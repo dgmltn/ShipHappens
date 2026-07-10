@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  a { color: #1E3A8F; text-decoration: none; }
+  a:hover { color: #16306f; }
+  @keyframes sheetIn { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  @keyframes toastIn { from { opacity: 0; transform: translate(-50%, 14px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  ::-webkit-scrollbar { width: 0; height: 0; }
+</style>
+</helmet>
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#E7E4DE;font-family:'Hanken Grotesk',sans-serif;padding:32px;">
+  <div style="position:relative;width:400px;height:820px;background:#0F0E0C;border-radius:52px;padding:13px;box-shadow:0 40px 90px -20px rgba(0,0,0,.5), 0 0 0 1px rgba(0,0,0,.6);">
+    <div style="position:relative;width:100%;height:100%;background:#F7F6F3;border-radius:40px;overflow:hidden;">
+
+      <!-- ============ LIST SCREEN ============ -->
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;">
+        <div style="padding:30px 22px 14px;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">
+            <div style="min-width:0;">
+              <div style="font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#A8A296;font-weight:700;">{{ dateLabel }}</div>
+              <div style="font-size:31px;font-weight:800;color:#17150F;letter-spacing:-.025em;margin-top:3px;">{{ headerTitle }}</div>
+              <div style="font-size:14px;color:#8A857C;margin-top:3px;">{{ headerSub }}</div>
+            </div>
+            <button onClick="{{ openSettings }}" title="Settings" style="flex:none;margin-top:4px;width:42px;height:42px;border-radius:13px;border:1px solid #E2DFD8;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.04);">
+              <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#6B665C" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            </button>
+          </div>
+          <div style="display:flex;gap:4px;margin-top:18px;background:#EAE7E0;padding:4px;border-radius:14px;">
+            <button onClick="{{ tabActive }}" style="{{ tabActiveStyle }}">Active</button>
+            <button onClick="{{ tabArchived }}" style="{{ tabArchivedStyle }}">Archived</button>
+          </div>
+        </div>
+
+        <div style="flex:1;overflow-y:auto;padding:2px 14px 26px;">
+          <sc-if value="{{ pending }}" hint-placeholder-val="{{ false }}">
+            <div style="margin:9px 0;display:flex;align-items:flex-start;gap:13px;padding:13px 13px;border-radius:20px;background:#FBFAF7;border:2px dashed {{ pending.color }};">
+              <div style="flex:none;width:44px;height:44px;border-radius:13px;background:{{ pending.color }};display:flex;align-items:center;justify-content:center;opacity:.92;margin-top:2px;">
+                <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3Z"></path><path d="M3 7.5 12 12l9-4.5"></path><path d="M12 12v9"></path></svg>
+              </div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:{{ pending.color }};font-weight:800;">From clipboard · {{ pending.carrierName }}</div>
+                <input value="{{ pending.name }}" onChange="{{ pendingNameInput }}" placeholder="Name this package" style="width:100%;border:none;background:transparent;outline:none;font-family:inherit;font-size:16px;font-weight:700;color:#17150F;padding:2px 0;margin-top:1px;" />
+                <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#8A857C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ pending.tracking }}</div>
+              </div>
+              <div style="flex:none;display:flex;flex-direction:column;gap:8px;margin-top:2px;">
+                <button onClick="{{ addPending }}" title="Add delivery" style="width:40px;height:40px;border-radius:12px;border:none;background:{{ pending.color }};display:flex;align-items:center;justify-content:center;cursor:pointer;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+                </button>
+                <button onClick="{{ dismissPending }}" title="Dismiss" style="width:40px;height:40px;border-radius:12px;border:1px solid #E6E3DC;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9A958B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+                </button>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ manualShow }}" hint-placeholder-val="{{ true }}">
+            <div style="position:relative;margin:9px 0;">
+              <div style="display:flex;align-items:flex-start;gap:13px;padding:13px 13px;border-radius:20px;background:#FBFAF7;border:2px dashed {{ manual.border }};transition:border-color .2s ease;">
+                <button onClick="{{ togglePicker }}" title="Choose carrier" style="position:relative;flex:none;width:44px;height:44px;border-radius:13px;background:{{ manual.badgeBg }};display:flex;align-items:center;justify-content:center;margin-top:2px;border:none;cursor:pointer;transition:background .2s ease;">
+                  <sc-if value="{{ manual.hasCarrier }}" hint-placeholder-val="{{ false }}">
+                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3Z"></path><path d="M3 7.5 12 12l9-4.5"></path><path d="M12 12v9"></path></svg>
+                  </sc-if>
+                  <sc-if value="{{ manual.noCarrier }}" hint-placeholder-val="{{ true }}">
+                    <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linejoin="round" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>
+                  </sc-if>
+                  <span style="position:absolute;bottom:-3px;right:-3px;width:16px;height:16px;border-radius:50%;background:#fff;border:1px solid #E2DFD8;display:flex;align-items:center;justify-content:center;">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#6B665C" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"></path></svg>
+                  </span>
+                </button>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:{{ manual.labelColor }};font-weight:800;transition:color .2s ease;">{{ manual.label }}</div>
+                  <input value="{{ manual.name }}" onChange="{{ manualNameInput }}" placeholder="Package name" style="width:100%;border:none;background:transparent;outline:none;font-family:inherit;font-size:16px;font-weight:700;color:#17150F;padding:2px 0;margin-top:1px;" />
+                  <input value="{{ manual.tracking }}" onChange="{{ manualTrackingInput }}" placeholder="Tracking number" style="width:100%;border:none;background:transparent;outline:none;font-family:'JetBrains Mono',monospace;font-size:12px;color:#6B665C;padding:1px 0;" />
+                </div>
+                <div style="flex:none;display:flex;flex-direction:column;gap:8px;margin-top:2px;">
+                  <button onClick="{{ addManual }}" title="Add delivery" style="width:40px;height:40px;border-radius:12px;border:none;background:{{ manual.addBg }};display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .2s ease;">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+                  </button>
+                  <button onClick="{{ clearManual }}" title="Clear" style="width:40px;height:40px;border-radius:12px;border:1px solid #E6E3DC;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9A958B" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"></path></svg>
+                  </button>
+                </div>
+              </div>
+              <sc-if value="{{ pickerOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="position:absolute;top:60px;left:13px;z-index:8;background:#fff;border:1px solid #E6E3DC;border-radius:14px;box-shadow:0 14px 34px rgba(0,0,0,.18);padding:6px;min-width:176px;">
+                  <sc-for list="{{ manual.carrierOptions }}" as="co" hint-placeholder-count="4">
+                    <button onClick="{{ co.onSelect }}" style="{{ co.style }}" style-hover="background:#F4F2EC;">
+                      <span style="{{ co.dotStyle }}"></span>
+                      <span style="flex:1;text-align:left;">{{ co.label }}</span>
+                      <sc-if value="{{ co.selected }}" hint-placeholder-val="{{ false }}">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#17150F" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+                      </sc-if>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+          <sc-for list="{{ packages }}" as="item" hint-placeholder-count="5">
+            <div style="position:relative;margin:9px 0;">
+              <div style="position:absolute;inset:0;border-radius:20px;background:#C2410C;display:flex;align-items:center;justify-content:flex-end;padding:0 24px;">
+                <span style="color:#fff;font-weight:800;font-size:13px;letter-spacing:.02em;">Archive</span>
+              </div>
+              <div onPointerDown="{{ item.onDown }}" onPointerMove="{{ item.onMove }}" onPointerUp="{{ item.onUp }}" style="position:relative;display:flex;align-items:center;gap:14px;padding:15px 16px;border-radius:20px;background:{{ item.cardBg }};border:1px solid #ECEAE3;box-shadow:0 1px 2px rgba(20,18,12,.05);cursor:pointer;touch-action:pan-y;transform:translateX({{ item.dx }}px);transition:{{ item.trans }};">
+                <div style="flex:none;width:46px;height:46px;border-radius:14px;background:{{ item.color }};display:flex;align-items:center;justify-content:center;">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3Z"></path><path d="M3 7.5 12 12l9-4.5"></path><path d="M12 12v9"></path></svg>
+                </div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:16.5px;font-weight:700;color:#17150F;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.01em;">{{ item.name }}</div>
+                  <div style="display:flex;align-items:center;gap:7px;margin-top:4px;">
+                    <span style="font-size:12px;font-weight:700;color:{{ item.color }};letter-spacing:.01em;">{{ item.carrierName }}</span>
+                    <span style="width:3px;height:3px;border-radius:50%;background:#CFCBC2;"></span>
+                    <span style="font-size:12.5px;color:#8A857C;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ item.statusText }}</span>
+                  </div>
+                </div>
+                <div style="flex:none;display:flex;flex-direction:column;align-items:flex-end;min-width:54px;">
+                  <sc-if value="{{ item.showNumber }}" hint-placeholder-val="{{ true }}">
+                    <div style="font-size:27px;font-weight:800;line-height:.95;color:{{ item.daysColor }};letter-spacing:-.02em;">{{ item.daysBig }}</div>
+                    <div style="font-size:11px;color:#A8A296;margin-top:4px;font-weight:600;">{{ item.daysLabel }}</div>
+                  </sc-if>
+                  <sc-if value="{{ item.showRing }}" hint-placeholder-val="{{ true }}">
+                    <div style="position:relative;width:50px;height:50px;">
+                      <svg width="50" height="50" viewBox="0 0 52 52"><circle cx="26" cy="26" r="22" fill="none" stroke="#ECEAE4" stroke-width="4"></circle><circle cx="26" cy="26" r="22" fill="none" stroke="{{ item.color }}" stroke-width="4" stroke-linecap="round" stroke-dasharray="{{ item.ringDash }}" transform="rotate(-90 26 26)"></circle></svg>
+                      <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+                        <span style="font-size:17px;font-weight:800;line-height:1;color:#17150F;">{{ item.ringNum }}</span>
+                        <span style="font-size:8px;color:#A8A296;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">{{ item.ringLabel }}</span>
+                      </div>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ item.showRel }}" hint-placeholder-val="{{ true }}">
+                    <div style="font-size:19px;font-weight:800;color:{{ item.daysColor }};text-align:right;letter-spacing:-.01em;">{{ item.relBig }}</div>
+                    <div style="font-size:11px;color:#A8A296;margin-top:3px;font-weight:600;">arrives</div>
+                  </sc-if>
+                  <sc-if value="{{ item.delivered }}" hint-placeholder-val="{{ true }}">
+                    <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:#1F7A4D;background:#E7F3EC;padding:5px 9px;border-radius:9px;white-space:nowrap;">Delivered</span>
+                  </sc-if>
+                  <sc-if value="{{ item.showRestore }}" hint-placeholder-val="{{ true }}">
+                    <button onClick="{{ item.onRestore }}" onPointerDown="{{ stopProp }}" onPointerUp="{{ stopProp }}" style="margin-top:8px;background:none;border:1px solid #E2DFD8;color:#8A857C;font-size:11px;font-weight:700;padding:5px 11px;border-radius:9px;cursor:pointer;font-family:inherit;">Restore</button>
+                  </sc-if>
+                </div>
+              </div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ empty }}" hint-placeholder-val="{{ false }}">
+            <div style="text-align:center;padding:70px 30px;color:#A8A296;">
+              <div style="width:56px;height:56px;border-radius:18px;background:#EDEBE4;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#B4AFA5" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3Z"></path><path d="M3 7.5 12 12l9-4.5"></path><path d="M12 12v9"></path></svg>
+              </div>
+              <div style="font-size:14.5px;line-height:1.5;max-width:220px;margin:0 auto;">{{ emptyText }}</div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+
+      <!-- ============ SETTINGS SHEET ============ -->
+      <sc-if value="{{ showSettings }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;inset:0;background:#F7F6F3;z-index:30;display:flex;flex-direction:column;animation:sheetIn .34s cubic-bezier(.2,.85,.25,1);">
+          <div style="padding:26px 20px 16px;background:#fff;border-bottom:1px solid #ECEAE3;display:flex;align-items:center;gap:12px;">
+            <button onClick="{{ closeSettings }}" title="Back" style="flex:none;width:42px;height:42px;border-radius:13px;border:1px solid #E2DFD8;background:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#17150F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+            </button>
+            <div style="font-size:29px;font-weight:800;color:#17150F;letter-spacing:-.025em;">Settings</div>
+          </div>
+
+          <div style="flex:1;overflow-y:auto;padding:18px 18px 34px;">
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#A8A296;font-weight:800;margin:2px 4px 10px;">Universal API</div>
+            <div style="background:#fff;border:1px solid #ECEAE3;border-radius:18px;padding:16px 16px;margin-bottom:22px;">
+              <div style="display:flex;align-items:center;gap:12px;">
+                <div style="flex:none;width:40px;height:40px;border-radius:12px;background:#0F766E;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:15px;letter-spacing:-.02em;">tm</div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:16px;font-weight:800;color:#17150F;">TrackingMore</div>
+                  <div style="font-size:12.5px;font-weight:600;color:{{ trackingmore.statusColor }};margin-top:1px;">{{ trackingmore.statusText }}</div>
+                </div>
+                <button onClick="{{ trackingmore.onToggle }}" style="flex:none;position:relative;width:46px;height:28px;border-radius:14px;border:none;cursor:pointer;background:{{ trackingmore.toggleBg }};transition:background .18s ease;">
+                  <span style="{{ trackingmore.dotStyle }}"></span>
+                </button>
+              </div>
+              <div style="margin-top:14px;">
+                <label style="display:block;">
+                  <span style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:#A8A296;font-weight:700;">API key</span>
+                  <input value="{{ trackingmore.apiKey }}" onChange="{{ trackingmore.onKey }}" placeholder="Paste your TrackingMore API key" style="width:100%;margin-top:5px;border:1px solid #E6E3DC;background:#FBFAF7;border-radius:11px;padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;color:#17150F;outline:none;" />
+                </label>
+              </div>
+              <div style="font-size:12.5px;color:#8A857C;line-height:1.5;margin-top:12px;">One key tracks 1,000+ couriers and auto-detects the carrier from each number — an alternative to configuring carriers individually below.</div>
+              <div style="margin-top:13px;display:flex;align-items:center;justify-content:space-between;">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#A8A296;">api.trackingmore.com/v4</span>
+                <button onClick="{{ trackingmore.onTest }}" style="background:#0F766E;border:none;color:#fff;font-family:inherit;font-size:12.5px;font-weight:700;padding:8px 13px;border-radius:10px;cursor:pointer;">Test connection</button>
+              </div>
+            </div>
+
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#A8A296;font-weight:800;margin:2px 4px 10px;">Direct carrier APIs</div>
+            <sc-for list="{{ settingsCarriers }}" as="c" hint-placeholder-count="3">
+              <div style="background:#fff;border:1px solid #ECEAE3;border-radius:18px;padding:16px 16px;margin-bottom:12px;">
+                <div style="display:flex;align-items:center;gap:12px;">
+                  <div style="flex:none;width:40px;height:40px;border-radius:12px;background:{{ c.color }};display:flex;align-items:center;justify-content:center;">
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3Z"></path><path d="M3 7.5 12 12l9-4.5"></path><path d="M12 12v9"></path></svg>
+                  </div>
+                  <div style="flex:1;min-width:0;">
+                    <div style="font-size:16px;font-weight:800;color:#17150F;">{{ c.name }}</div>
+                    <div style="font-size:12.5px;font-weight:600;color:{{ c.statusColor }};margin-top:1px;">{{ c.statusText }}</div>
+                  </div>
+                  <button onClick="{{ c.onToggle }}" style="flex:none;position:relative;width:46px;height:28px;border-radius:14px;border:none;cursor:pointer;background:{{ c.toggleBg }};transition:background .18s ease;">
+                    <span style="{{ c.dotStyle }}"></span>
+                  </button>
+                </div>
+                <div style="margin-top:14px;display:flex;flex-direction:column;gap:11px;">
+                  <sc-for list="{{ c.fields }}" as="f" hint-placeholder-count="2">
+                    <label style="display:block;">
+                      <span style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:#A8A296;font-weight:700;">{{ f.label }}</span>
+                      <input value="{{ f.value }}" onChange="{{ f.onChange }}" placeholder="{{ f.placeholder }}" style="width:100%;margin-top:5px;border:1px solid #E6E3DC;background:#FBFAF7;border-radius:11px;padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;color:#17150F;outline:none;" />
+                    </label>
+                  </sc-for>
+                </div>
+                <div style="margin-top:13px;display:flex;align-items:center;justify-content:space-between;">
+                  <span style="font-size:12px;color:#A8A296;">{{ c.envText }}</span>
+                  <button onClick="{{ c.onTest }}" style="background:#F1EFE9;border:none;color:#17150F;font-family:inherit;font-size:12.5px;font-weight:700;padding:8px 13px;border-radius:10px;cursor:pointer;">Test connection</button>
+                </div>
+              </div>
+            </sc-for>
+
+            <div style="font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#A8A296;font-weight:800;margin:22px 4px 10px;">Sync</div>
+            <div style="background:#fff;border:1px solid #ECEAE3;border-radius:18px;overflow:hidden;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 16px;">
+                <div style="min-width:0;">
+                  <div style="font-size:15px;font-weight:700;color:#17150F;">Auto-import from clipboard</div>
+                  <div style="font-size:12.5px;color:#8A857C;margin-top:2px;">Detect tracking numbers when you open the app</div>
+                </div>
+                <button onClick="{{ toggleAuto }}" style="flex:none;position:relative;width:46px;height:28px;border-radius:14px;border:none;cursor:pointer;background:{{ autoToggleBg }};transition:background .18s ease;">
+                  <span style="{{ autoDotStyle }}"></span>
+                </button>
+              </div>
+              <div style="height:1px;background:#ECEAE3;"></div>
+              <div style="padding:15px 16px;">
+                <div style="font-size:15px;font-weight:700;color:#17150F;">Refresh frequency</div>
+                <div style="display:flex;gap:6px;margin-top:10px;">
+                  <sc-for list="{{ freqOptions }}" as="fo" hint-placeholder-count="3">
+                    <button onClick="{{ fo.onClick }}" style="{{ fo.style }}">{{ fo.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+
+            <div style="font-size:12px;color:#A8A296;line-height:1.5;margin:16px 6px 0;">Keys are stored on this device only and used to fetch live tracking status directly from each carrier.</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ============ DETAIL SHEET ============ -->
+      <sc-if value="{{ selected }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;inset:0;background:#F7F6F3;z-index:20;display:flex;flex-direction:column;animation:sheetIn .34s cubic-bezier(.2,.85,.25,1);">
+          <div style="background:{{ selected.color }};padding:24px 20px 24px;color:#fff;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <button onClick="{{ closeDetail }}" style="background:rgba(255,255,255,.16);border:none;color:#fff;font-family:inherit;font-size:14px;font-weight:700;padding:8px 14px 8px 11px;border-radius:11px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+                Back
+              </button>
+              <span style="font-size:12px;font-weight:800;opacity:.9;letter-spacing:.03em;">{{ selected.carrierName }}</span>
+            </div>
+            <div style="margin-top:20px;font-size:25px;font-weight:800;letter-spacing:-.02em;">{{ selected.name }}</div>
+            <div style="margin-top:9px;font-size:15px;font-weight:600;opacity:.92;">{{ selected.headline }}</div>
+          </div>
+
+          <div style="flex:1;overflow-y:auto;padding:16px 18px 34px;">
+            <div style="background:#fff;border:1px solid #ECEAE3;border-radius:18px;padding:16px 18px;">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.11em;color:#A8A296;font-weight:800;">{{ selected.windowLabel }}</div>
+              <div style="font-size:19px;font-weight:800;color:#17150F;margin-top:6px;letter-spacing:-.01em;">{{ selected.windowText }}</div>
+            </div>
+
+            <div style="margin-top:14px;height:152px;border-radius:18px;overflow:hidden;position:relative;border:1px solid #ECEAE3;background:repeating-linear-gradient(45deg,#EEECE6,#EEECE6 10px,#F5F3EE 10px,#F5F3EE 20px);">
+              <div style="position:absolute;left:50%;top:47%;transform:translate(-50%,-50%) rotate(-45deg);width:20px;height:20px;border-radius:50% 50% 50% 0;background:{{ selected.color }};box-shadow:0 5px 12px rgba(0,0,0,.22);"></div>
+              <div style="position:absolute;left:50%;top:47%;transform:translate(-50%,-50%);width:7px;height:7px;border-radius:50%;background:#fff;"></div>
+              <div style="position:absolute;left:12px;bottom:11px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:#8A857C;background:rgba(255,255,255,.72);padding:3px 7px;border-radius:6px;">map · package location</div>
+            </div>
+
+            <div style="background:#fff;border:1px solid #ECEAE3;border-radius:18px;padding:18px 18px 4px;margin-top:14px;">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.11em;color:#A8A296;font-weight:800;margin-bottom:8px;">Tracking history</div>
+              <sc-for list="{{ selected.timeline }}" as="st" hint-placeholder-count="5">
+                <div style="display:flex;gap:14px;">
+                  <div style="flex:none;display:flex;flex-direction:column;align-items:center;width:14px;">
+                    <div style="{{ st.dotStyle }}"></div>
+                    <div style="{{ st.lineStyle }}"></div>
+                  </div>
+                  <div style="padding-bottom:15px;">
+                    <div style="{{ st.labelStyle }}">{{ st.label }}</div>
+                    <div style="font-size:12px;color:#A8A296;margin-top:2px;">{{ st.time }}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+
+            <div style="background:#fff;border:1px solid #ECEAE3;border-radius:18px;padding:16px 18px;margin-top:14px;">
+              <div style="font-size:11px;text-transform:uppercase;letter-spacing:.11em;color:#A8A296;font-weight:800;">{{ selected.carrierName }} tracking number</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#17150F;margin-top:6px;letter-spacing:.01em;">{{ selected.tracking }}</div>
+            </div>
+
+            <sc-if value="{{ selected.showPhoto }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:14px;">
+                <div style="font-size:11px;text-transform:uppercase;letter-spacing:.11em;color:#A8A296;font-weight:800;margin-bottom:9px;">Delivered photo</div>
+                <div style="height:172px;border-radius:18px;border:1px solid #ECEAE3;background:repeating-linear-gradient(45deg,#EEECE6,#EEECE6 10px,#F5F3EE 10px,#F5F3EE 20px);display:flex;align-items:center;justify-content:center;">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8A857C;">delivered photo</span>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ============ TOAST ============ -->
+      <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;left:50%;bottom:28px;transform:translateX(-50%);z-index:40;display:flex;align-items:center;gap:16px;background:#17150F;color:#fff;padding:12px 14px 12px 18px;border-radius:14px;box-shadow:0 14px 34px rgba(0,0,0,.32);animation:toastIn .25s ease;">
+          <span style="font-size:14px;font-weight:600;">{{ toast.msg }}</span>
+          <button onClick="{{ undo }}" style="background:none;border:none;color:#F2A15A;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit;padding:2px 4px;">Undo</button>
+        </div>
+      </sc-if>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:464,&quot;height&quot;:884},&quot;daysLeftStyle&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Number&quot;,&quot;Ring&quot;,&quot;Relative&quot;],&quot;default&quot;:&quot;Ring&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Display&quot;},&quot;carrierTint&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Accent dot&quot;,&quot;Tinted card&quot;],&quot;default&quot;:&quot;Accent dot&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Display&quot;},&quot;sortBy&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Soonest first&quot;,&quot;By carrier&quot;],&quot;default&quot;:&quot;Soonest first&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Display&quot;}}">
+class Component extends DCLogic {
+  state = { tab: 'active', selectedId: null, archived: {}, dragId: null, dragDx: 0, moved: false, exitId: null, toast: null, added: [], pendingImport: null, dismissedNorm: null, showSettings: false, settings: this.defaultSettings(), manual: { tracking: '', name: '' }, manualCarrier: null, manualPickerOpen: false };
+
+  defaultSettings() {
+    return {
+      carriers: {
+        UPS:   { enabled: false, fields: {} },
+        USPS:  { enabled: false, fields: {} },
+        FedEx: { enabled: false, fields: {} },
+      },
+      trackingmore: { enabled: false, apiKey: '' },
+      autoClipboard: true,
+      frequency: '15 min',
+    };
+  }
+  persist() { try { localStorage.setItem('parcels_settings_v1', JSON.stringify(this.state.settings)); } catch (_) {} }
+
+  componentDidMount() {
+    try {
+      const saved = JSON.parse(localStorage.getItem('parcels_settings_v1'));
+      if (saved && saved.carriers) {
+        if (!saved.trackingmore) saved.trackingmore = { enabled: false, apiKey: '' };
+        this.setState({ settings: saved });
+      }
+    } catch (_) {}
+    this._onPaste = (e) => { try { const t = (e.clipboardData || window.clipboardData).getData('text'); this.tryImport(t); } catch (_) {} };
+    document.addEventListener('paste', this._onPaste);
+    this._onFocus = () => { if (this.state.settings.autoClipboard) this.readClipboard(true); };
+    window.addEventListener('focus', this._onFocus);
+    this._onDocClick = () => { if (this.state.manualPickerOpen) this.setState({ manualPickerOpen: false }); };
+    document.addEventListener('click', this._onDocClick);
+    this.readClipboard(true);
+  }
+
+  togglePicker(e) { e.stopPropagation(); this.setState(s => ({ manualPickerOpen: !s.manualPickerOpen })); }
+  selectCarrier(k) { this.setState({ manualCarrier: k, manualPickerOpen: false }); }
+  openSettings() { this.setState({ showSettings: true }); }
+  closeSettings() { this.setState({ showSettings: false }); }
+  toggleCarrier(k) {
+    this.setState(s => { const c = { ...s.settings.carriers }; c[k] = { ...c[k], enabled: !c[k].enabled }; return { settings: { ...s.settings, carriers: c } }; }, () => this.persist());
+  }
+  setField(k, fk, v) {
+    this.setState(s => { const c = { ...s.settings.carriers }; c[k] = { ...c[k], fields: { ...c[k].fields, [fk]: v } }; return { settings: { ...s.settings, carriers: c } }; }, () => this.persist());
+  }
+  toggleAuto() {
+    this.setState(s => ({ settings: { ...s.settings, autoClipboard: !s.settings.autoClipboard } }), () => this.persist());
+  }
+  setFrequency(v) {
+    this.setState(s => ({ settings: { ...s.settings, frequency: v } }), () => this.persist());
+  }
+  testCarrier(k) {
+    const cs = this.state.settings.carriers[k];
+    const has = cs.fields && Object.values(cs.fields).some(v => v && v.trim());
+    this.setState({ toast: { msg: has ? (k + ' credentials look valid') : ('Enter ' + k + ' credentials first') } });
+    clearTimeout(this._tt);
+    this._tt = setTimeout(() => this.setState({ toast: null }), 2600);
+  }
+  toggleTrackingMore() {
+    this.setState(s => ({ settings: { ...s.settings, trackingmore: { ...s.settings.trackingmore, enabled: !s.settings.trackingmore.enabled } } }), () => this.persist());
+  }
+  setTrackingMoreKey(v) {
+    this.setState(s => ({ settings: { ...s.settings, trackingmore: { ...s.settings.trackingmore, apiKey: v } } }), () => this.persist());
+  }
+  testTrackingMore() {
+    const has = (this.state.settings.trackingmore.apiKey || '').trim();
+    this.setState({ toast: { msg: has ? 'TrackingMore key looks valid' : 'Enter your TrackingMore API key first' } });
+    clearTimeout(this._tt);
+    this._tt = setTimeout(() => this.setState({ toast: null }), 2600);
+  }
+  componentWillUnmount() {
+    document.removeEventListener('paste', this._onPaste);
+    window.removeEventListener('focus', this._onFocus);
+    document.removeEventListener('click', this._onDocClick);
+  }
+
+  async readClipboard(silent) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.readText) {
+        const t = await navigator.clipboard.readText();
+        const found = this.tryImport(t);
+        if (!found && !silent) this.setState({ toast: { msg: 'No tracking number found on the clipboard' } });
+      } else if (!silent) {
+        this.setState({ toast: { msg: 'Copy a tracking number, then press ⌘V / Ctrl+V' } });
+      }
+    } catch (_) {
+      if (!silent) this.setState({ toast: { msg: 'Copy a tracking number, then press ⌘V / Ctrl+V' } });
+    }
+    if (!silent) { clearTimeout(this._tt); this._tt = setTimeout(() => this.setState({ toast: null }), 3200); }
+  }
+
+  detectCarrier(text) {
+    if (!text) return null;
+    const t = text.trim();
+    const norm = t.replace(/[\s\-]/g, '').toUpperCase();
+    if (norm.length < 10) return null;
+    let carrier = null;
+    if (/^1Z[0-9A-Z]{10,}$/.test(norm)) carrier = 'UPS';
+    else if (/^(94|93|92|95|82)\d{14,24}$/.test(norm) || /^[A-Z]{2}\d{9}US$/.test(norm)) carrier = 'USPS';
+    else if (/^\d{12}$/.test(norm) || /^\d{15}$/.test(norm) || /^\d{20,22}$/.test(norm)) carrier = 'FedEx';
+    if (!carrier) return null;
+    return { carrier, tracking: t, norm };
+  }
+
+  tryImport(text) {
+    const det = this.detectCarrier(text);
+    if (!det) return false;
+    if (this.state.dismissedNorm === det.norm) return false;
+    const { C, raw } = this.data();
+    const clash = raw.concat(this.state.added).some(p => p.tracking.replace(/[\s\-]/g, '').toUpperCase() === det.norm);
+    if (clash) return false;
+    const cc = C[det.carrier];
+    this.setState({ tab: 'active', pendingImport: { carrier: det.carrier, carrierName: cc.name, color: cc.color, tracking: det.tracking, norm: det.norm, name: '' } });
+    return true;
+  }
+
+  manualNameInput(e) { const v = e.target.value; this.setState(s => ({ manual: { ...s.manual, name: v } })); }
+  manualTrackingInput(e) { const v = e.target.value; this.setState(s => ({ manual: { ...s.manual, tracking: v } })); }
+  clearManual() { this.setState({ manual: { tracking: '', name: '' }, manualCarrier: null }); }
+  addManual() {
+    const m = this.state.manual;
+    const det = this.detectCarrier(m.tracking);
+    const carrier = this.state.manualCarrier || (det ? det.carrier : null);
+    const flash = (msg) => { this.setState({ toast: { msg } }); clearTimeout(this._tt); this._tt = setTimeout(() => this.setState({ toast: null }), 2600); };
+    if (!m.tracking.trim()) { flash('Enter a tracking number'); return; }
+    if (!carrier) { flash('Tap the icon to choose a carrier'); return; }
+    const norm = m.tracking.replace(/[\s\-]/g, '').toUpperCase();
+    if (this.data().raw.concat(this.state.added).some(p => p.tracking.replace(/[\s\-]/g, '').toUpperCase() === norm)) { flash('That package is already in your list'); return; }
+    const dd = new Date(this.today().getTime() + 5 * 86400000);
+    const date = dd.getFullYear() + '-' + String(dd.getMonth() + 1).padStart(2, '0') + '-' + String(dd.getDate()).padStart(2, '0');
+    const pkg = { id: 'u' + Date.now(), name: (m.name && m.name.trim()) || 'New package', carrier, tracking: m.tracking.trim(), date, step: 0, time: '8:00 PM' };
+    this.setState(s => ({ added: [...s.added, pkg], manual: { tracking: '', name: '' }, manualCarrier: null, tab: 'active', toast: { msg: 'Delivery added' } }));
+    clearTimeout(this._tt); this._tt = setTimeout(() => this.setState({ toast: null }), 2600);
+  }
+
+  pendingNameInput(e) {
+    const v = e.target.value;
+    this.setState(s => ({ pendingImport: s.pendingImport ? { ...s.pendingImport, name: v } : null }));
+  }
+  dismissPending() {
+    this.setState(s => ({ pendingImport: null, dismissedNorm: s.pendingImport ? s.pendingImport.norm : null }));
+  }
+  addPending() {
+    const p = this.state.pendingImport;
+    if (!p) return;
+    const dd = new Date(this.today().getTime() + 5 * 86400000);
+    const date = dd.getFullYear() + '-' + String(dd.getMonth() + 1).padStart(2, '0') + '-' + String(dd.getDate()).padStart(2, '0');
+    const pkg = { id: 'u' + Date.now(), name: (p.name && p.name.trim()) || 'New package', carrier: p.carrier, tracking: p.tracking, date, step: 0, time: '8:00 PM' };
+    this.setState(s => ({ added: [...s.added, pkg], pendingImport: null, dismissedNorm: p.norm, tab: 'active', toast: { msg: 'Delivery added' } }));
+    clearTimeout(this._tt);
+    this._tt = setTimeout(() => this.setState({ toast: null }), 2600);
+  }
+
+  today() { return new Date('2026-07-10T12:00:00'); }
+
+  fmt(dt) {
+    const wd = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dt.getDay()];
+    const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
+    return { wd, mo, day: dt.getDate(), long: wd + ', ' + mo + ' ' + dt.getDate() };
+  }
+
+  data() {
+    const C = {
+      USPS:  { name: 'USPS',  color: '#1E3A8F', tint: '#EEF2FB' },
+      UPS:   { name: 'UPS',   color: '#5A3A22', tint: '#F4EFE9' },
+      FedEx: { name: 'FedEx', color: '#5A1B9A', tint: '#F3ECFA' },
+    };
+    const raw = [
+      { id: 'cap',   name: 'Baseball cap',            carrier: 'USPS',  tracking: '1ZW463200377332024',       date: '2026-07-12', step: 2, time: '8:00 PM' },
+      { id: 'shoes', name: 'Trail running shoes',     carrier: 'FedEx', tracking: 'FX 8823 0199 4422',        date: '2026-07-11', step: 3, time: '9:00 PM' },
+      { id: 'kbd',   name: 'Mechanical keyboard',     carrier: 'UPS',   tracking: '1Z 999 AA1 01 2345 6784',  date: '2026-07-15', step: 2, time: '8:00 PM' },
+      { id: 'lamp',  name: 'Ceramic desk lamp',       carrier: 'UPS',   tracking: '1Z 88E 033 03 9876 5432',  date: '2026-07-10', step: 3, time: '8:00 PM' },
+      { id: 'case',  name: 'Clear phone case',        carrier: 'USPS',  tracking: '9400 1118 9922 3300 1122', date: '2026-07-14', step: 1, time: '8:00 PM' },
+      { id: 'beans', name: 'Oat-blend coffee beans',  carrier: 'USPS',  tracking: '9400 1118 9922 3197 4284', date: '2026-07-08', step: 4, time: '2:14 PM' },
+      { id: 'book',  name: 'Paperback — The Overstory', carrier: 'FedEx', tracking: 'FX 7711 2058 3366',      date: '2026-07-09', step: 4, time: '11:42 AM' },
+    ];
+    return { C, raw };
+  }
+
+  buildVM(p, ctx) {
+    const { C } = this.data();
+    const cc = C[p.carrier];
+    const dt = new Date(p.date + 'T12:00:00');
+    const d = Math.round((dt - this.today()) / 86400000);
+    const delivered = p.step === 4;
+    const f = this.fmt(dt);
+    const archivedTab = ctx.tab === 'archived';
+
+    const STATUS = ['Label created', 'Shipped', 'In transit', 'Out for delivery', 'Delivered'];
+    let statusText = STATUS[p.step];
+    if (!delivered && d <= 0) statusText = 'Out for delivery today';
+
+    const urgent = d <= 1;
+    let daysBig, daysLabel;
+    if (d <= 0) { daysBig = 'Today'; daysLabel = ''; }
+    else if (d === 1) { daysBig = '1'; daysLabel = 'day left'; }
+    else { daysBig = String(d); daysLabel = 'days left'; }
+    const daysColor = urgent ? '#C2410C' : '#17150F';
+    const relBig = d <= 0 ? 'Today' : (d === 1 ? 'Tomorrow' : f.wd);
+
+    const CIRC = 138.2;
+    const ringDash = (p.step / 4 * CIRC).toFixed(1) + ' ' + CIRC.toFixed(1);
+    const ringNum = d <= 0 ? '0' : String(Math.max(d, 0));
+
+    const dragging = this.state.dragId === p.id;
+    const exiting = this.state.exitId === p.id;
+    let dx = 0, trans = 'transform .28s cubic-bezier(.2,.8,.2,1)';
+    if (dragging) { dx = this.state.dragDx; trans = 'none'; }
+    else if (exiting) { dx = -370; trans = 'transform .22s ease-in'; }
+
+    const swipeable = delivered && ctx.tab === 'active';
+
+    return {
+      id: p.id, name: p.name, carrierName: cc.name, color: cc.color,
+      cardBg: ctx.tint === 'Tinted card' ? cc.tint : '#FFFFFF',
+      statusText,
+      showNumber: !delivered && ctx.mode === 'Number',
+      showRing:   !delivered && ctx.mode === 'Ring',
+      showRel:    !delivered && ctx.mode === 'Relative',
+      delivered,
+      showRestore: archivedTab,
+      daysBig, daysLabel, daysColor, relBig, ringDash, ringNum, ringLabel: 'days',
+      dx, trans,
+      onDown: (e) => this.onRowDown(p.id, swipeable, e),
+      onMove: (e) => this.onRowMove(p.id, swipeable, e),
+      onUp:   (e) => this.onRowUp(p.id, swipeable, e),
+      onRestore: (e) => { e.stopPropagation(); this.restore(p.id); },
+    };
+  }
+
+  buildDetail(p) {
+    const { C } = this.data();
+    const cc = C[p.carrier];
+    const dt = new Date(p.date + 'T12:00:00');
+    const d = Math.round((dt - this.today()) / 86400000);
+    const delivered = p.step === 4;
+    const f = this.fmt(dt);
+    const STATUS = ['Label created', 'Shipped', 'In transit', 'Out for delivery', 'Delivered'];
+
+    const timeline = STATUS.map((label, i) => {
+      let stt;
+      if (delivered) stt = 'done';
+      else if (i < p.step) stt = 'done';
+      else if (i === p.step) stt = 'current';
+      else stt = 'todo';
+
+      let time = '';
+      if (stt === 'done' || stt === 'current') {
+        const off = p.step - i;
+        const sf = this.fmt(new Date(dt.getTime() - off * 86400000));
+        time = sf.long;
+        if (delivered && i === 4) time = f.long + ' · ' + p.time;
+        else if (stt === 'current') time = time + ' · latest update';
+      }
+      const c = cc.color;
+      const dotStyle = stt === 'done'
+        ? 'width:13px;height:13px;border-radius:50%;background:' + c + ';'
+        : stt === 'current'
+          ? 'width:13px;height:13px;border-radius:50%;background:#fff;border:3px solid ' + c + ';box-shadow:0 0 0 4px ' + c + '22;'
+          : 'width:11px;height:11px;margin:1px;border-radius:50%;background:#E2DFD8;';
+      const lineStyle = i === STATUS.length - 1
+        ? 'width:0;'
+        : (stt === 'todo'
+            ? 'width:2px;flex:1;min-height:24px;background:#EAE7E0;'
+            : 'width:2px;flex:1;min-height:24px;background:' + c + ';');
+      const labelStyle = stt === 'todo'
+        ? 'font-size:14.5px;font-weight:600;color:#B4AFA5;'
+        : 'font-size:14.5px;font-weight:700;color:#17150F;';
+      return { label, time, dotStyle, lineStyle, labelStyle };
+    });
+
+    let headline, windowLabel, windowText;
+    if (delivered) { headline = 'Delivered'; windowLabel = 'Delivered'; windowText = f.long + ' · ' + p.time; }
+    else if (d <= 0) { headline = 'Arriving today'; windowLabel = 'Estimated delivery'; windowText = f.long + ' · by ' + p.time; }
+    else { headline = d === 1 ? 'Arrives tomorrow' : 'Arrives in ' + d + ' days'; windowLabel = 'Estimated delivery'; windowText = f.long + ' · by ' + p.time; }
+
+    return { id: p.id, name: p.name, carrierName: cc.name, color: cc.color, tracking: p.tracking, timeline, headline, windowLabel, windowText, showPhoto: delivered };
+  }
+
+  onRowDown(id, swipeable, e) {
+    this._sx = e.clientX;
+    if (swipeable) { try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {} }
+    this.setState({ dragId: id, dragDx: 0, moved: false });
+  }
+  onRowMove(id, swipeable, e) {
+    if (this.state.dragId !== id) return;
+    const dx = e.clientX - this._sx;
+    const moved = Math.abs(dx) > 6;
+    if (swipeable) this.setState({ dragDx: Math.max(-330, Math.min(0, dx)), moved: this.state.moved || moved });
+    else if (moved && !this.state.moved) this.setState({ moved: true });
+  }
+  onRowUp(id, swipeable, e) {
+    const { dragDx, moved } = this.state;
+    if (swipeable && dragDx <= -110) { this.slideAndArchive(id); return; }
+    if (!moved) { this.setState({ dragId: null, dragDx: 0, moved: false }); this.openDetail(id); return; }
+    this.setState({ dragId: null, dragDx: 0, moved: false });
+  }
+
+  slideAndArchive(id) {
+    this.setState({ dragId: null, dragDx: 0, moved: false, exitId: id });
+    setTimeout(() => {
+      this.setState(s => ({ archived: { ...s.archived, [id]: true }, exitId: null, toast: { msg: 'Package archived' } }));
+      this._lastArchived = id;
+      clearTimeout(this._tt);
+      this._tt = setTimeout(() => this.setState({ toast: null }), 3800);
+    }, 220);
+  }
+  undoToast() {
+    const id = this._lastArchived;
+    clearTimeout(this._tt);
+    this.setState(s => { const a = { ...s.archived }; delete a[id]; return { archived: a, toast: null }; });
+  }
+  restore(id) {
+    this.setState(s => { const a = { ...s.archived }; delete a[id]; return { archived: a }; });
+  }
+  openDetail(id) { this.setState({ selectedId: id }); }
+
+  renderVals() {
+    const { raw, C } = this.data();
+    const mode = this.props.daysLeftStyle || 'Number';
+    const tint = this.props.carrierTint || 'Accent dot';
+    const sortBy = this.props.sortBy || 'Soonest first';
+    const tab = this.state.tab;
+    const arch = this.state.archived;
+    const today = this.today();
+    const dnum = p => Math.round((new Date(p.date + 'T12:00:00') - today) / 86400000);
+
+    const allPkgs = raw.concat(this.state.added);
+    let list = allPkgs.filter(p => tab === 'active' ? !arch[p.id] : !!arch[p.id]);
+    if (sortBy === 'By carrier') {
+      const order = { USPS: 0, UPS: 1, FedEx: 2 };
+      list = list.slice().sort((a, b) => (order[a.carrier] - order[b.carrier]) || (dnum(a) - dnum(b)));
+    } else {
+      list = list.slice().sort((a, b) => {
+        const ad = a.step === 4, bd = b.step === 4;
+        if (ad !== bd) return ad ? 1 : -1;
+        return dnum(a) - dnum(b);
+      });
+    }
+
+    const ctx = { mode, tint, tab };
+    const packages = list.map(p => this.buildVM(p, ctx));
+    const soon = allPkgs.filter(p => !arch[p.id] && p.step !== 4).length;
+    const archN = Object.keys(arch).length;
+    const selPkg = this.state.selectedId ? allPkgs.find(p => p.id === this.state.selectedId) : null;
+    const sel = selPkg ? this.buildDetail(selPkg) : null;
+
+    // ---- settings view model ----
+    const S = this.state.settings;
+    const dot = (on) => 'position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .18s ease;transform:translateX(' + (on ? '18px' : '0px') + ');';
+    const carrierMeta = [
+      { key: 'UPS',   fields: [['clientId', 'Client ID', 'UPS OAuth client ID'], ['clientSecret', 'Client secret', '••••••••']] },
+      { key: 'USPS',  fields: [['consumerKey', 'Consumer key', 'USPS consumer key'], ['consumerSecret', 'Consumer secret', '••••••••']] },
+      { key: 'FedEx', fields: [['apiKey', 'API key', 'FedEx API key'], ['secretKey', 'Secret key', '••••••••']] },
+    ];
+    const settingsCarriers = carrierMeta.map(m => {
+      const cc = C[m.key]; const cs = S.carriers[m.key] || { enabled: false, fields: {} };
+      return {
+        key: m.key, name: cc.name, color: cc.color, enabled: cs.enabled,
+        statusText: cs.enabled ? 'Connected · syncing' : 'Not connected',
+        statusColor: cs.enabled ? '#1F7A4D' : '#A8A296',
+        toggleBg: cs.enabled ? cc.color : '#DAD6CE',
+        dotStyle: dot(cs.enabled),
+        envText: 'Production endpoint',
+        onToggle: () => this.toggleCarrier(m.key),
+        onTest: () => this.testCarrier(m.key),
+        fields: m.fields.map(([fk, flabel, fph]) => ({
+          label: flabel, placeholder: fph, value: (cs.fields && cs.fields[fk]) || '',
+          onChange: (e) => this.setField(m.key, fk, e.target.value),
+        })),
+      };
+    });
+    const tm = S.trackingmore || { enabled: false, apiKey: '' };
+    const tmHasKey = (tm.apiKey || '').trim().length > 0;
+    const trackingmore = {
+      enabled: tm.enabled,
+      apiKey: tm.apiKey,
+      toggleBg: tm.enabled ? '#0F766E' : '#DAD6CE',
+      dotStyle: dot(tm.enabled),
+      statusText: tm.enabled ? (tmHasKey ? 'Connected · 1,000+ couriers' : 'Enabled · add your API key') : 'Not connected',
+      statusColor: tm.enabled ? (tmHasKey ? '#0F766E' : '#C2410C') : '#A8A296',
+      onToggle: () => this.toggleTrackingMore(),
+      onKey: (e) => this.setTrackingMoreKey(e.target.value),
+      onTest: () => this.testTrackingMore(),
+    };
+
+    const freqOptions = ['15 min', '1 hour', 'Manual'].map(label => {
+      const active = S.frequency === label;
+      return {
+        label, active,
+        onClick: () => this.setFrequency(label),
+        style: 'flex:1;border:1px solid ' + (active ? '#17150F' : '#E6E3DC') + ';background:' + (active ? '#17150F' : '#fff') + ';color:' + (active ? '#fff' : '#6B665C') + ';font-family:inherit;font-size:13px;font-weight:700;padding:9px;border-radius:11px;cursor:pointer;',
+      };
+    });
+
+    // ---- manual add-package card ----
+    const m = this.state.manual;
+    const mdet = this.detectCarrier(m.tracking);
+    const eff = this.state.manualCarrier || (mdet ? mdet.carrier : null);
+    const ecolor = eff ? C[eff].color : null;
+    const carrierOptions = [
+      { key: null, label: 'Auto-detect' },
+      { key: 'UPS', label: 'UPS' },
+      { key: 'USPS', label: 'USPS' },
+      { key: 'FedEx', label: 'FedEx' },
+    ].map(o => ({
+      label: o.label,
+      selected: (this.state.manualCarrier || null) === o.key,
+      dotStyle: 'flex:none;width:14px;height:14px;border-radius:50%;background:' + (o.key ? C[o.key].color : '#FBFAF7') + ';' + (o.key ? '' : 'border:2px solid #C3BDB1;box-sizing:border-box;'),
+      style: 'display:flex;align-items:center;gap:11px;width:100%;padding:9px 10px;border:none;background:transparent;border-radius:10px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:600;color:#17150F;',
+      onSelect: (e) => { e.stopPropagation(); this.selectCarrier(o.key); },
+    }));
+    const manual = {
+      name: m.name, tracking: m.tracking,
+      hasCarrier: !!eff, noCarrier: !eff,
+      border: ecolor || '#CFC9BE',
+      badgeBg: ecolor || '#C3BDB1',
+      labelColor: ecolor || '#A8A296',
+      label: eff ? ('New · ' + C[eff].name) : 'Add a package',
+      addBg: ecolor || '#D8D3CA',
+      carrierOptions,
+    };
+    const manualShow = tab === 'active' && !this.state.pendingImport;
+    const pickerOpen = manualShow && this.state.manualPickerOpen;
+
+    const seg = (on) => on
+      ? 'flex:1;border:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:700;color:#17150F;background:#fff;padding:9px;border-radius:11px;box-shadow:0 1px 3px rgba(0,0,0,.08);'
+      : 'flex:1;border:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:600;color:#8A857C;background:transparent;padding:9px;border-radius:11px;';
+
+    return {
+      packages,
+      dateLabel: this.fmt(this.today()).long,
+      headerTitle: 'Ship Happens',
+      headerSub: tab === 'active' ? (soon + ' arriving soon') : (archN + (archN === 1 ? ' package archived' : ' packages archived')),
+      empty: list.length === 0,
+      emptyText: tab === 'active' ? 'No active deliveries right now.' : 'Nothing archived yet. Swipe a delivered package left to archive it.',
+      tabActive: () => this.setState({ tab: 'active' }),
+      tabArchived: () => this.setState({ tab: 'archived' }),
+      tabActiveStyle: seg(tab === 'active'),
+      tabArchivedStyle: seg(tab === 'archived'),
+      selected: sel,
+      closeDetail: () => this.setState({ selectedId: null }),
+      toast: this.state.toast,
+      undo: () => this.undoToast(),
+      stopProp: (e) => e.stopPropagation(),
+      pending: tab === 'active' ? this.state.pendingImport : null,
+      readClipboard: () => this.readClipboard(false),
+      pendingNameInput: (e) => this.pendingNameInput(e),
+      addPending: () => this.addPending(),
+      dismissPending: () => this.dismissPending(),
+      manual, manualShow, pickerOpen,
+      togglePicker: (e) => this.togglePicker(e),
+      manualNameInput: (e) => this.manualNameInput(e),
+      manualTrackingInput: (e) => this.manualTrackingInput(e),
+      addManual: () => this.addManual(),
+      clearManual: () => this.clearManual(),
+      showSettings: this.state.showSettings,
+      openSettings: () => this.openSettings(),
+      closeSettings: () => this.closeSettings(),
+      settingsCarriers,
+      trackingmore,
+      freqOptions,
+      autoToggleBg: S.autoClipboard ? '#17150F' : '#DAD6CE',
+      autoDotStyle: dot(S.autoClipboard),
+      toggleAuto: () => this.toggleAuto(),
+    };
+  }
+}
+</script>
+</body>
+</html>
