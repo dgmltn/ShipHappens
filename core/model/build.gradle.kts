@@ -7,6 +7,7 @@ kotlin {
     android {
         namespace = "com.shiphappens.core.model"
         compileSdk = libs.versions.compileSdk.get().toInt()
+        minSdk = libs.versions.minSdk.get().toInt()
     }
     jvm()
     iosArm64()
