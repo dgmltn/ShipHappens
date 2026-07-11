@@ -1,0 +1,5 @@
+<resources>
+    <style name="Theme.ShipHappens" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#F7F6F3</item>
+    </style>
+</resources>

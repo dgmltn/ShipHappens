@@ -14,6 +14,7 @@ datetime = "0.8.0"
 lifecycle = "2.10.0"
 navigation3Runtime = "1.1.4"
 navigation3Ui = "1.1.1"
+activityCompose = "1.13.0"
 minSdk = "26"
 compileSdk = "36"
 targetSdk = "36"
@@ -46,6 +47,7 @@ lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-vie
 lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
 navigation3-runtime = { module = "androidx.navigation3:navigation3-runtime", version.ref = "navigation3Runtime" }
 navigation3-ui = { module = "org.jetbrains.androidx.navigation3:navigation3-ui", version.ref = "navigation3Ui" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }
 
 [plugins]
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
