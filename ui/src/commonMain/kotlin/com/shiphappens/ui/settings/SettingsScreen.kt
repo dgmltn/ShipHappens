@@ -37,7 +37,9 @@ fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = koinViewModel()) 
     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(ShipColors.bg)) {
         Column(Modifier.fillMaxSize()) {
             Row(
-                Modifier.fillMaxWidth().background(ShipColors.card).padding(start = 20.dp, end = 20.dp, top = 26.dp, bottom = 16.dp),
+                Modifier.fillMaxWidth().background(ShipColors.card)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                    .padding(start = 20.dp, end = 20.dp, top = 26.dp, bottom = 16.dp),
                 verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text("‹", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = ShipColors.ink,
@@ -62,7 +64,12 @@ fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = koinViewModel()) 
                 )
             }
         }
-        ToastOverlay(s.toast, Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp))
+        ToastOverlay(
+            s.toast,
+            Modifier.align(Alignment.BottomCenter)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                .padding(bottom = 28.dp),
+        )
     }
 }
 

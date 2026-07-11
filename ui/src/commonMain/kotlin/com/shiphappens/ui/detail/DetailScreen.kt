@@ -8,7 +8,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -32,7 +31,11 @@ fun DetailScreen(parcelId: String, onBack: () -> Unit) {
 
     Column(Modifier.fillMaxSize().background(ShipColors.bg)) {
         // Carrier-colored header
-        Column(Modifier.fillMaxWidth().background(accent).padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 24.dp)) {
+        Column(
+            Modifier.fillMaxWidth().background(accent)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                .padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 24.dp),
+        ) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("‹ Back", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp,
                     modifier = Modifier.clip(RoundedCornerShape(11.dp)).background(Color.White.copy(alpha = .16f))

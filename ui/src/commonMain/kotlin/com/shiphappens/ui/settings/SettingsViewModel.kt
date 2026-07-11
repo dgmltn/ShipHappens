@@ -45,6 +45,7 @@ class SettingsViewModel(
             val configured = d.configSpec.all { cfg[it.key] != null }
             val (statusText, statusColor) = when {
                 !cfg.enabled -> "Not connected" to "#A8A296"
+                !d.implemented -> "Direct API coming soon" to "#A8A296"
                 !configured -> "Enabled · add your credentials" to "#C2410C"
                 d.kind == SourceKind.UNIVERSAL -> "Connected · 1,000+ couriers" to (d.accentColorHex ?: "#1F7A4D")
                 else -> "Connected · syncing" to "#1F7A4D"

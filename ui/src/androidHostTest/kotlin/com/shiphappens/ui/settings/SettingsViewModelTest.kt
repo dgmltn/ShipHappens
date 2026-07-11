@@ -103,16 +103,20 @@ class SettingsViewModelTest {
     private fun fieldCommitted(key: String, value: String): (SettingsUiState) -> Boolean =
         { it.carriers.singleOrNull()?.fields?.any { f -> f.key == key && f.value == value } == true }
 
+    // NOTE (controller-authorized expectation change): UPS is a stub source (implemented =
+    // false), so once enabled its status is always "Direct API coming soon" regardless of
+    // whether credentials are configured — it no longer transitions through "Enabled · add
+    // your credentials" / "Connected · syncing". Field edits still persist normally.
     @Test fun field_edits_persist_and_change_status() = runTest {
         val vm = vm()
         vm.onToggle("ups")
         val enabled = awaitState { it.carriers.singleOrNull()?.enabled == true }
-        assertEquals("Enabled · add your credentials", enabled.carriers.single().statusText)
+        assertEquals("Direct API coming soon", enabled.carriers.single().statusText)
         // Fired back-to-back on purpose: updateSourceConfig makes concurrent same-source edits
         // atomic, so both fields must land (this exercises the race fix at the VM level).
         vm.onField("ups", "clientId", "abc"); vm.onField("ups", "clientSecret", "shh")
-        val configured = awaitState { it.carriers.singleOrNull()?.statusText == "Connected · syncing" }
-        assertEquals("Connected · syncing", configured.carriers.single().statusText)
+        val configured = awaitState { fieldCommitted("clientId", "abc")(it) }
+        assertEquals("Direct API coming soon", configured.carriers.single().statusText)
         assertEquals("abc", settings.current("ups")["clientId"])
     }
 

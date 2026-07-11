@@ -139,10 +139,11 @@ class ListViewModel(
     fun onAcceptPending() {
         val p = clipboard.pending.value ?: return
         viewModelScope.launch {
-            repository.addParcel(pendingName.value, p.trackingNumber, p.carrier)
-            clipboard.dismiss()
-            pendingName.value = ""
-            flash("Delivery added")
+            when (repository.addParcel(pendingName.value, p.trackingNumber, p.carrier)) {
+                is AddResult.Added -> { clipboard.dismiss(); pendingName.value = ""; flash("Delivery added") }
+                AddResult.Duplicate -> flash("That package is already in your list")
+                AddResult.NoCarrier -> flash("Tap the icon to choose a carrier")
+            }
         }
     }
 

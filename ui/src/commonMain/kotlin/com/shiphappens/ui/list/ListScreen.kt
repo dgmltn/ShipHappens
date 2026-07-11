@@ -72,13 +72,22 @@ fun ListScreen(
                 }
             }
         }
-        ToastOverlay(state.toast, vm::onUndo, Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp))
+        ToastOverlay(
+            state.toast, vm::onUndo,
+            Modifier.align(Alignment.BottomCenter)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
+                .padding(bottom = 28.dp),
+        )
     }
 }
 
 @Composable
 private fun Header(state: ListUiState, onOpenSettings: () -> Unit) {
-    Row(Modifier.padding(start = 22.dp, end = 22.dp, top = 30.dp, bottom = 4.dp), verticalAlignment = Alignment.Top) {
+    Row(
+        Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+            .padding(start = 22.dp, end = 22.dp, top = 30.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
         Column(Modifier.weight(1f)) {
             Text(state.dateLabel.uppercase(), color = ShipColors.faint,
                 style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp))
