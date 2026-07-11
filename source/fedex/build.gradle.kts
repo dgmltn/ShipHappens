@@ -6,8 +6,8 @@ plugins {
 kotlin {
     android {
         namespace = "com.shiphappens.source.fedex"
-        compileSdk = libs.versions.compileSdk.get().toInt()
-        minSdk = libs.versions.minSdk.get().toInt()
+        compileSdk = providers.gradleProperty("shiphappens.compileSdk").get().toInt()
+        minSdk = providers.gradleProperty("shiphappens.minSdk").get().toInt()
     }
     jvm()
     iosArm64()

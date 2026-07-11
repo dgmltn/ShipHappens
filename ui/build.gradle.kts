@@ -9,8 +9,8 @@ plugins {
 kotlin {
     android {
         namespace = "com.shiphappens.ui"
-        compileSdk = libs.versions.compileSdk.get().toInt()
-        minSdk = libs.versions.minSdk.get().toInt()
+        compileSdk = providers.gradleProperty("shiphappens.compileSdk").get().toInt()
+        minSdk = providers.gradleProperty("shiphappens.minSdk").get().toInt()
         // Host tests: un-mocked Android SDK methods return default values instead of throwing
         // "not mocked" (e.g. Room's RoomDatabase.isMainThread calls Looper.getMainLooper()).
         withHostTestBuilder {}.configure { isReturnDefaultValues = true }

@@ -5,11 +5,11 @@ plugins {
 
 android {
     namespace = "com.shiphappens.android"
-    compileSdk = libs.versions.compileSdk.get().toInt()
+    compileSdk = providers.gradleProperty("shiphappens.compileSdk").get().toInt()
     defaultConfig {
         applicationId = "com.shiphappens"
-        minSdk = libs.versions.minSdk.get().toInt()
-        targetSdk = libs.versions.targetSdk.get().toInt()
+        minSdk = providers.gradleProperty("shiphappens.minSdk").get().toInt()
+        targetSdk = providers.gradleProperty("shiphappens.targetSdk").get().toInt()
         versionCode = 1
         versionName = "0.1.0"
     }

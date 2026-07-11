@@ -15,9 +15,6 @@ lifecycle = "2.10.0"
 navigation3Runtime = "1.1.4"
 navigation3Ui = "1.1.1"
 activityCompose = "1.13.0"
-minSdk = "26"
-compileSdk = "36"
-targetSdk = "36"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
