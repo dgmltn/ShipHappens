@@ -17,6 +17,7 @@ class FedexSource : TrackingSource {
             ConfigField("apiKey", "API key", "FedEx API key"),
             ConfigField("secretKey", "Secret key", "••••••••", isSecret = true),
         ),
+        implemented = false,
     )
     override fun detectCarrier(trackingNumber: String): Carrier? =
         WellKnownCarriers.FEDEX.takeIf { Regex("^\\d{12}$|^\\d{15}$|^\\d{20,22}$").matches(normalizeTracking(trackingNumber)) }

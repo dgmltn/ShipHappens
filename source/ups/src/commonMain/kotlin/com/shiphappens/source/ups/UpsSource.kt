@@ -17,6 +17,7 @@ class UpsSource : TrackingSource {
             ConfigField("clientId", "Client ID", "UPS OAuth client ID"),
             ConfigField("clientSecret", "Client secret", "••••••••", isSecret = true),
         ),
+        implemented = false,
     )
     override fun detectCarrier(trackingNumber: String): Carrier? =
         WellKnownCarriers.UPS.takeIf { Regex("^1Z[0-9A-Z]{10,}$").matches(normalizeTracking(trackingNumber)) }

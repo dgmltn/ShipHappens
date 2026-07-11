@@ -17,6 +17,7 @@ class UspsSource : TrackingSource {
             ConfigField("consumerKey", "Consumer key", "USPS consumer key"),
             ConfigField("consumerSecret", "Consumer secret", "••••••••", isSecret = true),
         ),
+        implemented = false,
     )
     override fun detectCarrier(trackingNumber: String): Carrier? {
         val normalized = normalizeTracking(trackingNumber)

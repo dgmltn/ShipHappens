@@ -35,6 +35,15 @@ class SeedingFake : TrackingSource, SeedingSource {
     override fun seeds() = listOf(SeedParcel("Baseball cap", "1ZW463200377332024", WellKnownCarriers.USPS))
 }
 
+/** Always throws instead of returning a Failure — exercises the runCatching guard in refreshRow. */
+class ThrowingSource : TrackingSource {
+    override val descriptor = SourceDescriptor("boom", "Boom", SourceKind.UNIVERSAL)
+    override fun detectCarrier(trackingNumber: String): Carrier? = null
+    override suspend fun track(trackingNumber: String, carrier: Carrier?): SourceResult<TrackingSnapshot> =
+        throw IllegalStateException("source exploded")
+    override suspend fun testConnection(config: SourceConfig) = SourceResult.Success(Unit)
+}
+
 class ParcelRepositoryTest {
     private lateinit var settings: SettingsRepository
     private lateinit var clock: FixedClock
@@ -113,6 +122,30 @@ class ParcelRepositoryTest {
         assertEquals(listOf("Baseball cap"), parcels.map { it.name })
         r.refreshAll(force = true)  // seeding is idempotent (dedupe)
         assertEquals(1, r.observeParcels(archived = false).first().size)
+    }
+
+    @Test fun refreshAll_does_not_count_no_source_parcels_as_failures() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val src = FakeSource("u", kind = SourceKind.UNIVERSAL)
+        val r = repo(scope, src)
+        // "u" is never enabled -> the parcel has no resolvable source.
+        val added = r.addParcel("Mystery box", "1Z999AA10123456784", WellKnownCarriers.UPS) as AddResult.Added
+        val summary = r.refreshAll(force = true)
+        assertEquals(0, summary.failed)
+        assertNull(summary.firstFailureReason)
+        val p = r.observeParcel(added.parcel.id).first()!!
+        assertEquals(TrackingStatus.UNKNOWN, p.status)
+    }
+
+    @Test fun refreshAll_survives_a_throwing_source_and_counts_one_failure() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val src = ThrowingSource()
+        val r = repo(scope, src)
+        settings.setSourceConfig("boom", SourceConfig(enabled = true))
+        r.addParcel("Keyboard", "1Z999AA10123456784", null)
+        val summary = r.refreshAll(force = true)
+        assertEquals(1, summary.failed)
+        assertEquals(FailureReason.UNKNOWN, summary.firstFailureReason)
     }
 
     @Test fun archive_restore_and_sorting() = runTest {

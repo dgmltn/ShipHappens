@@ -48,6 +48,20 @@ class SourceRegistryTest {
         scope.cancel()
     }
 
+    @Test fun unimplemented_carrier_source_is_skipped_for_universal_fallback() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val s = settings(scope)
+        val stubCarrier = FakeSource("stub-carrier", detects = WellKnownCarriers.UPS, implemented = false)
+        val universal = FakeSource("universal-src", kind = SourceKind.UNIVERSAL)
+        s.setSourceConfig("stub-carrier", SourceConfig(enabled = true))
+        s.setSourceConfig("universal-src", SourceConfig(enabled = true))
+        val reg = SourceRegistry(listOf(stubCarrier, universal), s)
+        // stub-carrier would normally win by detectCarrier match, but it's not implemented,
+        // so the universal source must win instead.
+        assertEquals("universal-src", reg.sourceFor(parcel())!!.descriptor.id)
+        scope.cancel()
+    }
+
     @Test fun no_enabled_source_returns_null() = runTest {
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
         val reg = SourceRegistry(listOf(FakeSource("x")), settings(scope))

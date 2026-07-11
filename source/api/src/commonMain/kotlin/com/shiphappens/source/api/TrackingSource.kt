@@ -18,6 +18,8 @@ data class SourceDescriptor(
     val kind: SourceKind,
     val accentColorHex: String? = null,
     val configSpec: List<ConfigField> = emptyList(),
+    /** False for stub sources that declare themselves but don't actually fetch live data yet. */
+    val implemented: Boolean = true,
 )
 
 enum class FailureReason { AUTH, NETWORK, NOT_FOUND, RATE_LIMITED, UNKNOWN }
@@ -31,6 +33,10 @@ interface TrackingSource {
     val descriptor: SourceDescriptor
     /** Cheap, local-only recognition. Null = "not mine / don't know". */
     fun detectCarrier(trackingNumber: String): Carrier?
+    /**
+     * Implementations should return [SourceResult.Failure] rather than throwing; the repository
+     * additionally guards against thrown exceptions.
+     */
     suspend fun track(trackingNumber: String, carrier: Carrier?): SourceResult<TrackingSnapshot>
     suspend fun testConnection(config: SourceConfig): SourceResult<Unit>
 }

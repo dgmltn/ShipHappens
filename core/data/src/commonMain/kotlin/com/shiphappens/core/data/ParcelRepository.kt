@@ -62,15 +62,29 @@ class ParcelRepository(
     suspend fun archive(id: String) = dao.archive(id, clock.now().toEpochMilliseconds())
     suspend fun restore(id: String) = dao.restore(id)
 
-    suspend fun refresh(id: String): Boolean = refreshRow(id) == null
+    suspend fun refresh(id: String): Boolean = refreshRow(id) is RefreshOutcome.Success
 
-    /** @return null on success, failure reason otherwise (NO source resolves to UNKNOWN). */
-    private suspend fun refreshRow(id: String): FailureReason? {
-        val row = dao.getById(id) ?: return FailureReason.UNKNOWN
+    /**
+     * Outcome of a single-row refresh attempt. [NoSource] (no enabled source resolves for this
+     * parcel) is NOT a failure — per spec §9 it must not count toward [RefreshSummary.failed] or
+     * surface a "couldn't refresh" toast; the parcel simply stays at whatever status it has.
+     */
+    private sealed interface RefreshOutcome {
+        data object Success : RefreshOutcome
+        data object NoSource : RefreshOutcome
+        data class Failed(val reason: FailureReason) : RefreshOutcome
+    }
+
+    private suspend fun refreshRow(id: String): RefreshOutcome {
+        val row = dao.getById(id) ?: return RefreshOutcome.Failed(FailureReason.UNKNOWN)
         val parcel = row.toDomain()
-        val source = registry.sourceFor(parcel) ?: return FailureReason.UNKNOWN
-        return when (val result = source.track(parcel.trackingNumber, parcel.carrier)) {
-            is SourceResult.Failure -> result.reason
+        val source = registry.sourceFor(parcel) ?: return RefreshOutcome.NoSource
+        // Guard against a misbehaving source implementation throwing instead of returning
+        // SourceResult.Failure — see TrackingSource.track KDoc.
+        val result = runCatching { source.track(parcel.trackingNumber, parcel.carrier) }
+            .getOrElse { SourceResult.Failure(FailureReason.UNKNOWN, it.message) }
+        return when (result) {
+            is SourceResult.Failure -> RefreshOutcome.Failed(result.reason)
             is SourceResult.Success -> {
                 val snap = result.value
                 val updated = row.parcel.copy(
@@ -83,7 +97,7 @@ class ParcelRepository(
                 )
                 dao.upsertParcel(updated)
                 if (snap.events.isNotEmpty()) dao.replaceEvents(id, snap.events.map { it.toEntity(id) })
-                null
+                RefreshOutcome.Success
             }
         }
     }
@@ -101,8 +115,11 @@ class ParcelRepository(
         var failed = 0
         var firstReason: FailureReason? = null
         for (e in candidates) {
-            val reason = refreshRow(e.id)
-            if (reason != null) { failed++; if (firstReason == null) firstReason = reason }
+            val outcome = refreshRow(e.id)
+            if (outcome is RefreshOutcome.Failed) {
+                failed++
+                if (firstReason == null) firstReason = outcome.reason
+            }
         }
         return RefreshSummary(candidates.size, failed, firstReason)
     }

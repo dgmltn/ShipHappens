@@ -12,6 +12,7 @@ class UpsSourceTest {
         assertEquals("ups", src.descriptor.id)
         assertEquals(SourceKind.CARRIER, src.descriptor.kind)
         assertEquals(listOf("clientId", "clientSecret"), src.descriptor.configSpec.map { it.key })
+        assertFalse(src.descriptor.implemented)
     }
     @Test fun detects_1z_numbers_only() {
         assertEquals(WellKnownCarriers.UPS, src.detectCarrier("1Z 999 AA1 01 2345 6784"))
