@@ -1,0 +1,33 @@
+name: ShipHappens
+options:
+  bundleIdPrefix: com.shiphappens
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    ENABLE_USER_SCRIPT_SANDBOXING: "NO"
+targets:
+  ShipHappens:
+    type: application
+    platform: iOS
+    sources: [ShipHappens]
+    info:
+      path: ShipHappens/Info.plist
+      properties:
+        CFBundleDisplayName: Ship Happens
+        UILaunchScreen: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.shiphappens
+        OTHER_LDFLAGS: $(inherited) -framework SharedUI
+        FRAMEWORK_SEARCH_PATHS: $(inherited) $(SRCROOT)/../ui/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)
+        # :ui only configures iosArm64()/iosSimulatorArm64() targets (no Intel simulator slice).
+        # The generic "Any iOS Simulator Device" destination otherwise requests ios_x64 too,
+        # which Gradle/Kotlin Native can't satisfy -- exclude it for the simulator SDK.
+        "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
+    preBuildScripts:
+      - name: Build Kotlin Framework
+        script: |
+          cd "$SRCROOT/.."
+          ./gradlew :ui:embedAndSignAppleFrameworkForXcode
+        basedOnDependencyAnalysis: false
