@@ -1,0 +1,42 @@
+package com.shiphappens.ui
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.ui.NavDisplay
+import com.shiphappens.ui.detail.DetailScreen
+import com.shiphappens.ui.list.ListScreen
+import com.shiphappens.ui.navigation.*
+import com.shiphappens.ui.settings.SettingsScreen
+import com.shiphappens.ui.theme.ShipTheme
+
+// Navigation 3 API-drift note: the installed runtime (1.1.4) only exposes an unconfigured
+// `rememberNavBackStack(vararg NavKey)` overload from androidMain (RememberNavBackStack.android.kt,
+// reflection-based); the overload visible from commonMain requires a SavedStateConfiguration with
+// a SerializersModule registering every NavKey subtype. Rather than wire that up, this uses
+// NavBackStack's public `vararg` constructor directly under `remember` — the same
+// Compose-state-backed (SnapshotStateList) back stack, just without save/restore across process
+// death. `entry<T>` is a reified member of EntryProviderScope<T>, not a top-level function, so it
+// is used unqualified inside the `entryProvider { }` builder block (no separate import exists).
+@Composable
+fun App() {
+    ShipTheme {
+        val backStack = remember { NavBackStack<NavKey>(ListRoute) }
+        NavDisplay(
+            backStack = backStack,
+            onBack = { backStack.removeLastOrNull() },
+            entryProvider = entryProvider {
+                entry<ListRoute> {
+                    ListScreen(
+                        onOpenDetail = { id -> backStack.add(DetailRoute(id)) },
+                        onOpenSettings = { backStack.add(SettingsRoute) },
+                    )
+                }
+                entry<DetailRoute> { route -> DetailScreen(route.parcelId, onBack = { backStack.removeLastOrNull() }) }
+                entry<SettingsRoute> { SettingsScreen(onBack = { backStack.removeLastOrNull() }) }
+            },
+        )
+    }
+}
