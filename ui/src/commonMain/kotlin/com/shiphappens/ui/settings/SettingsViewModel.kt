@@ -72,16 +72,14 @@ class SettingsViewModel(
 
     fun onToggle(sourceId: String) {
         viewModelScope.launch {
-            val cfg = settings.current(sourceId)
-            settings.setSourceConfig(sourceId, cfg.copy(enabled = !cfg.enabled))
-            if (!cfg.enabled) repository.refreshAll(force = false)  // just turned ON: seed + refresh
+            val new = settings.updateSourceConfig(sourceId) { it.copy(enabled = !it.enabled) }
+            if (new.enabled) repository.refreshAll(force = false)  // just turned ON: seed + refresh
         }
     }
 
     fun onField(sourceId: String, key: String, value: String) {
         viewModelScope.launch {
-            val cfg = settings.current(sourceId)
-            settings.setSourceConfig(sourceId, cfg.copy(values = cfg.values + (key to value)))
+            settings.updateSourceConfig(sourceId) { it.copy(values = it.values + (key to value)) }
         }
     }
 

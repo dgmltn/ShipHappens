@@ -93,10 +93,13 @@ class SettingsViewModelTest {
         val s = awaitState { it.universal.singleOrNull()?.enabled == true }
         assertTrue(s.universal.single().enabled)
         assertEquals("Connected · 1,000+ couriers", s.universal.single().statusText)
-        assertEquals(7, repo.observeParcels(false).first { it.size == 7 }.size)  // demo seeds flowed through
+        // Await seeding first (a bare first{} would race the flow's initial empty emission),
+        // then assert the exact count on a FRESH read so over-seeding beyond 7 still fails.
+        repo.observeParcels(false).first { it.size >= 7 }
+        assertEquals(7, repo.observeParcels(false).first().size)  // demo seeds flowed through
     }
 
-    /** True once [key]'s field on the sole carrier card holds [value] — settings.current() has committed it. */
+    /** True once [key]'s field on the sole carrier card holds [value] — the edit has committed. */
     private fun fieldCommitted(key: String, value: String): (SettingsUiState) -> Boolean =
         { it.carriers.singleOrNull()?.fields?.any { f -> f.key == key && f.value == value } == true }
 
@@ -105,11 +108,9 @@ class SettingsViewModelTest {
         vm.onToggle("ups")
         val enabled = awaitState { it.carriers.singleOrNull()?.enabled == true }
         assertEquals("Enabled · add your credentials", enabled.carriers.single().statusText)
-        // Sequenced (not fired concurrently): onField does a read-modify-write of the same
-        // settings key, so two in-flight calls would race and one could clobber the other.
-        vm.onField("ups", "clientId", "abc")
-        awaitState(predicate = fieldCommitted("clientId", "abc"))
-        vm.onField("ups", "clientSecret", "shh")
+        // Fired back-to-back on purpose: updateSourceConfig makes concurrent same-source edits
+        // atomic, so both fields must land (this exercises the race fix at the VM level).
+        vm.onField("ups", "clientId", "abc"); vm.onField("ups", "clientSecret", "shh")
         val configured = awaitState { it.carriers.singleOrNull()?.statusText == "Connected · syncing" }
         assertEquals("Connected · syncing", configured.carriers.single().statusText)
         assertEquals("abc", settings.current("ups")["clientId"])
@@ -122,10 +123,10 @@ class SettingsViewModelTest {
             "Enter UPS credentials first",
             awaitRecorded { it.toast == "Enter UPS credentials first" }.toast,
         )
-        vm.onField("ups", "clientId", "a")
-        awaitState(predicate = fieldCommitted("clientId", "a"))
-        vm.onField("ups", "clientSecret", "b")
-        awaitState(predicate = fieldCommitted("clientSecret", "b"))
+        vm.onField("ups", "clientId", "a"); vm.onField("ups", "clientSecret", "b")
+        // Both edits must be committed before onTest reads settings.current("ups") — otherwise
+        // the second test-connection could legitimately still see missing credentials.
+        awaitState { fieldCommitted("clientId", "a")(it) && fieldCommitted("clientSecret", "b")(it) }
         vm.onTest("ups")
         assertEquals(
             "UPS credentials look valid",

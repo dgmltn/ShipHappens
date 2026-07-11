@@ -3,9 +3,13 @@ package com.shiphappens.core.data.settings
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import com.shiphappens.source.api.SourceConfig
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.test.*
 import okio.Path.Companion.toPath
 import kotlin.test.*
@@ -35,6 +39,22 @@ class SettingsRepositoryTest {
         assertEquals(cfg, r.settings.first().sourceConfigs["trackingmore"])
         assertEquals(cfg, r.current("trackingmore"))
         assertEquals(SourceConfig(), r.current("never-set"))
+        scope.cancel()
+    }
+
+    /** Regression: two concurrent field writes to the SAME source must not clobber each other. */
+    @Test fun concurrent_updates_to_same_source_both_persist() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val r = repo(scope)
+        withContext(Dispatchers.Default) {  // real threads: genuinely concurrent edits
+            listOf(
+                async { r.updateSourceConfig("ups") { it.copy(values = it.values + ("clientId" to "abc")) } },
+                async { r.updateSourceConfig("ups") { it.copy(values = it.values + ("clientSecret" to "shh")) } },
+            ).awaitAll()
+        }
+        val cfg = r.current("ups")
+        assertEquals("abc", cfg["clientId"])
+        assertEquals("shh", cfg["clientSecret"])
         scope.cancel()
     }
 

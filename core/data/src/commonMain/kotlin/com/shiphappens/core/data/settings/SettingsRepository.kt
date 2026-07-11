@@ -53,6 +53,19 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) : Source
         }
     }
 
+    /** Atomically transform one source's config inside a single DataStore edit. Returns the new value. */
+    suspend fun updateSourceConfig(sourceId: String, transform: (SourceConfig) -> SourceConfig): SourceConfig {
+        var result = SourceConfig()
+        dataStore.edit { prefs ->
+            val current = prefs[KEY_SOURCE_CONFIGS]
+                ?.let { runCatching { json.decodeFromString(configsSerializer, it) }.getOrNull() }
+                ?: emptyMap()
+            result = transform(current[sourceId] ?: SourceConfig())
+            prefs[KEY_SOURCE_CONFIGS] = json.encodeToString(configsSerializer, current + (sourceId to result))
+        }
+        return result
+    }
+
     suspend fun setAutoClipboardImport(enabled: Boolean) {
         dataStore.edit { it[KEY_AUTO_CLIPBOARD] = enabled }
     }
