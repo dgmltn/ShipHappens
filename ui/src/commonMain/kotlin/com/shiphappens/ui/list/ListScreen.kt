@@ -1,0 +1,312 @@
+package com.shiphappens.ui.list
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.shiphappens.ui.components.ToastOverlay
+import com.shiphappens.ui.theme.*
+import org.koin.compose.viewmodel.koinViewModel
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ListScreen(
+    onOpenDetail: (String) -> Unit,
+    onOpenSettings: () -> Unit,
+    vm: ListViewModel = koinViewModel(),
+) {
+    val state by vm.state.collectAsState()
+
+    val owner = LocalLifecycleOwner.current
+    LaunchedEffect(owner) {
+        owner.lifecycle.currentStateFlow.collect { if (it == Lifecycle.State.RESUMED) vm.onForeground() }
+    }
+
+    Box(Modifier.fillMaxSize().background(ShipColors.bg)) {
+        Column(Modifier.fillMaxSize()) {
+            Header(state, onOpenSettings)
+            Tabs(state.tab, vm::onTabSelect)
+            PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = vm::onRefresh, modifier = Modifier.weight(1f)) {
+                LazyColumn(
+                    Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 14.dp, end = 14.dp, bottom = 26.dp, top = 2.dp),
+                ) {
+                    state.pendingImport?.let { p ->
+                        item(key = "pending") {
+                            PendingImportCard(p, vm::onPendingName, vm::onAcceptPending, vm::onDismissPending)
+                        }
+                    }
+                    if (state.tab == ListTab.ACTIVE && state.pendingImport == null) {
+                        item(key = "manual") {
+                            ManualAddCard(state.manualAdd, vm::onManualName, vm::onManualTracking,
+                                vm::onPickerToggle, vm::onPickCarrier, vm::onAddManual, vm::onClearManual)
+                        }
+                    }
+                    items(state.cards, key = { it.id }) { card ->
+                        ParcelRow(card, onClick = { onOpenDetail(card.id) },
+                            onArchive = { vm.onArchive(card.id) }, onRestore = { vm.onRestore(card.id) })
+                    }
+                    state.emptyText?.let { item(key = "empty") { EmptyState(it) } }
+                }
+            }
+        }
+        ToastOverlay(state.toast, vm::onUndo, Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp))
+    }
+}
+
+@Composable
+private fun Header(state: ListUiState, onOpenSettings: () -> Unit) {
+    Row(Modifier.padding(start = 22.dp, end = 22.dp, top = 30.dp, bottom = 4.dp), verticalAlignment = Alignment.Top) {
+        Column(Modifier.weight(1f)) {
+            Text(state.dateLabel.uppercase(), color = ShipColors.faint,
+                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp))
+            Text("Ship Happens", color = ShipColors.ink, fontSize = 31.sp, fontWeight = FontWeight.ExtraBold,
+                fontFamily = hankenFamily())
+            Text(state.headerSub, color = ShipColors.muted, style = MaterialTheme.typography.bodyMedium)
+        }
+        OutlinedIconButton(
+            onClick = onOpenSettings, shape = RoundedCornerShape(13.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, ShipColors.hairlineStrong),
+            colors = IconButtonDefaults.outlinedIconButtonColors(containerColor = ShipColors.card),
+        ) { Text("⚙", fontSize = 17.sp) }
+    }
+}
+
+@Composable
+private fun Tabs(tab: ListTab, onSelect: (ListTab) -> Unit) {
+    Row(
+        Modifier.padding(horizontal = 22.dp, vertical = 14.dp).fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp)).background(ShipColors.segmentBg).padding(4.dp),
+    ) {
+        listOf(ListTab.ACTIVE to "Active", ListTab.ARCHIVED to "Archived").forEach { (t, label) ->
+            val selected = tab == t
+            Text(
+                label, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                color = if (selected) ShipColors.ink else ShipColors.muted,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+                fontFamily = hankenFamily(),
+                modifier = Modifier.weight(1f).clip(RoundedCornerShape(11.dp))
+                    .background(if (selected) ShipColors.card else Color.Transparent)
+                    .clickable { onSelect(t) }.padding(vertical = 9.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun CarrierBadge(accentHex: String, size: Int = 46) {
+    Box(
+        Modifier.size(size.dp).clip(RoundedCornerShape((size * 0.3).dp)).background(colorFromHex(accentHex)),
+        contentAlignment = Alignment.Center,
+    ) { Text("📦", fontSize = (size * 0.42).sp) }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ParcelRow(card: ParcelCardUi, onClick: () -> Unit, onArchive: () -> Unit, onRestore: () -> Unit) {
+    val content: @Composable () -> Unit = {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(ShipColors.card)
+                .border(1.dp, ShipColors.hairline, RoundedCornerShape(20.dp))
+                .clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 15.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            CarrierBadge(card.accentHex)
+            Column(Modifier.weight(1f)) {
+                Text(card.name, color = ShipColors.ink, fontWeight = FontWeight.Bold, fontSize = 16.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, fontFamily = hankenFamily())
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Text(card.carrierName, color = colorFromHex(card.accentHex), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Box(Modifier.size(3.dp).clip(CircleShape).background(ShipColors.hairlineStrong))
+                    Text(card.statusText, color = ShipColors.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            when {
+                card.delivered && !card.showRestore -> Text(
+                    "Delivered", color = ShipColors.delivered, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clip(RoundedCornerShape(9.dp)).background(ShipColors.deliveredBg)
+                        .padding(horizontal = 9.dp, vertical = 5.dp),
+                )
+                card.showRestore -> OutlinedButton(onClick = onRestore, shape = RoundedCornerShape(9.dp)) {
+                    Text("Restore", fontSize = 11.sp, color = ShipColors.muted)
+                }
+                card.ring != null -> DaysRing(card.ring, colorFromHex(card.accentHex), card.urgent)
+            }
+        }
+    }
+
+    Box(Modifier.padding(vertical = 9.dp)) {
+        if (card.swipeable) {
+            val dismissState = rememberSwipeToDismissBoxState(
+                confirmValueChange = { v ->
+                    if (v == SwipeToDismissBoxValue.EndToStart) { onArchive(); true } else false
+                },
+            )
+            SwipeToDismissBox(
+                state = dismissState, enableDismissFromStartToEnd = false,
+                backgroundContent = {
+                    Row(
+                        Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)).background(ShipColors.urgent)
+                            .padding(horizontal = 24.dp),
+                        horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically,
+                    ) { Text("Archive", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp) }
+                },
+            ) { content() }
+        } else content()
+    }
+}
+
+@Composable
+private fun DaysRing(ring: RingUi, accent: Color, urgent: Boolean) {
+    Box(Modifier.size(50.dp), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize()) {
+            val stroke = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
+            val inset = 4.dp.toPx()
+            val arcSize = androidx.compose.ui.geometry.Size(size.width - inset * 2, size.height - inset * 2)
+            drawArc(ShipColors.hairline, 0f, 360f, false, Offset(inset, inset), arcSize, style = stroke)
+            drawArc(accent, -90f, 360f * ring.fraction, false, Offset(inset, inset), arcSize, style = stroke)
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(ring.number, color = if (urgent) ShipColors.urgent else ShipColors.ink,
+                fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, fontFamily = hankenFamily())
+            Text("DAYS", color = ShipColors.faint, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun DashedCard(borderColor: Color, content: @Composable RowScope.() -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 9.dp).clip(RoundedCornerShape(20.dp))
+            .background(ShipColors.cardAlt).border(2.dp, borderColor, RoundedCornerShape(20.dp))
+            .padding(13.dp),
+        verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(13.dp),
+        content = content,
+    )
+}
+
+@Composable
+private fun SmallActionButton(bg: Color, label: String, onClick: () -> Unit, outlined: Boolean = false) {
+    Box(
+        Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))
+            .background(if (outlined) ShipColors.card else bg)
+            .then(if (outlined) Modifier.border(1.dp, ShipColors.hairlineStrong, RoundedCornerShape(12.dp)) else Modifier)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Text(label, color = if (outlined) ShipColors.faint else Color.White, fontWeight = FontWeight.ExtraBold) }
+}
+
+@Composable
+private fun CardTextField(value: String, onChange: (String) -> Unit, placeholder: String, mono: Boolean = false) {
+    BasicTextField(
+        value = value, onValueChange = onChange, singleLine = true,
+        textStyle = MaterialTheme.typography.bodyLarge.copy(
+            color = ShipColors.ink,
+            fontFamily = if (mono) monoFamily() else hankenFamily(),
+            fontWeight = if (mono) FontWeight.Normal else FontWeight.Bold,
+            fontSize = if (mono) 12.sp else 16.sp,
+        ),
+        decorationBox = { inner ->
+            Box { if (value.isEmpty()) Text(placeholder, color = ShipColors.faint, fontSize = if (mono) 12.sp else 16.sp); inner() }
+        },
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+@Composable
+private fun PendingImportCard(p: PendingImportUi, onName: (String) -> Unit, onAccept: () -> Unit, onDismiss: () -> Unit) {
+    val accent = colorFromHex(p.accentHex)
+    DashedCard(accent) {
+        CarrierBadge(p.accentHex, size = 44)
+        Column(Modifier.weight(1f)) {
+            Text("FROM CLIPBOARD · ${p.carrierName.uppercase()}", color = accent, fontSize = 10.sp,
+                fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+            CardTextField(p.name, onName, "Name this package")
+            Text(p.tracking, color = ShipColors.muted, fontFamily = monoFamily(), fontSize = 11.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SmallActionButton(accent, "✓", onAccept)
+            SmallActionButton(ShipColors.card, "✕", onDismiss, outlined = true)
+        }
+    }
+}
+
+@Composable
+private fun ManualAddCard(
+    m: ManualAddUi, onName: (String) -> Unit, onTracking: (String) -> Unit,
+    onPickerToggle: () -> Unit, onPick: (String?) -> Unit, onAdd: () -> Unit, onClear: () -> Unit,
+) {
+    val accent = m.effectiveAccentHex?.let(::colorFromHex) ?: Color(0xFFC3BDB1)
+    Box {
+        DashedCard(if (m.effectiveAccentHex != null) accent else Color(0xFFCFC9BE)) {
+            Box {
+                Box(Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(accent)
+                    .clickable(onClick = onPickerToggle), contentAlignment = Alignment.Center) {
+                    Text(if (m.effectiveCarrierName != null) "📦" else "+", color = Color.White,
+                        fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                }
+                DropdownMenu(expanded = m.pickerOpen, onDismissRequest = onPickerToggle) {
+                    m.options.forEach { opt ->
+                        DropdownMenuItem(
+                            leadingIcon = {
+                                Box(Modifier.size(14.dp).clip(CircleShape)
+                                    .background(opt.accentHex?.let(::colorFromHex) ?: ShipColors.cardAlt)
+                                    .border(if (opt.accentHex == null) 2.dp else 0.dp, Color(0xFFC3BDB1), CircleShape))
+                            },
+                            text = { Text(opt.label, fontWeight = FontWeight.SemiBold) },
+                            onClick = { onPick(opt.code) },
+                        )
+                    }
+                }
+            }
+            Column(Modifier.weight(1f)) {
+                Text(
+                    m.effectiveCarrierName?.let { "NEW · ${it.uppercase()}" } ?: "ADD A PACKAGE",
+                    color = if (m.effectiveCarrierName != null) accent else ShipColors.faint,
+                    fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp,
+                )
+                CardTextField(m.name, onName, "Package name")
+                CardTextField(m.tracking, onTracking, "Tracking number", mono = true)
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SmallActionButton(if (m.effectiveAccentHex != null) accent else Color(0xFFD8D3CA), "✓", onAdd)
+                SmallActionButton(ShipColors.card, "✕", onClear, outlined = true)
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyState(text: String) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 70.dp, horizontal = 30.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(56.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xFFEDEBE4)),
+            contentAlignment = Alignment.Center) { Text("📦", fontSize = 24.sp) }
+        Spacer(Modifier.height(16.dp))
+        Text(text, color = ShipColors.faint, fontSize = 14.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 21.sp)
+    }
+}
