@@ -3,7 +3,7 @@
 Date: 2026-07-10
 Status: Approved pending user review
 Design source: Claude Design project `b7199339-b47b-4111-a58c-bfe98ab9a168`, file `Parcels.dc.html`
-(local copy imported to `design/Parcels.dc.html`)
+(local copy imported to `resources/design/Parcels.dc.html`)
 
 ## 1. What we're building
 

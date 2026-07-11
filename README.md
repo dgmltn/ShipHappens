@@ -8,7 +8,7 @@ undo; settings hold per-source API keys and a refresh cadence.
 
 The full visual spec — every screen, state, and interaction (empty state, list, detail, archive
 swipe, settings cards, clipboard-import card, toasts) — lives in
-[`design/Parcels.dc.html`](design/Parcels.dc.html). Open it in a browser for the canonical UI
+[`resources/design/Parcels.dc.html`](resources/design/Parcels.dc.html). Open it in a browser for the canonical UI
 reference.
 
 ## Module map
