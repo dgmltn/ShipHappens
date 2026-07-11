@@ -14,8 +14,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shiphappens.ui.list.ToastUi
-import com.shiphappens.ui.theme.ShipColors
-import com.shiphappens.ui.theme.ShipTheme
+import com.shiphappens.design.ShipColors
+import com.shiphappens.design.ShipTheme
 import androidx.compose.ui.tooling.preview.Preview
 
 @Composable

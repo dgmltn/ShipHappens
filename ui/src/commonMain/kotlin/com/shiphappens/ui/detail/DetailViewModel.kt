@@ -2,10 +2,10 @@ package com.shiphappens.ui.detail
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.shiphappens.core.data.AppClock
-import com.shiphappens.core.data.ParcelRepository
-import com.shiphappens.core.model.*
-import com.shiphappens.ui.theme.accentHex
+import com.shiphappens.data.AppClock
+import com.shiphappens.data.ParcelRepository
+import com.shiphappens.domain.*
+import com.shiphappens.design.accentHex
 import com.shiphappens.ui.util.design12h
 import com.shiphappens.ui.util.designFormat
 import kotlinx.coroutines.flow.SharingStarted

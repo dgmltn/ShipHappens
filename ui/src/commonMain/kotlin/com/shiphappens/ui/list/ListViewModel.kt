@@ -2,13 +2,13 @@ package com.shiphappens.ui.list
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.shiphappens.core.data.*
-import com.shiphappens.core.data.clipboard.ClipboardImportManager
-import com.shiphappens.core.data.clipboard.PendingImport
-import com.shiphappens.core.data.source.BuiltInCarrierDetection
-import com.shiphappens.core.model.*
+import com.shiphappens.data.*
+import com.shiphappens.data.clipboard.ClipboardImportManager
+import com.shiphappens.data.clipboard.PendingImport
+import com.shiphappens.data.source.BuiltInCarrierDetection
+import com.shiphappens.domain.*
 import com.shiphappens.source.api.FailureReason
-import com.shiphappens.ui.theme.accentHex
+import com.shiphappens.design.accentHex
 import com.shiphappens.ui.util.designFormat
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay

@@ -1,7 +1,7 @@
 package com.shiphappens.ui.di
 
-import com.shiphappens.core.data.di.coreDataModule
-import com.shiphappens.core.data.di.platformDataModule
+import com.shiphappens.data.di.dataModule
+import com.shiphappens.data.di.platformDataModule
 import com.shiphappens.source.demo.demoSourceModule
 import com.shiphappens.source.fedex.fedexSourceModule
 import com.shiphappens.source.trackingmore.trackingMoreSourceModule
@@ -27,7 +27,7 @@ val uiModule = module {
 /** Adding a tracking source = implement TrackingSource in a new module + add its Koin module here. */
 fun appModules(): List<Module> = listOf(
     platformDataModule(),
-    coreDataModule,
+    dataModule,
     trackingMoreSourceModule,
     demoSourceModule,
     upsSourceModule,

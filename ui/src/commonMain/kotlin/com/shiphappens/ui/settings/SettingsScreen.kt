@@ -25,9 +25,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.MaterialTheme
-import com.shiphappens.core.data.settings.RefreshFrequency
+import com.shiphappens.data.settings.RefreshFrequency
 import com.shiphappens.ui.components.ToastOverlay
-import com.shiphappens.ui.theme.*
+import com.shiphappens.design.*
 import androidx.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
 

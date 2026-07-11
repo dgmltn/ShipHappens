@@ -1,7 +1,7 @@
 package com.shiphappens.source.api
 
-import com.shiphappens.core.model.Carrier
-import com.shiphappens.core.model.TrackingSnapshot
+import com.shiphappens.domain.Carrier
+import com.shiphappens.domain.TrackingSnapshot
 
 enum class SourceKind { UNIVERSAL, CARRIER }
 

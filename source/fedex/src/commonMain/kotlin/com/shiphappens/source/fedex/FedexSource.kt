@@ -1,9 +1,9 @@
 package com.shiphappens.source.fedex
 
-import com.shiphappens.core.model.Carrier
-import com.shiphappens.core.model.WellKnownCarriers
-import com.shiphappens.core.model.normalizeTracking
-import com.shiphappens.core.model.TrackingSnapshot
+import com.shiphappens.domain.Carrier
+import com.shiphappens.domain.WellKnownCarriers
+import com.shiphappens.domain.normalizeTracking
+import com.shiphappens.domain.TrackingSnapshot
 import com.shiphappens.source.api.*
 import org.koin.core.module.Module
 import org.koin.dsl.bind

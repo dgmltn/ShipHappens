@@ -15,8 +15,9 @@ dependencyResolutionManagement {
     }
 }
 
-include(":core:model")
-include(":core:data")
+include(":domain")
+include(":data")
+include(":design")
 include(":source:api")
 include(":source:trackingmore")
 include(":source:demo")

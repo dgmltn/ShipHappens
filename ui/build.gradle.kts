@@ -24,7 +24,8 @@ kotlin {
     sourceSets {
         all { languageSettings.optIn("kotlin.time.ExperimentalTime") }
         commonMain.dependencies {
-            api(projects.core.data)
+            api(projects.data)
+            api(projects.design)
             implementation(projects.source.trackingmore)
             implementation(projects.source.demo)
             implementation(projects.source.ups)
@@ -34,7 +35,6 @@ kotlin {
             implementation(compose.foundation)
             implementation(compose.material3)
             implementation(compose.ui)
-            implementation(compose.components.resources)
             implementation(libs.compose.ui.tooling.preview)
             implementation(libs.lifecycle.viewmodel)
             implementation(libs.lifecycle.runtime.compose)
@@ -63,9 +63,8 @@ kotlin {
     }
 }
 
-compose.resources { packageOfResClass = "com.shiphappens.ui.res" }
 
-// Companion to the sqlite-bundled-jvm test dependency above: core:data's androidMain still
+// Companion to the sqlite-bundled-jvm test dependency above: :data's androidMain still
 // pulls the Android-native `sqlite-bundled` variant onto this classpath transitively, giving
 // two BundledSQLiteDriver class definitions whose winner would depend on classpath order.
 // Exclude the Android variant so the desktop driver wins deterministically in host tests.

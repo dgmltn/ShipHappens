@@ -1,6 +1,6 @@
 package com.shiphappens.source.ups
 
-import com.shiphappens.core.model.WellKnownCarriers
+import com.shiphappens.domain.WellKnownCarriers
 import com.shiphappens.source.api.*
 import kotlinx.coroutines.test.runTest
 import kotlin.test.*

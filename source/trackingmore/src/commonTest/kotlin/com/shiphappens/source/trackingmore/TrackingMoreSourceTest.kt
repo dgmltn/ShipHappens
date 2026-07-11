@@ -1,7 +1,7 @@
 package com.shiphappens.source.trackingmore
 
-import com.shiphappens.core.model.TrackingStatus
-import com.shiphappens.core.model.WellKnownCarriers
+import com.shiphappens.domain.TrackingStatus
+import com.shiphappens.domain.WellKnownCarriers
 import com.shiphappens.source.api.*
 import io.ktor.client.engine.mock.*
 import io.ktor.http.*

@@ -1,6 +1,6 @@
 package com.shiphappens.source.demo
 
-import com.shiphappens.core.model.*
+import com.shiphappens.domain.*
 import com.shiphappens.source.api.*
 import kotlin.time.Instant
 import kotlin.time.Duration.Companion.days

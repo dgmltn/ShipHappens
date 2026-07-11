@@ -10,7 +10,7 @@ import com.shiphappens.ui.detail.DetailScreen
 import com.shiphappens.ui.list.ListScreen
 import com.shiphappens.ui.navigation.*
 import com.shiphappens.ui.settings.SettingsScreen
-import com.shiphappens.ui.theme.ShipTheme
+import com.shiphappens.design.ShipTheme
 
 // Navigation 3 API-drift note: the installed runtime (1.1.4) only exposes an unconfigured
 // `rememberNavBackStack(vararg NavKey)` overload from androidMain (RememberNavBackStack.android.kt,

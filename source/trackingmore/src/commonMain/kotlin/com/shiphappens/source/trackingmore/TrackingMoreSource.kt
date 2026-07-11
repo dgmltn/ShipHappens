@@ -1,6 +1,6 @@
 package com.shiphappens.source.trackingmore
 
-import com.shiphappens.core.model.*
+import com.shiphappens.domain.*
 import com.shiphappens.source.api.*
 import io.ktor.client.*
 import io.ktor.client.call.*

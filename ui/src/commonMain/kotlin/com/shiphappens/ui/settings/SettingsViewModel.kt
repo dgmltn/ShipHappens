@@ -2,13 +2,13 @@ package com.shiphappens.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.shiphappens.core.data.ParcelRepository
-import com.shiphappens.core.data.settings.RefreshFrequency
-import com.shiphappens.core.data.settings.SettingsRepository
-import com.shiphappens.core.data.source.SourceRegistry
+import com.shiphappens.data.ParcelRepository
+import com.shiphappens.data.settings.RefreshFrequency
+import com.shiphappens.data.settings.SettingsRepository
+import com.shiphappens.data.source.SourceRegistry
 import com.shiphappens.source.api.*
-import com.shiphappens.ui.theme.accentHex
-import com.shiphappens.core.model.Carrier
+import com.shiphappens.design.accentHex
+import com.shiphappens.domain.Carrier
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*

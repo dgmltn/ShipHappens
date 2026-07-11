@@ -3,11 +3,11 @@ package com.shiphappens.ui.settings
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room3.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
-import com.shiphappens.core.data.*
-import com.shiphappens.core.data.db.ShipHappensDb
-import com.shiphappens.core.data.settings.RefreshFrequency
-import com.shiphappens.core.data.settings.SettingsRepository
-import com.shiphappens.core.data.source.SourceRegistry
+import com.shiphappens.data.*
+import com.shiphappens.data.db.ShipHappensDb
+import com.shiphappens.data.settings.RefreshFrequency
+import com.shiphappens.data.settings.SettingsRepository
+import com.shiphappens.data.source.SourceRegistry
 import com.shiphappens.source.demo.DemoSource
 import com.shiphappens.source.ups.UpsSource
 import kotlinx.coroutines.Dispatchers

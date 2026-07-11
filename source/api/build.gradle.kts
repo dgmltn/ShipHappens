@@ -17,7 +17,7 @@ kotlin {
     sourceSets {
         all { languageSettings.optIn("kotlin.time.ExperimentalTime") }
         commonMain.dependencies {
-            api(projects.core.model)
+            api(projects.domain)
             api(libs.kotlinx.coroutines.core)
             api(libs.kotlinx.serialization.json)
         }

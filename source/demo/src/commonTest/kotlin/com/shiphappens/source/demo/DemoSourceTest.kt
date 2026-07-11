@@ -1,6 +1,6 @@
 package com.shiphappens.source.demo
 
-import com.shiphappens.core.model.*
+import com.shiphappens.domain.*
 import com.shiphappens.source.api.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.LocalDate

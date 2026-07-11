@@ -14,10 +14,11 @@ reference.
 ## Module map
 
 ```
-core/
-  model/       Domain types: Parcel, Carrier, TrackingStatus/Event/Snapshot. No dependencies.
-  data/        Room 3 database, ParcelRepository, SettingsRepository (DataStore), clipboard
+domain/        Domain types: Parcel, Carrier, TrackingStatus/Event/Snapshot. No dependencies.
+data/          Room 3 database, ParcelRepository, SettingsRepository (DataStore), clipboard
                import manager, carrier detection, SourceRegistry, Koin DI wiring.
+design/        Design system: ShipTheme, ShipColors, font resources (Hanken + mono), and the
+               canonical HTML visual spec (Parcels.dc.html).
 source/
   api/         The plugin contract: TrackingSource, SourceConfig, SourceResult, SeedingSource.
                Every source module depends only on this.
@@ -27,16 +28,16 @@ source/
   usps/        USPS carrier source (stub).
   fedex/       FedEx carrier source (stub).
 ui/            Compose Multiplatform screens (list, detail, settings), Navigation 3, ViewModels,
-               theme, and appModules() — the single place all Koin modules are assembled.
+               and appModules() — the single place all Koin modules are assembled.
 app-android/   Android application shell: MainActivity, Koin bootstrap with androidContext.
 app-ios/       iOS application shell (SwiftUI entry point hosting the shared Compose UI),
                generated via XcodeGen from app-ios/project.yml.
 ```
 
-Dependency direction is one-way: `source/*` depends on `source/api` (and `core/model` for domain
-types) but never on `core/data` or `ui`; `core/data` depends on `source/api` for the
-`TrackingSource` contract but not on any specific source; `ui` wires everything together in
-`ui/src/commonMain/kotlin/com/shiphappens/ui/di/AppModules.kt`.
+Dependency direction is one-way: `source/*` depends on `source/api` (and `domain` for domain
+types) but never on `data` or `ui`; `data` depends on `source/api` for the `TrackingSource`
+contract but not on any specific source; `design` depends only on `domain`; `ui` wires everything
+together in `ui/src/commonMain/kotlin/com/shiphappens/ui/di/AppModules.kt`.
 
 ## Build & run
 
@@ -74,7 +75,7 @@ gitignored and recreated by `xcodegen generate`, while `app-ios/ShipHappens/Info
 ## Running tests
 
 ```bash
-./gradlew :core:model:jvmTest :core:data:jvmTest :source:api:jvmTest \
+./gradlew :domain:jvmTest :data:jvmTest :source:api:jvmTest \
           :source:demo:jvmTest :source:trackingmore:jvmTest :source:ups:jvmTest \
           :ui:testAndroidHostTest --console=plain
 ```
@@ -86,7 +87,7 @@ run on the Android-host test source set. Current suite: 65 tests across 7 module
 ## How to add a tracking source
 
 The plugin boundary is `TrackingSource` in `source/api`. Adding a new carrier or aggregator never
-touches `core/*`:
+touches `domain` or `data`:
 
 1. **Implement `TrackingSource`** in a new `source/<name>` module (copy `source/ups` as a
    template: same `build.gradle.kts` shape — `api(projects.source.api)` plus Koin). Provide a
@@ -102,15 +103,15 @@ touches `core/*`:
    ```
 3. **Register it** in `appModules()` in
    `ui/src/commonMain/kotlin/com/shiphappens/ui/di/AppModules.kt` — add the module to the list
-   returned there. `SourceRegistry` (in `core/data`) picks up every bound `TrackingSource`
-   automatically; nothing in `core` needs to change.
+   returned there. `SourceRegistry` (in `data`) picks up every bound `TrackingSource`
+   automatically; nothing in `data` needs to change.
 
 Add `:source:<name>` to `settings.gradle.kts` and give the module the same
 `kotlinMultiplatform` + `android.kotlin.multiplatform.library` shape as its siblings.
 
 ## Settings & API keys
 
-`SettingsRepository` (`core/data`) persists source configs, auto-clipboard-import, and refresh
+`SettingsRepository` (`data`) persists source configs, auto-clipboard-import, and refresh
 frequency in a Jetpack/Multiplatform DataStore `Preferences` file. **Keys are stored
 unencrypted, by design** — this is a v1 personal-use app with no server component; there is no
 keychain/keystore integration. Do not put production or shared credentials in the app.
