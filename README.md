@@ -67,8 +67,9 @@ Or just open `app-ios/ShipHappens.xcodeproj` in Xcode after `xcodegen generate` 
 the scheme's pre-build script runs `./gradlew :ui:embedAndSignAppleFrameworkForXcode` for you, so
 the shared Compose UI framework is always rebuilt before the Swift shell links against it.
 
-Re-run `xcodegen generate` any time `app-ios/project.yml` changes; the generated `.xcodeproj` and
-`Info.plist` are gitignored.
+Re-run `xcodegen generate` any time `app-ios/project.yml` changes; the generated `.xcodeproj` is
+gitignored and recreated by `xcodegen generate`, while `app-ios/ShipHappens/Info.plist` and
+`app-ios/project.yml` are tracked in git.
 
 ## Running tests
 
