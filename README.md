@@ -80,8 +80,8 @@ gitignored and recreated by `xcodegen generate`, while `app-ios/ShipHappens/Info
 ```
 
 Note `:ui`'s task is `testAndroidHostTest`, not `testDebugUnitTest` — the UI module's unit tests
-run on the Android-host test source set. Current suite: 62 tests across 7 modules (model 5, data
-26, api 2, demo 4, trackingmore 5, ups 3, ui 17), all passing.
+run on the Android-host test source set. Current suite: 65 tests across 7 modules (model 5, data
+29, api 2, demo 4, trackingmore 5, ups 3, ui 17), all passing.
 
 ## How to add a tracking source
 
@@ -93,6 +93,9 @@ touches `core/*`:
    `SourceDescriptor` (id, display name, `SourceKind.CARRIER` or `.UNIVERSAL`, config fields),
    `detectCarrier(trackingNumber)` for cheap local format recognition, `track(...)`, and
    `testConnection(...)`. Implement `SeedingSource` too if the source should offer demo/seed data.
+   **Important:** `source/ups` sets `implemented = false` in its descriptor because it is a stub —
+   a real source must leave `implemented` at its default (`true`), or `SourceRegistry` will skip it
+   when resolving which source refreshes a parcel.
 2. **Expose a Koin module** — one line, same pattern as every existing source:
    ```kotlin
    val myNewSourceModule: Module = module { single { MyNewSource() } bind TrackingSource::class }
