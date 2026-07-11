@@ -15,6 +15,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shiphappens.ui.list.ToastUi
 import com.shiphappens.ui.theme.ShipColors
+import com.shiphappens.ui.theme.ShipTheme
+import androidx.compose.ui.tooling.preview.Preview
 
 @Composable
 fun ToastOverlay(toast: ToastUi?, onUndo: () -> Unit, modifier: Modifier = Modifier) {
@@ -35,4 +37,20 @@ fun ToastOverlay(toast: ToastUi?, onUndo: () -> Unit, modifier: Modifier = Modif
 @Composable
 fun ToastOverlay(message: String?, modifier: Modifier = Modifier) {
     ToastOverlay(message?.let { ToastUi(it) }, onUndo = {}, modifier = modifier)
+}
+
+@Preview
+@Composable
+private fun Preview_ToastOverlay_WithUndo() {
+    ShipTheme {
+        ToastOverlay(ToastUi("Package archived", showUndo = true), onUndo = {})
+    }
+}
+
+@Preview
+@Composable
+private fun Preview_ToastOverlay_MessageOnly() {
+    ShipTheme {
+        ToastOverlay(ToastUi("Delivery added"), onUndo = {})
+    }
 }

@@ -28,9 +28,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.shiphappens.ui.components.ToastOverlay
 import com.shiphappens.ui.theme.*
+import androidx.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ListScreen(
     onOpenDetail: (String) -> Unit,
@@ -44,36 +44,78 @@ fun ListScreen(
         owner.lifecycle.currentStateFlow.collect { if (it == Lifecycle.State.RESUMED) vm.onForeground() }
     }
 
+    ListContent(
+        state = state,
+        onOpenDetail = onOpenDetail,
+        onOpenSettings = onOpenSettings,
+        onTabSelect = vm::onTabSelect,
+        onRefresh = vm::onRefresh,
+        onPendingName = vm::onPendingName,
+        onAcceptPending = vm::onAcceptPending,
+        onDismissPending = vm::onDismissPending,
+        onManualName = vm::onManualName,
+        onManualTracking = vm::onManualTracking,
+        onPickerToggle = vm::onPickerToggle,
+        onPickCarrier = vm::onPickCarrier,
+        onAddManual = vm::onAddManual,
+        onClearManual = vm::onClearManual,
+        onArchive = vm::onArchive,
+        onRestore = vm::onRestore,
+        onUndo = vm::onUndo,
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ListContent(
+    state: ListUiState,
+    onOpenDetail: (String) -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    onTabSelect: (ListTab) -> Unit = {},
+    onRefresh: () -> Unit = {},
+    onPendingName: (String) -> Unit = {},
+    onAcceptPending: () -> Unit = {},
+    onDismissPending: () -> Unit = {},
+    onManualName: (String) -> Unit = {},
+    onManualTracking: (String) -> Unit = {},
+    onPickerToggle: () -> Unit = {},
+    onPickCarrier: (String?) -> Unit = {},
+    onAddManual: () -> Unit = {},
+    onClearManual: () -> Unit = {},
+    onArchive: (String) -> Unit = {},
+    onRestore: (String) -> Unit = {},
+    onUndo: () -> Unit = {},
+) {
     Box(Modifier.fillMaxSize().background(ShipColors.bg)) {
         Column(Modifier.fillMaxSize()) {
             Header(state, onOpenSettings)
-            Tabs(state.tab, vm::onTabSelect)
-            PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = vm::onRefresh, modifier = Modifier.weight(1f)) {
+            Tabs(state.tab, onTabSelect)
+            PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
                 LazyColumn(
                     Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(start = 14.dp, end = 14.dp, bottom = 26.dp, top = 2.dp),
                 ) {
                     state.pendingImport?.let { p ->
                         item(key = "pending") {
-                            PendingImportCard(p, vm::onPendingName, vm::onAcceptPending, vm::onDismissPending)
+                            PendingImportCard(p, onPendingName, onAcceptPending, onDismissPending)
                         }
                     }
                     if (state.tab == ListTab.ACTIVE && state.pendingImport == null) {
                         item(key = "manual") {
-                            ManualAddCard(state.manualAdd, vm::onManualName, vm::onManualTracking,
-                                vm::onPickerToggle, vm::onPickCarrier, vm::onAddManual, vm::onClearManual)
+                            ManualAddCard(state.manualAdd, onManualName, onManualTracking,
+                                onPickerToggle, onPickCarrier, onAddManual, onClearManual)
                         }
                     }
                     items(state.cards, key = { it.id }) { card ->
                         ParcelRow(card, onClick = { onOpenDetail(card.id) },
-                            onArchive = { vm.onArchive(card.id) }, onRestore = { vm.onRestore(card.id) })
+                            onArchive = { onArchive(card.id) }, onRestore = { onRestore(card.id) })
                     }
                     state.emptyText?.let { item(key = "empty") { EmptyState(it) } }
                 }
             }
         }
         ToastOverlay(
-            state.toast, vm::onUndo,
+            state.toast, onUndo,
             Modifier.align(Alignment.BottomCenter)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
                 .padding(bottom = 28.dp),
@@ -317,5 +359,113 @@ private fun EmptyState(text: String) {
         Spacer(Modifier.height(16.dp))
         Text(text, color = ShipColors.faint, fontSize = 14.sp,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 21.sp)
+    }
+}
+
+@Preview
+@Composable
+private fun Preview_ListContent_Empty() {
+    ShipTheme {
+        ListContent(
+            ListUiState(
+                dateLabel = "Fri, Jul 11",
+                headerSub = "0 arriving soon",
+                emptyText = "No active deliveries right now.",
+                manualAdd = ManualAddUi(
+                    options = listOf(
+                        CarrierOption(null, "Auto-detect", null),
+                        CarrierOption("ups", "UPS", "#5A3A22"),
+                        CarrierOption("usps", "USPS", "#1E3A8F"),
+                        CarrierOption("fedex", "FedEx", "#5A1B9A"),
+                    ),
+                ),
+            ),
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview_ListContent_PopulatedWithRings() {
+    ShipTheme {
+        ListContent(
+            ListUiState(
+                dateLabel = "Fri, Jul 11",
+                headerSub = "5 arriving soon",
+                cards = listOf(
+                    ParcelCardUi("1", "Baseball cap", "USPS", "#1E3A8F", "In transit",
+                        delivered = false, swipeable = false, showRestore = false, ring = RingUi("2", 0.5f), urgent = false),
+                    ParcelCardUi("2", "Trail running shoes", "FedEx", "#5A1B9A", "Out for delivery",
+                        delivered = false, swipeable = false, showRestore = false, ring = RingUi("1", 0.75f), urgent = true),
+                    ParcelCardUi("3", "Mechanical keyboard", "UPS", "#5A3A22", "In transit",
+                        delivered = false, swipeable = false, showRestore = false, ring = RingUi("5", 0.5f), urgent = false),
+                    ParcelCardUi("4", "Ceramic desk lamp", "UPS", "#5A3A22", "Out for delivery today",
+                        delivered = false, swipeable = false, showRestore = false, ring = RingUi("0", 0.75f), urgent = true),
+                    ParcelCardUi("5", "Clear phone case", "USPS", "#1E3A8F", "Shipped",
+                        delivered = false, swipeable = false, showRestore = false, ring = RingUi("4", 0.25f), urgent = false),
+                ),
+            ),
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview_ListContent_Delivered() {
+    ShipTheme {
+        ListContent(
+            ListUiState(
+                dateLabel = "Fri, Jul 11",
+                headerSub = "0 arriving soon",
+                cards = listOf(
+                    ParcelCardUi("6", "Oat-blend coffee beans", "USPS", "#1E3A8F", "Delivered",
+                        delivered = true, swipeable = true, showRestore = false, ring = null, urgent = false),
+                    ParcelCardUi("7", "Paperback — The Overstory", "FedEx", "#5A1B9A", "Delivered",
+                        delivered = true, swipeable = true, showRestore = false, ring = null, urgent = false),
+                ),
+                toast = ToastUi("Package archived", showUndo = true),
+            ),
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview_ListContent_ArchivedTab() {
+    ShipTheme {
+        ListContent(
+            ListUiState(
+                dateLabel = "Fri, Jul 11",
+                headerSub = "2 packages archived",
+                tab = ListTab.ARCHIVED,
+                cards = listOf(
+                    ParcelCardUi("6", "Oat-blend coffee beans", "USPS", "#1E3A8F", "Delivered",
+                        delivered = true, swipeable = false, showRestore = true, ring = null, urgent = false),
+                    ParcelCardUi("7", "Paperback — The Overstory", "FedEx", "#5A1B9A", "Delivered",
+                        delivered = true, swipeable = false, showRestore = true, ring = null, urgent = false),
+                ),
+            ),
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview_ListContent_PendingImport() {
+    ShipTheme {
+        ListContent(
+            ListUiState(
+                dateLabel = "Fri, Jul 11",
+                headerSub = "1 arriving soon",
+                pendingImport = PendingImportUi(
+                    carrierName = "USPS", accentHex = "#1E3A8F",
+                    tracking = "9400 1118 9922 3300 1122", name = "",
+                ),
+                cards = listOf(
+                    ParcelCardUi("1", "Baseball cap", "USPS", "#1E3A8F", "In transit",
+                        delivered = false, swipeable = false, showRestore = false, ring = RingUi("2", 0.5f), urgent = false),
+                ),
+            ),
+        )
     }
 }

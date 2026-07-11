@@ -28,12 +28,33 @@ import androidx.compose.material3.MaterialTheme
 import com.shiphappens.core.data.settings.RefreshFrequency
 import com.shiphappens.ui.components.ToastOverlay
 import com.shiphappens.ui.theme.*
+import androidx.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = koinViewModel()) {
     val s by vm.state.collectAsState()
+    SettingsContent(
+        state = s,
+        onBack = onBack,
+        onToggle = vm::onToggle,
+        onField = vm::onField,
+        onTest = vm::onTest,
+        onAutoImport = vm::onAutoImport,
+        onFrequency = vm::onFrequency,
+    )
+}
 
+@Composable
+fun SettingsContent(
+    state: SettingsUiState,
+    onBack: () -> Unit = {},
+    onToggle: (String) -> Unit = {},
+    onField: (String, String, String) -> Unit = { _, _, _ -> },
+    onTest: (String) -> Unit = {},
+    onAutoImport: (Boolean) -> Unit = {},
+    onFrequency: (RefreshFrequency) -> Unit = {},
+) {
     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(ShipColors.bg)) {
         Column(Modifier.fillMaxSize()) {
             Row(
@@ -50,13 +71,13 @@ fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = koinViewModel()) 
 
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 34.dp)) {
                 SectionLabel("Universal API")
-                s.universal.forEach { SourceCard(it, vm) }
+                state.universal.forEach { SourceCard(it, onToggle, onField, onTest) }
                 Spacer(Modifier.height(10.dp))
                 SectionLabel("Direct carrier APIs")
-                s.carriers.forEach { SourceCard(it, vm) }
+                state.carriers.forEach { SourceCard(it, onToggle, onField, onTest) }
                 Spacer(Modifier.height(10.dp))
                 SectionLabel("Sync")
-                SyncCard(s, vm)
+                SyncCard(state.autoImport, state.frequency, onAutoImport, onFrequency)
                 Text(
                     "Keys are stored on this device only and used to fetch live tracking status directly from each carrier.",
                     color = ShipColors.faint, fontSize = 12.sp, lineHeight = 18.sp,
@@ -65,7 +86,7 @@ fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = koinViewModel()) 
             }
         }
         ToastOverlay(
-            s.toast,
+            state.toast,
             Modifier.align(Alignment.BottomCenter)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
                 .padding(bottom = 28.dp),
@@ -89,7 +110,12 @@ private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-private fun SourceCard(card: SourceCardUi, vm: SettingsViewModel) {
+private fun SourceCard(
+    card: SourceCardUi,
+    onToggle: (String) -> Unit,
+    onField: (String, String, String) -> Unit,
+    onTest: (String) -> Unit,
+) {
     val accent = colorFromHex(card.accentHex)
     SettingsCard {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -102,7 +128,7 @@ private fun SourceCard(card: SourceCardUi, vm: SettingsViewModel) {
                 Text(card.statusText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = colorFromHex(card.statusColorHex))
             }
             Switch(
-                checked = card.enabled, onCheckedChange = { vm.onToggle(card.id) },
+                checked = card.enabled, onCheckedChange = { onToggle(card.id) },
                 colors = SwitchDefaults.colors(checkedTrackColor = accent, uncheckedTrackColor = ShipColors.toggleOff),
             )
         }
@@ -112,7 +138,7 @@ private fun SourceCard(card: SourceCardUi, vm: SettingsViewModel) {
                 Text(f.label.uppercase(), color = ShipColors.faint, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.7.sp)
                 Spacer(Modifier.height(5.dp))
                 BasicTextField(
-                    value = f.value, onValueChange = { vm.onField(card.id, f.key, it) }, singleLine = true,
+                    value = f.value, onValueChange = { onField(card.id, f.key, it) }, singleLine = true,
                     visualTransformation = if (f.isSecret) PasswordVisualTransformation() else VisualTransformation.None,
                     textStyle = MaterialTheme.typography.bodyMedium.copy(color = ShipColors.ink, fontFamily = monoFamily(), fontSize = 13.sp),
                     decorationBox = { inner ->
@@ -132,7 +158,7 @@ private fun SourceCard(card: SourceCardUi, vm: SettingsViewModel) {
             Spacer(Modifier.height(13.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(endpoint, color = ShipColors.faint, fontSize = 11.sp, fontFamily = monoFamily())
-                TextButton(onClick = { vm.onTest(card.id) }) {
+                TextButton(onClick = { onTest(card.id) }) {
                     Text("Test connection", color = if (card.id == "trackingmore") Color.White else ShipColors.ink,
                         fontSize = 12.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.clip(RoundedCornerShape(10.dp))
@@ -145,14 +171,19 @@ private fun SourceCard(card: SourceCardUi, vm: SettingsViewModel) {
 }
 
 @Composable
-private fun SyncCard(s: SettingsUiState, vm: SettingsViewModel) {
+private fun SyncCard(
+    autoImport: Boolean,
+    frequency: RefreshFrequency,
+    onAutoImport: (Boolean) -> Unit,
+    onFrequency: (RefreshFrequency) -> Unit,
+) {
     SettingsCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Auto-import from clipboard", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = ShipColors.ink)
                 Text("Detect tracking numbers when you open the app", fontSize = 12.sp, color = ShipColors.muted)
             }
-            Switch(checked = s.autoImport, onCheckedChange = vm::onAutoImport,
+            Switch(checked = autoImport, onCheckedChange = onAutoImport,
                 colors = SwitchDefaults.colors(checkedTrackColor = ShipColors.ink, uncheckedTrackColor = ShipColors.toggleOff))
         }
         Spacer(Modifier.height(15.dp))
@@ -160,15 +191,80 @@ private fun SyncCard(s: SettingsUiState, vm: SettingsViewModel) {
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf(RefreshFrequency.FIFTEEN_MIN to "15 min", RefreshFrequency.ONE_HOUR to "1 hour", RefreshFrequency.MANUAL to "Manual").forEach { (f, label) ->
-                val active = s.frequency == f
+                val active = frequency == f
                 Text(label, fontSize = 13.sp, fontWeight = FontWeight.Bold,
                     color = if (active) Color.White else Color(0xFF6B665C),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                     modifier = Modifier.weight(1f).clip(RoundedCornerShape(11.dp))
                         .background(if (active) ShipColors.ink else ShipColors.card)
                         .border(1.dp, if (active) ShipColors.ink else ShipColors.hairline, RoundedCornerShape(11.dp))
-                        .clickable { vm.onFrequency(f) }.padding(vertical = 9.dp))
+                        .clickable { onFrequency(f) }.padding(vertical = 9.dp))
             }
         }
+    }
+}
+
+@Preview
+@Composable
+private fun Preview_SettingsContent_SourcesDisabled() {
+    ShipTheme {
+        SettingsContent(
+            SettingsUiState(
+                universal = listOf(
+                    SourceCardUi(
+                        id = "trackingmore", name = "TrackingMore", accentHex = "#1F7A4D", enabled = false,
+                        statusText = "Not connected", statusColorHex = "#A8A296",
+                        fields = listOf(FieldUi("apiKey", "API key", "tm_live_…", isSecret = true, value = "")),
+                        endpointText = "api.trackingmore.com/v4",
+                    ),
+                ),
+                carriers = listOf(
+                    SourceCardUi(
+                        id = "ups", name = "UPS", accentHex = "#5A3A22", enabled = false,
+                        statusText = "Not connected", statusColorHex = "#A8A296",
+                        fields = emptyList(), endpointText = "Production endpoint",
+                    ),
+                    SourceCardUi(
+                        id = "usps", name = "USPS", accentHex = "#1E3A8F", enabled = false,
+                        statusText = "Not connected", statusColorHex = "#A8A296",
+                        fields = emptyList(), endpointText = "Production endpoint",
+                    ),
+                ),
+            ),
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview_SettingsContent_SourcesEnabled() {
+    ShipTheme {
+        SettingsContent(
+            SettingsUiState(
+                universal = listOf(
+                    SourceCardUi(
+                        id = "trackingmore", name = "TrackingMore", accentHex = "#1F7A4D", enabled = true,
+                        statusText = "Connected · 1,000+ couriers", statusColorHex = "#1F7A4D",
+                        fields = listOf(FieldUi("apiKey", "API key", "tm_live_…", isSecret = true, value = "tm_live_4f2a9c")),
+                        endpointText = "api.trackingmore.com/v4",
+                    ),
+                ),
+                carriers = listOf(
+                    SourceCardUi(
+                        id = "ups", name = "UPS", accentHex = "#5A3A22", enabled = true,
+                        statusText = "Enabled · add your credentials", statusColorHex = "#C2410C",
+                        fields = listOf(FieldUi("clientId", "Client ID", "Your UPS client ID", isSecret = false, value = "")),
+                        endpointText = "Production endpoint",
+                    ),
+                    SourceCardUi(
+                        id = "fedex", name = "FedEx", accentHex = "#5A1B9A", enabled = true,
+                        statusText = "Direct API coming soon", statusColorHex = "#A8A296",
+                        fields = emptyList(), endpointText = "Production endpoint",
+                    ),
+                ),
+                autoImport = true,
+                frequency = RefreshFrequency.ONE_HOUR,
+            ),
+        )
     }
 }
