@@ -1,0 +1,51 @@
+package com.shiphappens.core.data.settings
+
+import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import com.shiphappens.source.api.SourceConfig
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.*
+import okio.Path.Companion.toPath
+import kotlin.test.*
+
+class SettingsRepositoryTest {
+    private fun repo(scope: CoroutineScope): SettingsRepository {
+        val dir = kotlin.io.path.createTempDirectory("settings").toString()
+        val ds = PreferenceDataStoreFactory.createWithPath(scope = scope) { "$dir/app.preferences_pb".toPath() }
+        return SettingsRepository(ds)
+    }
+
+    @Test fun defaults_are_spec_defaults() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val r = repo(scope)
+        val s = r.settings.first()
+        assertTrue(s.autoClipboardImport)
+        assertEquals(RefreshFrequency.FIFTEEN_MIN, s.refreshFrequency)
+        assertTrue(s.sourceConfigs.isEmpty())
+        scope.cancel()
+    }
+
+    @Test fun source_config_roundtrips_and_provider_returns_it() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val r = repo(scope)
+        val cfg = SourceConfig(enabled = true, values = mapOf("apiKey" to "tm-1"))
+        r.setSourceConfig("trackingmore", cfg)
+        assertEquals(cfg, r.settings.first().sourceConfigs["trackingmore"])
+        assertEquals(cfg, r.current("trackingmore"))
+        assertEquals(SourceConfig(), r.current("never-set"))
+        scope.cancel()
+    }
+
+    @Test fun frequency_and_clipboard_persist() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val r = repo(scope)
+        r.setRefreshFrequency(RefreshFrequency.MANUAL)
+        r.setAutoClipboardImport(false)
+        val s = r.settings.first()
+        assertEquals(RefreshFrequency.MANUAL, s.refreshFrequency)
+        assertFalse(s.autoClipboardImport)
+        scope.cancel()
+    }
+}
