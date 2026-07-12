@@ -4,7 +4,6 @@ import com.shiphappens.data.di.dataModule
 import com.shiphappens.data.di.platformDataModule
 import com.shiphappens.source.demo.demoSourceModule
 import com.shiphappens.source.fedex.fedexSourceModule
-import com.shiphappens.source.trackingmore.trackingMoreSourceModule
 import com.shiphappens.source.ups.upsSourceModule
 import com.shiphappens.source.usps.uspsSourceModule
 import com.shiphappens.ui.detail.DetailViewModel
@@ -28,7 +27,6 @@ val uiModule = module {
 fun appModules(): List<Module> = listOf(
     platformDataModule(),
     dataModule,
-    trackingMoreSourceModule,
     demoSourceModule,
     upsSourceModule,
     uspsSourceModule,

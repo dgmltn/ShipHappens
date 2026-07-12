@@ -34,10 +34,10 @@ class SettingsRepositoryTest {
     @Test fun source_config_roundtrips_and_provider_returns_it() = runTest {
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
         val r = repo(scope)
-        val cfg = SourceConfig(enabled = true, values = mapOf("apiKey" to "tm-1"))
-        r.setSourceConfig("trackingmore", cfg)
-        assertEquals(cfg, r.settings.first().sourceConfigs["trackingmore"])
-        assertEquals(cfg, r.current("trackingmore"))
+        val cfg = SourceConfig(enabled = true, values = mapOf("apiKey" to "key-1"))
+        r.setSourceConfig("ups", cfg)
+        assertEquals(cfg, r.settings.first().sourceConfigs["ups"])
+        assertEquals(cfg, r.current("ups"))
         assertEquals(SourceConfig(), r.current("never-set"))
         scope.cancel()
     }

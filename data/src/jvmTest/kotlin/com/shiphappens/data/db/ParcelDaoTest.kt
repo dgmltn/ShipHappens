@@ -64,7 +64,7 @@ class ParcelDaoTest {
             etaDate = kotlinx.datetime.LocalDate(2026, 7, 15),
             etaTime = kotlinx.datetime.LocalTime(20, 0),
             latestLocation = "Louisville, KY",
-            sourceId = "trackingmore",
+            sourceId = "ups",
         )
         dao.upsertParcel(original.toEntity())
         assertEquals(original, dao.getById("a")!!.toDomain())

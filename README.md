@@ -22,7 +22,6 @@ design/        Design system: ShipTheme, ShipColors, font resources (Hanken + mo
 source/
   api/         The plugin contract: TrackingSource, SourceConfig, SourceResult, SeedingSource.
                Every source module depends only on this.
-  trackingmore/ TrackingMore v4 aggregator source (Ktor client).
   demo/        Seeds the design's 7 sample parcels; used by the Settings "Demo data" toggle.
   ups/         UPS carrier source (stub proving the plugin contract).
   usps/        USPS carrier source (stub).
@@ -76,13 +75,13 @@ gitignored and recreated by `xcodegen generate`, while `app-ios/ShipHappens/Info
 
 ```bash
 ./gradlew :domain:jvmTest :data:jvmTest :source:api:jvmTest \
-          :source:demo:jvmTest :source:trackingmore:jvmTest :source:ups:jvmTest \
+          :source:demo:jvmTest :source:ups:jvmTest \
           :ui:testAndroidHostTest --console=plain
 ```
 
 Note `:ui`'s task is `testAndroidHostTest`, not `testDebugUnitTest` — the UI module's unit tests
-run on the Android-host test source set. Current suite: 65 tests across 7 modules (model 5, data
-29, api 2, demo 4, trackingmore 5, ups 3, ui 17), all passing.
+run on the Android-host test source set. Current suite: 60 tests across 6 modules (model 5, data
+29, api 2, demo 4, ups 3, ui 17), all passing.
 
 ## How to add a tracking source
 

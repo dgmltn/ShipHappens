@@ -122,7 +122,7 @@ private fun SourceCard(
             androidx.compose.foundation.layout.Box(
                 Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(accent),
                 contentAlignment = Alignment.Center,
-            ) { Text(if (card.id == "trackingmore") "tm" else "📦", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp) }
+            ) { Text("📦", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp) }
             Column(Modifier.weight(1f)) {
                 Text(card.name, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = ShipColors.ink, fontFamily = hankenFamily())
                 Text(card.statusText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = colorFromHex(card.statusColorHex))
@@ -159,10 +159,10 @@ private fun SourceCard(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(endpoint, color = ShipColors.faint, fontSize = 11.sp, fontFamily = monoFamily())
                 TextButton(onClick = { onTest(card.id) }) {
-                    Text("Test connection", color = if (card.id == "trackingmore") Color.White else ShipColors.ink,
+                    Text("Test connection", color = ShipColors.ink,
                         fontSize = 12.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.clip(RoundedCornerShape(10.dp))
-                            .background(if (card.id == "trackingmore") accent else Color(0xFFF1EFE9))
+                            .background(Color(0xFFF1EFE9))
                             .padding(horizontal = 13.dp, vertical = 8.dp))
                 }
             }
@@ -212,10 +212,9 @@ private fun Preview_SettingsContent_SourcesDisabled() {
             SettingsUiState(
                 universal = listOf(
                     SourceCardUi(
-                        id = "trackingmore", name = "TrackingMore", accentHex = "#1F7A4D", enabled = false,
+                        id = "demo", name = "Demo data", accentHex = "#17150F", enabled = false,
                         statusText = "Not connected", statusColorHex = "#A8A296",
-                        fields = listOf(FieldUi("apiKey", "API key", "tm_live_…", isSecret = true, value = "")),
-                        endpointText = "api.trackingmore.com/v4",
+                        fields = emptyList(), endpointText = null,
                     ),
                 ),
                 carriers = listOf(
@@ -243,10 +242,9 @@ private fun Preview_SettingsContent_SourcesEnabled() {
             SettingsUiState(
                 universal = listOf(
                     SourceCardUi(
-                        id = "trackingmore", name = "TrackingMore", accentHex = "#1F7A4D", enabled = true,
-                        statusText = "Connected · 1,000+ couriers", statusColorHex = "#1F7A4D",
-                        fields = listOf(FieldUi("apiKey", "API key", "tm_live_…", isSecret = true, value = "tm_live_4f2a9c")),
-                        endpointText = "api.trackingmore.com/v4",
+                        id = "demo", name = "Demo data", accentHex = "#17150F", enabled = true,
+                        statusText = "Connected · demo parcels", statusColorHex = "#1F7A4D",
+                        fields = emptyList(), endpointText = null,
                     ),
                 ),
                 carriers = listOf(

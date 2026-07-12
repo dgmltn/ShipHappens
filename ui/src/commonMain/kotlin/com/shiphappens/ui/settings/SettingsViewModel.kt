@@ -56,7 +56,6 @@ class SettingsViewModel(
                 enabled = cfg.enabled, statusText = statusText, statusColorHex = statusColor,
                 fields = d.configSpec.map { f -> FieldUi(f.key, f.label, f.placeholder, f.isSecret, cfg.values[f.key] ?: "") },
                 endpointText = when {
-                    d.id == "trackingmore" -> "api.trackingmore.com/v4"
                     d.kind == SourceKind.CARRIER -> "Production endpoint"
                     else -> null
                 },
