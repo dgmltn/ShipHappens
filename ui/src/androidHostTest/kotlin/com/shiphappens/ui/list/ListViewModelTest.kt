@@ -121,7 +121,7 @@ class ListViewModelTest {
         assertEquals("Keyboard", card.name)
         assertEquals("UPS", card.carrierName)
         assertEquals("In transit", card.statusText)
-        assertEquals("2", card.ring?.number)                 // eta 7/12, today 7/10
+        assertEquals(2, card.ring?.number)                   // eta 7/12, today 7/10
         assertEquals(2f / 4f, card.ring!!.fraction, 0.001f)  // IN_TRANSIT = step 2
         assertFalse(card.urgent)
         assertEquals("Fri, Jul 10", s.dateLabel)
@@ -137,7 +137,7 @@ class ListViewModelTest {
         val card = s.cards.single()
         assertTrue(card.urgent)
         assertEquals("Out for delivery today", card.statusText)
-        assertEquals("0", card.ring?.number)
+        assertEquals(0, card.ring?.number)
     }
 
     @Test fun archive_shows_undo_toast_and_undo_restores() = runTest {
