@@ -151,9 +151,12 @@ fun ListContent(
                         ParcelRow(
                             card, tab = state.tab, onClick = { onOpenDetail(card.id) },
                             onArchive = { onArchive(card.id) }, onRestore = { onRestore(card.id) },
-                            onDelete = { onDelete(card.id) })
+                            onDelete = { onDelete(card.id) },
+                            modifier = Modifier.animateItem())
                     }
-                    state.emptyText?.let { item(key = "empty") { EmptyState(it) } }
+                    state.emptyText?.let {
+                        item(key = "empty") { EmptyState(it, Modifier.animateItem()) }
+                    }
                 }
             }
         }
@@ -241,7 +244,7 @@ private fun ParcelRow(
 ) {
     val content: @Composable () -> Unit = {
         Row(
-            modifier
+            Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(20.dp))
                 .background(ShipColors.card)
@@ -309,7 +312,7 @@ private fun ParcelRow(
         deleteAction(onDelete) to restoreAction(onRestore)
     }
 
-    Box(Modifier.padding(vertical = 9.dp)) {
+    Box(modifier.padding(vertical = 9.dp)) {
         SwipeActionRow(startToEnd, endToStart) { content() }
     }
 }
@@ -471,9 +474,9 @@ private fun ManualAddCard(
 }
 
 @Composable
-private fun EmptyState(text: String) {
+private fun EmptyState(text: String, modifier: Modifier = Modifier) {
     Column(
-        Modifier.fillMaxWidth().padding(vertical = 70.dp, horizontal = 30.dp),
+        modifier.fillMaxWidth().padding(vertical = 70.dp, horizontal = 30.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
