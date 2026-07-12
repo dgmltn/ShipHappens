@@ -3,32 +3,58 @@ package com.shiphappens.ui.list
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.*
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedIconButton
+import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.shiphappens.design.ShipColors
+import com.shiphappens.design.ShipTheme
+import com.shiphappens.design.colorFromHex
+import com.shiphappens.design.hankenFamily
+import com.shiphappens.design.monoFamily
+import com.shiphappens.ui.components.DaysRing
 import com.shiphappens.ui.components.ToastOverlay
-import com.shiphappens.design.*
-import androidx.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -41,7 +67,9 @@ fun ListScreen(
 
     val owner = LocalLifecycleOwner.current
     LaunchedEffect(owner) {
-        owner.lifecycle.currentStateFlow.collect { if (it == Lifecycle.State.RESUMED) vm.onForeground() }
+        owner.lifecycle.currentStateFlow.collect {
+            if (it == Lifecycle.State.RESUMED) vm.onForeground()
+        }
     }
 
     ListContent(
@@ -92,10 +120,19 @@ fun ListContent(
         Column(Modifier.fillMaxSize()) {
             Header(state, onOpenSettings)
             Tabs(state.tab, onTabSelect)
-            PullToRefreshBox(isRefreshing = state.isRefreshing, onRefresh = onRefresh, modifier = Modifier.weight(1f)) {
+            PullToRefreshBox(
+                isRefreshing = state.isRefreshing,
+                onRefresh = onRefresh,
+                modifier = Modifier.weight(1f)
+            ) {
                 LazyColumn(
                     Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 14.dp, end = 14.dp, bottom = 26.dp, top = 2.dp),
+                    contentPadding = PaddingValues(
+                        start = 14.dp,
+                        end = 14.dp,
+                        bottom = 26.dp,
+                        top = 2.dp
+                    ),
                 ) {
                     state.pendingImport?.let { p ->
                         item(key = "pending") {
@@ -104,12 +141,15 @@ fun ListContent(
                     }
                     if (state.tab == ListTab.ACTIVE && state.pendingImport == null) {
                         item(key = "manual") {
-                            ManualAddCard(state.manualAdd, onManualName, onManualTracking,
-                                onPickerToggle, onPickCarrier, onAddManual, onClearManual)
+                            ManualAddCard(
+                                state.manualAdd, onManualName, onManualTracking,
+                                onPickerToggle, onPickCarrier, onAddManual, onClearManual
+                            )
                         }
                     }
                     items(state.cards, key = { "${state.tab}-${it.id}" }) { card ->
-                        ParcelRow(card, tab = state.tab, onClick = { onOpenDetail(card.id) },
+                        ParcelRow(
+                            card, tab = state.tab, onClick = { onOpenDetail(card.id) },
                             onArchive = { onArchive(card.id) }, onRestore = { onRestore(card.id) },
                             onDelete = { onDelete(card.id) })
                     }
@@ -134,11 +174,22 @@ private fun Header(state: ListUiState, onOpenSettings: () -> Unit) {
         verticalAlignment = Alignment.Top,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(state.dateLabel.uppercase(), color = ShipColors.faint,
-                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp))
-            Text("Ship Happens", color = ShipColors.ink, fontSize = 31.sp, fontWeight = FontWeight.ExtraBold,
-                fontFamily = hankenFamily())
-            Text(state.headerSub, color = ShipColors.muted, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                state.dateLabel.uppercase(), color = ShipColors.faint,
+                style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 2.sp)
+            )
+            Text(
+                "Ship Happens",
+                color = ShipColors.ink,
+                fontSize = 31.sp,
+                fontWeight = FontWeight.ExtraBold,
+                fontFamily = hankenFamily()
+            )
+            Text(
+                state.headerSub,
+                color = ShipColors.muted,
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
         OutlinedIconButton(
             onClick = onOpenSettings, shape = RoundedCornerShape(13.dp),
@@ -172,7 +223,8 @@ private fun Tabs(tab: ListTab, onSelect: (ListTab) -> Unit) {
 @Composable
 private fun CarrierBadge(accentHex: String, size: Int = 46) {
     Box(
-        Modifier.size(size.dp).clip(RoundedCornerShape((size * 0.3).dp)).background(colorFromHex(accentHex)),
+        Modifier.size(size.dp).clip(RoundedCornerShape((size * 0.3).dp))
+            .background(colorFromHex(accentHex)),
         contentAlignment = Alignment.Center,
     ) { Text("📦", fontSize = (size * 0.42).sp) }
 }
@@ -192,21 +244,52 @@ private fun ParcelRow(
         ) {
             CarrierBadge(card.accentHex)
             Column(Modifier.weight(1f)) {
-                Text(card.name, color = ShipColors.ink, fontWeight = FontWeight.Bold, fontSize = 16.sp,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, fontFamily = hankenFamily())
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    Text(card.carrierName, color = colorFromHex(card.accentHex), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    card.name,
+                    color = ShipColors.ink,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontFamily = hankenFamily()
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    Text(
+                        card.carrierName,
+                        color = colorFromHex(card.accentHex),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                     Box(Modifier.size(3.dp).clip(CircleShape).background(ShipColors.hairlineStrong))
-                    Text(card.statusText, color = ShipColors.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        card.statusText,
+                        color = ShipColors.muted,
+                        fontSize = 12.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
             when {
                 card.delivered -> Text(
-                    "Delivered", color = ShipColors.delivered, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clip(RoundedCornerShape(9.dp)).background(ShipColors.deliveredBg)
+                    "Delivered",
+                    color = ShipColors.delivered,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(ShipColors.deliveredBg)
                         .padding(horizontal = 9.dp, vertical = 5.dp),
                 )
-                card.ring != null -> DaysRing(card.ring, colorFromHex(card.accentHex), card.urgent)
+
+                card.ring != null -> DaysRing(
+                    days = card.ring.number,
+                    accent = colorFromHex(card.accentHex),
+                    urgent = card.urgent
+                )
             }
         }
     }
@@ -223,24 +306,6 @@ private fun ParcelRow(
 }
 
 @Composable
-private fun DaysRing(ring: RingUi, accent: Color, urgent: Boolean) {
-    Box(Modifier.size(50.dp), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize()) {
-            val stroke = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
-            val inset = 4.dp.toPx()
-            val arcSize = androidx.compose.ui.geometry.Size(size.width - inset * 2, size.height - inset * 2)
-            drawArc(ShipColors.hairline, 0f, 360f, false, Offset(inset, inset), arcSize, style = stroke)
-            drawArc(accent, -90f, 360f * ring.fraction, false, Offset(inset, inset), arcSize, style = stroke)
-        }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(ring.number, color = if (urgent) ShipColors.urgent else ShipColors.ink,
-                fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, fontFamily = hankenFamily())
-            Text("DAYS", color = ShipColors.faint, fontSize = 8.sp, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
 private fun DashedCard(borderColor: Color, content: @Composable RowScope.() -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 9.dp).clip(RoundedCornerShape(20.dp))
@@ -252,18 +317,40 @@ private fun DashedCard(borderColor: Color, content: @Composable RowScope.() -> U
 }
 
 @Composable
-private fun SmallActionButton(bg: Color, label: String, onClick: () -> Unit, outlined: Boolean = false) {
+private fun SmallActionButton(
+    bg: Color,
+    label: String,
+    onClick: () -> Unit,
+    outlined: Boolean = false
+) {
     Box(
         Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))
             .background(if (outlined) ShipColors.card else bg)
-            .then(if (outlined) Modifier.border(1.dp, ShipColors.hairlineStrong, RoundedCornerShape(12.dp)) else Modifier)
+            .then(
+                if (outlined) Modifier.border(
+                    1.dp,
+                    ShipColors.hairlineStrong,
+                    RoundedCornerShape(12.dp)
+                ) else Modifier
+            )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Text(label, color = if (outlined) ShipColors.faint else Color.White, fontWeight = FontWeight.ExtraBold) }
+    ) {
+        Text(
+            label,
+            color = if (outlined) ShipColors.faint else Color.White,
+            fontWeight = FontWeight.ExtraBold
+        )
+    }
 }
 
 @Composable
-private fun CardTextField(value: String, onChange: (String) -> Unit, placeholder: String, mono: Boolean = false) {
+private fun CardTextField(
+    value: String,
+    onChange: (String) -> Unit,
+    placeholder: String,
+    mono: Boolean = false
+) {
     BasicTextField(
         value = value, onValueChange = onChange, singleLine = true,
         textStyle = MaterialTheme.typography.bodyLarge.copy(
@@ -273,23 +360,38 @@ private fun CardTextField(value: String, onChange: (String) -> Unit, placeholder
             fontSize = if (mono) 12.sp else 16.sp,
         ),
         decorationBox = { inner ->
-            Box { if (value.isEmpty()) Text(placeholder, color = ShipColors.faint, fontSize = if (mono) 12.sp else 16.sp); inner() }
+            Box {
+                if (value.isEmpty()) Text(
+                    placeholder,
+                    color = ShipColors.faint,
+                    fontSize = if (mono) 12.sp else 16.sp
+                ); inner()
+            }
         },
         modifier = Modifier.fillMaxWidth(),
     )
 }
 
 @Composable
-private fun PendingImportCard(p: PendingImportUi, onName: (String) -> Unit, onAccept: () -> Unit, onDismiss: () -> Unit) {
+private fun PendingImportCard(
+    p: PendingImportUi,
+    onName: (String) -> Unit,
+    onAccept: () -> Unit,
+    onDismiss: () -> Unit
+) {
     val accent = colorFromHex(p.accentHex)
     DashedCard(accent) {
         CarrierBadge(p.accentHex, size = 44)
         Column(Modifier.weight(1f)) {
-            Text("FROM CLIPBOARD · ${p.carrierName.uppercase()}", color = accent, fontSize = 10.sp,
-                fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+            Text(
+                "FROM CLIPBOARD · ${p.carrierName.uppercase()}", color = accent, fontSize = 10.sp,
+                fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp
+            )
             CardTextField(p.name, onName, "Name this package")
-            Text(p.tracking, color = ShipColors.muted, fontFamily = monoFamily(), fontSize = 11.sp,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                p.tracking, color = ShipColors.muted, fontFamily = monoFamily(), fontSize = 11.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
         }
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             SmallActionButton(accent, "✓", onAccept)
@@ -307,18 +409,30 @@ private fun ManualAddCard(
     Box {
         DashedCard(if (m.effectiveAccentHex != null) accent else Color(0xFFCFC9BE)) {
             Box {
-                Box(Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(accent)
-                    .clickable(onClick = onPickerToggle), contentAlignment = Alignment.Center) {
-                    Text(if (m.effectiveCarrierName != null) "📦" else "+", color = Color.White,
-                        fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Box(
+                    Modifier.size(44.dp).clip(RoundedCornerShape(13.dp)).background(accent)
+                        .clickable(onClick = onPickerToggle), contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        if (m.effectiveCarrierName != null) "📦" else "+", color = Color.White,
+                        fontSize = 20.sp, fontWeight = FontWeight.Bold
+                    )
                 }
                 DropdownMenu(expanded = m.pickerOpen, onDismissRequest = onPickerToggle) {
                     m.options.forEach { opt ->
                         DropdownMenuItem(
                             leadingIcon = {
-                                Box(Modifier.size(14.dp).clip(CircleShape)
-                                    .background(opt.accentHex?.let(::colorFromHex) ?: ShipColors.cardAlt)
-                                    .border(if (opt.accentHex == null) 2.dp else 0.dp, Color(0xFFC3BDB1), CircleShape))
+                                Box(
+                                    Modifier.size(14.dp).clip(CircleShape)
+                                        .background(
+                                            opt.accentHex?.let(::colorFromHex) ?: ShipColors.cardAlt
+                                        )
+                                        .border(
+                                            if (opt.accentHex == null) 2.dp else 0.dp,
+                                            Color(0xFFC3BDB1),
+                                            CircleShape
+                                        )
+                                )
                             },
                             text = { Text(opt.label, fontWeight = FontWeight.SemiBold) },
                             onClick = { onPick(opt.code) },
@@ -336,7 +450,11 @@ private fun ManualAddCard(
                 CardTextField(m.tracking, onTracking, "Tracking number", mono = true)
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SmallActionButton(if (m.effectiveAccentHex != null) accent else Color(0xFFD8D3CA), "✓", onAdd)
+                SmallActionButton(
+                    if (m.effectiveAccentHex != null) accent else Color(0xFFD8D3CA),
+                    "✓",
+                    onAdd
+                )
                 SmallActionButton(ShipColors.card, "✕", onClear, outlined = true)
             }
         }
@@ -345,12 +463,19 @@ private fun ManualAddCard(
 
 @Composable
 private fun EmptyState(text: String) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 70.dp, horizontal = 30.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(56.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xFFEDEBE4)),
-            contentAlignment = Alignment.Center) { Text("📦", fontSize = 24.sp) }
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 70.dp, horizontal = 30.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            Modifier.size(56.dp).clip(RoundedCornerShape(18.dp)).background(Color(0xFFEDEBE4)),
+            contentAlignment = Alignment.Center
+        ) { Text("📦", fontSize = 24.sp) }
         Spacer(Modifier.height(16.dp))
-        Text(text, color = ShipColors.faint, fontSize = 14.sp,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 21.sp)
+        Text(
+            text, color = ShipColors.faint, fontSize = 14.sp,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 21.sp
+        )
     }
 }
 
@@ -384,18 +509,7 @@ private fun Preview_ListContent_PopulatedWithRings() {
             ListUiState(
                 dateLabel = "Fri, Jul 11",
                 headerSub = "5 arriving soon",
-                cards = listOf(
-                    ParcelCardUi("1", "Baseball cap", "USPS", "#1E3A8F", "In transit",
-                        delivered = false, ring = RingUi("2", 0.5f), urgent = false),
-                    ParcelCardUi("2", "Trail running shoes", "FedEx", "#5A1B9A", "Out for delivery",
-                        delivered = false, ring = RingUi("1", 0.75f), urgent = true),
-                    ParcelCardUi("3", "Mechanical keyboard", "UPS", "#5A3A22", "In transit",
-                        delivered = false, ring = RingUi("5", 0.5f), urgent = false),
-                    ParcelCardUi("4", "Ceramic desk lamp", "UPS", "#5A3A22", "Out for delivery today",
-                        delivered = false, ring = RingUi("0", 0.75f), urgent = true),
-                    ParcelCardUi("5", "Clear phone case", "USPS", "#1E3A8F", "Shipped",
-                        delivered = false, ring = RingUi("4", 0.25f), urgent = false),
-                ),
+                cards = previewParcelCards.subList(0, 6),
             ),
         )
     }
@@ -409,12 +523,7 @@ private fun Preview_ListContent_Delivered() {
             ListUiState(
                 dateLabel = "Fri, Jul 11",
                 headerSub = "0 arriving soon",
-                cards = listOf(
-                    ParcelCardUi("6", "Oat-blend coffee beans", "USPS", "#1E3A8F", "Delivered",
-                        delivered = true, ring = null, urgent = false),
-                    ParcelCardUi("7", "Paperback — The Overstory", "FedEx", "#5A1B9A", "Delivered",
-                        delivered = true, ring = null, urgent = false),
-                ),
+                cards = previewParcelCards.subList(5, 7),
                 toast = ToastUi("Package archived", showUndo = true),
             ),
         )
@@ -430,12 +539,7 @@ private fun Preview_ListContent_ArchivedTab() {
                 dateLabel = "Fri, Jul 11",
                 headerSub = "2 packages archived",
                 tab = ListTab.ARCHIVED,
-                cards = listOf(
-                    ParcelCardUi("6", "Oat-blend coffee beans", "USPS", "#1E3A8F", "Delivered",
-                        delivered = true, ring = null, urgent = false),
-                    ParcelCardUi("7", "Paperback — The Overstory", "FedEx", "#5A1B9A", "Delivered",
-                        delivered = true, ring = null, urgent = false),
-                ),
+                cards = previewParcelCards.subList(5, 7),
             ),
         )
     }
@@ -450,14 +554,56 @@ private fun Preview_ListContent_PendingImport() {
                 dateLabel = "Fri, Jul 11",
                 headerSub = "1 arriving soon",
                 pendingImport = PendingImportUi(
-                    carrierName = "USPS", accentHex = "#1E3A8F",
-                    tracking = "9400 1118 9922 3300 1122", name = "",
+                    carrierName = "USPS",
+                    accentHex = "#1E3A8F",
+                    tracking = "9400 1118 9922 3300 1122",
+                    name = "",
                 ),
-                cards = listOf(
-                    ParcelCardUi("1", "Baseball cap", "USPS", "#1E3A8F", "In transit",
-                        delivered = false, ring = RingUi("2", 0.5f), urgent = false),
-                ),
+                cards = previewParcelCards.subList(0, 0),
             ),
         )
     }
 }
+
+private val previewParcelCards = listOf(
+    ParcelCardUi(
+        "1", "Baseball cap", "USPS", "#1E3A8F", "In transit",
+        delivered = false, ring = RingUi(2, 0.5f), urgent = false
+    ),
+    ParcelCardUi(
+        "2", "Trail running shoes", "FedEx", "#5A1B9A", "Out for delivery",
+        delivered = false, ring = RingUi(1, 0.75f), urgent = true
+    ),
+    ParcelCardUi(
+        "3", "Mechanical keyboard", "UPS", "#5A3A22", "In transit",
+        delivered = false, ring = RingUi(5, 0.5f), urgent = false
+    ),
+    ParcelCardUi(
+        "4", "Ceramic desk lamp", "UPS", "#5A3A22", "Out for delivery today",
+        delivered = false, ring = RingUi(0, 0.75f), urgent = true
+    ),
+    ParcelCardUi(
+        "5", "Clear phone case", "USPS", "#1E3A8F", "Shipped",
+        delivered = false, ring = RingUi(4, 0.25f), urgent = false
+    ),
+    ParcelCardUi(
+        id = "6",
+        name = "Oat-blend coffee beans",
+        carrierName = "USPS",
+        accentHex = "#1E3A8F",
+        statusText = "Delivered",
+        delivered = true,
+        ring = null,
+        urgent = false
+    ),
+    ParcelCardUi(
+        id = "7",
+        name = "Paperback — The Overstory",
+        carrierName = "FedEx",
+        accentHex = "#5A1B9A",
+        statusText = "Delivered",
+        delivered = true,
+        ring = null,
+        urgent = false
+    ),
+)

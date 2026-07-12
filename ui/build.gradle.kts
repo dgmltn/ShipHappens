@@ -47,6 +47,11 @@ kotlin {
             implementation(libs.koin.compose.viewmodel)
             implementation(libs.kotlinx.serialization.json)
         }
+        getByName("androidMain") {
+            dependencies {
+                implementation(libs.compose.ui.tooling)
+            }
+        }
         getByName("androidHostTest") {
             dependencies {
                 implementation(libs.kotlin.test)

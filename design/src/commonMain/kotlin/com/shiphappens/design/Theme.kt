@@ -1,12 +1,19 @@
 package com.shiphappens.design
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.shiphappens.domain.Carrier
 import com.shiphappens.domain.fallbackAccentColor
 import com.shiphappens.design.res.Res
@@ -87,4 +94,18 @@ fun ShipTheme(content: @Composable () -> Unit) {
         ),
         content = content,
     )
+}
+
+@Composable
+fun ShipPreview(
+    contentPadding: Dp = 16.dp,
+    content: @Composable () -> Unit
+) {
+    ShipTheme {
+        Surface {
+            Box(modifier = Modifier.padding(contentPadding)) {
+                content()
+            }
+        }
+    }
 }

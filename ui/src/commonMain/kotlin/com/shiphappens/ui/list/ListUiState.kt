@@ -2,7 +2,7 @@ package com.shiphappens.ui.list
 
 enum class ListTab { ACTIVE, ARCHIVED }
 
-data class RingUi(val number: String, val fraction: Float)
+data class RingUi(val number: Int, val fraction: Float)
 
 data class ParcelCardUi(
     val id: String,

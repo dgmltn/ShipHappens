@@ -97,7 +97,7 @@ class ListViewModel(
             id = id, name = name, carrierName = carrier.displayName, accentHex = carrier.accentHex(),
             statusText = statusText, delivered = delivered,
             ring = if (delivered) null else RingUi(
-                number = (days?.coerceAtLeast(0) ?: 0).toString(),
+                number = (days?.coerceAtLeast(0) ?: 0),
                 fraction = (status.stepIndex.coerceAtLeast(0)) / 4f,
             ),
             urgent = urgent,

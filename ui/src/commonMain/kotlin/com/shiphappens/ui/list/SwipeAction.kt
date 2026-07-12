@@ -52,19 +52,22 @@ data class SwipeAction(
 
 fun archiveAction(onTrigger: () -> Unit) = SwipeAction(
     label = "Archive", background = ShipColors.archiveAccent,
-    closedIcon = Res.drawable.ic_archive_outline, openIcon = Res.drawable.ic_archive_outline_open,
+    closedIcon = Res.drawable.ic_archive_outline,
+    openIcon = Res.drawable.ic_archive_outline_open,
     onTrigger = onTrigger,
 )
 
 fun restoreAction(onTrigger: () -> Unit) = SwipeAction(
     label = "Restore", background = ShipColors.archiveAccent,
-    closedIcon = Res.drawable.ic_archive_outline, openIcon = Res.drawable.ic_archive_outline_open,
+    closedIcon = Res.drawable.ic_archive_outline,
+    openIcon = Res.drawable.ic_archive_outline_open,
     onTrigger = onTrigger,
 )
 
 fun deleteAction(onTrigger: () -> Unit) = SwipeAction(
     label = "Delete", background = ShipColors.urgent,
-    closedIcon = Res.drawable.ic_trash_outline, openIcon = Res.drawable.ic_trash_outline_open,
+    closedIcon = Res.drawable.ic_trash_outline,
+    openIcon = Res.drawable.ic_trash_outline_open,
     onTrigger = onTrigger,
 )
 
