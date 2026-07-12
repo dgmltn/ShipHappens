@@ -231,14 +231,23 @@ private fun CarrierBadge(accentHex: String, size: Int = 46) {
 
 @Composable
 private fun ParcelRow(
-    card: ParcelCardUi, tab: ListTab, onClick: () -> Unit,
-    onArchive: () -> Unit, onRestore: () -> Unit, onDelete: () -> Unit,
+    card: ParcelCardUi,
+    tab: ListTab,
+    onClick: () -> Unit,
+    onArchive: () -> Unit,
+    onRestore: () -> Unit,
+    onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val content: @Composable () -> Unit = {
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(ShipColors.card)
+            modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(20.dp))
+                .background(ShipColors.card)
                 .border(1.dp, ShipColors.hairline, RoundedCornerShape(20.dp))
-                .clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 15.dp),
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 15.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {

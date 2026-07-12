@@ -31,6 +31,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shiphappens.design.ShipColors
@@ -39,6 +40,7 @@ import com.shiphappens.design.res.ic_archive_outline
 import com.shiphappens.design.res.ic_archive_outline_open
 import com.shiphappens.design.res.ic_trash_outline
 import com.shiphappens.design.res.ic_trash_outline_open
+import kotlin.math.abs
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 
@@ -72,9 +74,13 @@ fun deleteAction(onTrigger: () -> Unit) = SwipeAction(
 )
 
 /**
- * Two-directional swipe wrapper ported from WorldClock's DismissableCityListItem: a 96dp
- * positional threshold drives both a haptic tick and an icon swap (closed -> open) the instant
- * it's crossed, independently per direction.
+ * Two-directional swipe wrapper ported from WorldClock's DismissableCityListItem: the positional
+ * [threshold] drives both a haptic tick and an icon swap (closed -> open) the instant it's crossed,
+ * independently per direction. The dismiss action fires only if, at the moment the finger is
+ * released, the row is still dragged at least [threshold] past its resting position - a fast flick
+ * or a drag that retreats back under [threshold] before release springs back instead.
+ *
+ * @param threshold how far the row must be dragged (and still be, on release) to trigger the action.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,11 +88,12 @@ fun SwipeActionRow(
     startToEnd: SwipeAction,
     endToStart: SwipeAction,
     modifier: Modifier = Modifier,
+    threshold: Dp = 96.dp,
     content: @Composable () -> Unit,
 ) {
     val hapticFeedback = LocalHapticFeedback.current
     val density = LocalDensity.current
-    val positionalThreshold = with(density) { 96.dp.toPx() }
+    val positionalThreshold = with(density) { threshold.toPx() }
     var rowWidth by remember { mutableIntStateOf(0) }
     var hasReachedThreshold by remember { mutableStateOf(false) }
 
@@ -103,27 +110,38 @@ fun SwipeActionRow(
     // never legitimate for gesture state to outlive the composable instance. Plain `remember`
     // scopes this state to the current composition subtree only, so a fresh instance is always
     // Settled regardless of what the same key did previously.
-    // confirmValueChange is deliberately side-effect-free (just the threshold veto). Compose's
-    // AnchoredDraggableState invokes it not only at gesture release but ALSO mid-drag, the instant
-    // the raw drag offset crosses the halfway point between two anchors (AnchoredDraggableState's
-    // AnchoredDragScope.dragTo -> updateIfNeeded, in
-    // androidx.compose.foundation.gestures.AnchoredDraggable.kt) - i.e. roughly half the row's full
-    // width, well past our much smaller 96dp hasReachedThreshold. Calling onTrigger() from inside
-    // confirmValueChange (as this used to do) fires the real archive/delete/restore mutation while
-    // the finger is still down, before the user has released - confirmed on-device with a drag past
-    // the halfway point held without lifting. The actual dismiss action must only fire once the
-    // gesture is truly committed on release, so it's wired below to SwipeToDismissBox's `onDismiss`
-    // instead, which fires from `settledValue` - only set once per complete drag session (release +
-    // settle animation), never mid-drag.
-    val dismissState = remember(density) {
+    // The dismiss action must fire ONLY when the finger is released AND the row is still past
+    // [threshold] at that instant. Two independent traps make this subtle:
+    //
+    //  1. onTrigger must never run mid-drag. It's wired below to SwipeToDismissBox's `onDismiss`,
+    //     which fires off `settledValue` - set only once a drag settles on release, never mid-drag.
+    //     (Calling onTrigger from confirmValueChange, as this once did, fired the real mutation while
+    //     the finger was still down, the instant the drag crossed the halfway anchor.)
+    //
+    //  2. The threshold veto must read the LIVE release offset, not a latched flag. Compose's fling
+    //     evaluates confirmValueChange synchronously against the release offset
+    //     (SnapLayoutInfoProvider.calculateSnapOffset in foundation's AnchoredDraggable.kt), and that
+    //     fling ignores the positional threshold entirely once release velocity exceeds ~125dp/s.
+    //     Gating on the async `hasReachedThreshold` latch (updated by the LaunchedEffect below, a
+    //     frame behind) let a fast flick, or a drag that retreated back under the threshold, still
+    //     dismiss. Reading requireOffset() here vetoes both: unless |offset| is genuinely >=
+    //     [threshold] the moment the finger lifts, the row springs back. confirmValueChange stays
+    //     side-effect-free. It runs only during a live drag/settle (never from the pre-drag
+    //     trySnapTo path), so requireOffset() is always initialized when we read it. `stateHolder`
+    //     breaks the chicken-and-egg of referencing the state from its own constructor lambda.
+    val stateHolder = remember { object { var state: SwipeToDismissBoxState? = null } }
+    val dismissState = remember(density, positionalThreshold) {
         @Suppress("DEPRECATION")
         SwipeToDismissBoxState(
             initialValue = SwipeToDismissBoxValue.Settled,
             density = density,
-            confirmValueChange = { it != SwipeToDismissBoxValue.Settled && hasReachedThreshold },
+            confirmValueChange = { target ->
+                val offset = stateHolder.state?.requireOffset() ?: 0f
+                target != SwipeToDismissBoxValue.Settled && abs(offset) >= positionalThreshold
+            },
             positionalThreshold = { positionalThreshold },
         )
-    }
+    }.also { stateHolder.state = it }
 
     LaunchedEffect(dismissState.progress) {
         val distance = dismissState.progress * rowWidth
