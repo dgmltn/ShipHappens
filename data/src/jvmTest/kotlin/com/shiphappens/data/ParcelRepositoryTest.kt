@@ -159,4 +159,13 @@ class ParcelRepositoryTest {
         r.restore(a.parcel.id)
         assertEquals(2, r.observeParcels(false).first().size)
     }
+
+    @Test fun delete_removes_parcel() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val r = repo(scope)
+        val a = r.addParcel("A", "1Z999AA10123456784", WellKnownCarriers.UPS) as AddResult.Added
+        r.delete(a.parcel.id)
+        assertEquals(0, r.observeParcels(false).first().size)
+        assertNull(r.observeParcel(a.parcel.id).first())
+    }
 }

@@ -11,8 +11,6 @@ data class ParcelCardUi(
     val accentHex: String,
     val statusText: String,
     val delivered: Boolean,
-    val swipeable: Boolean,
-    val showRestore: Boolean,
     val ring: RingUi?,
     val urgent: Boolean,
 )

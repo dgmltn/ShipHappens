@@ -43,4 +43,7 @@ interface ParcelDao {
 
     @Query("UPDATE parcels SET isArchived = 0, archivedAt = NULL WHERE id = :id")
     suspend fun restore(id: String)
+
+    @Query("DELETE FROM parcels WHERE id = :id")
+    suspend fun deleteParcel(id: String)
 }

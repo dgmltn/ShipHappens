@@ -12,8 +12,11 @@ import com.shiphappens.data.source.SourceRegistry
 import com.shiphappens.domain.*
 import com.shiphappens.source.api.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.*
 import kotlinx.coroutines.withContext
@@ -79,6 +82,12 @@ class ListViewModelTest {
      */
     private suspend fun awaitRecorded(timeoutMs: Long = 10_000, predicate: (ListUiState) -> Boolean): ListUiState =
         withContext(Dispatchers.Default) { withTimeout(timeoutMs) { recordedStates.first(predicate) } }
+
+    /** Polls the repository (real time) until [id] is actually gone — for delete-without-undo. */
+    private suspend fun awaitParcelDeleted(id: String, timeoutMs: Long = 10_000) =
+        withContext(Dispatchers.Default) {
+            withTimeout(timeoutMs) { while (repo.observeParcel(id).first() != null) delay(50) }
+        }
 
     private suspend fun TestScope.vm(): ListViewModel {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
@@ -147,16 +156,89 @@ class ListViewModelTest {
         assertNull(afterUndo.toast)
     }
 
-    @Test fun archived_tab_shows_restore_and_empty_texts() = runTest {
+    @Test fun archived_tab_shows_correct_header_and_empty_texts() = runTest {
         val vm = vm()
         vm.onTabSelect(ListTab.ARCHIVED)
         val empty = awaitState { it.tab == ListTab.ARCHIVED && it.emptyText != null }
-        assertNotNull(empty.emptyText)
+        assertEquals("Nothing archived yet. Swipe a package right to archive it.", empty.emptyText)
         val added = repo.addParcel("Beans", "9400111899223197428", WellKnownCarriers.USPS) as AddResult.Added
         repo.archive(added.parcel.id)
         val s = awaitState { it.cards.size == 1 }
-        assertTrue(s.cards.single().showRestore)
         assertEquals("1 package archived", s.headerSub)
+    }
+
+    @Test fun archive_available_for_non_delivered_package() = runTest {
+        val vm = vm()
+        val added = repo.addParcel("Keyboard", "1Z999AA10123456784", WellKnownCarriers.UPS) as AddResult.Added
+        val before = awaitState { it.cards.size == 1 }
+        assertFalse(before.cards.single().delivered)  // FakeSource defaults to IN_TRANSIT
+        vm.onArchive(added.parcel.id)
+        val afterArchive = awaitState { it.cards.isEmpty() }
+        assertTrue(afterArchive.cards.isEmpty())
+        vm.onTabSelect(ListTab.ARCHIVED)
+        val archivedTab = awaitState { it.tab == ListTab.ARCHIVED && it.cards.size == 1 }
+        assertEquals("Keyboard", archivedTab.cards.single().name)
+    }
+
+    @Test fun restore_shows_undo_toast_and_undo_rearchives() = runTest {
+        val vm = vm()
+        val added = repo.addParcel("Beans", "9400111899223197428", WellKnownCarriers.USPS) as AddResult.Added
+        awaitState { it.cards.size == 1 }
+        repo.archive(added.parcel.id)
+        vm.onTabSelect(ListTab.ARCHIVED)
+        awaitState { it.tab == ListTab.ARCHIVED && it.cards.size == 1 }
+        vm.onRestore(added.parcel.id)
+        val afterRestore = awaitState { it.tab == ListTab.ARCHIVED && it.cards.isEmpty() }
+        assertTrue(afterRestore.cards.isEmpty())
+        val toast = awaitRecorded { it.toast?.message == "Package restored" }.toast!!
+        assertTrue(toast.showUndo)
+        vm.onUndo()
+        val afterUndo = awaitState { it.tab == ListTab.ARCHIVED && it.cards.size == 1 && it.toast == null }
+        assertEquals(1, afterUndo.cards.size)
+    }
+
+    /**
+     * Timing note: unlike the other awaits in this class, the "hidden, not deleted yet" check
+     * here deliberately avoids a *fresh* `repo.observeParcel(id).first()` call at that exact
+     * instant. A brand-new Room Flow query always requires a genuine real-thread round-trip;
+     * while `runTest`'s scheduler is genuinely blocked waiting on that real completion, it
+     * opportunistically drains every other pending virtual-time task too — including onDelete's
+     * 3.8s grace-period job — racing straight past the very "not yet deleted" state under test
+     * (verified empirically: a bare `.first()` call there jumps `testScheduler.currentTime` from
+     * 0 to 3800 before it resolves, regardless of whether the call goes through
+     * `withContext(Dispatchers.Default)` or not). Pre-subscribing a hot `StateFlow` to the row
+     * *before* deleting sidesteps this: once primed, its cached `.value` needs no further Room
+     * I/O, so reading it can't trigger that drain.
+     */
+    @Test fun delete_hides_immediately_and_undo_restores_it() = runTest {
+        val vm = vm()
+        val added = repo.addParcel("Beans", "9400111899223197428", WellKnownCarriers.USPS) as AddResult.Added
+        awaitState { it.cards.size == 1 }
+        val parcelRow = repo.observeParcel(added.parcel.id).stateIn(backgroundScope, SharingStarted.Eagerly, null)
+        withContext(Dispatchers.Default) { withTimeout(10_000) { parcelRow.first { it != null } } }
+
+        vm.onDelete(added.parcel.id)
+        testScheduler.runCurrent()
+        val afterDelete = vm.state.value
+        assertTrue(afterDelete.cards.isEmpty())
+        val toast = afterDelete.toast!!
+        assertEquals("Package deleted", toast.message)
+        assertTrue(toast.showUndo)
+        assertNotNull(parcelRow.value)  // hidden, not deleted yet — cached pre-delete row, no fresh Room I/O
+        vm.onUndo()
+        val afterUndo = awaitState { it.cards.size == 1 && it.toast == null }
+        assertEquals(1, afterUndo.cards.size)
+        assertNotNull(repo.observeParcel(added.parcel.id).first())
+    }
+
+    @Test fun delete_without_undo_removes_parcel_after_grace_period() = runTest {
+        val vm = vm()
+        val added = repo.addParcel("Beans", "9400111899223197428", WellKnownCarriers.USPS) as AddResult.Added
+        awaitState { it.cards.size == 1 }
+        vm.onDelete(added.parcel.id)
+        awaitState { it.cards.isEmpty() }
+        awaitParcelDeleted(added.parcel.id)
+        assertNull(repo.observeParcel(added.parcel.id).first())
     }
 
     @Test fun manual_add_validates_then_adds() = runTest {

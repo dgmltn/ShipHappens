@@ -49,6 +49,15 @@ class ParcelDaoTest {
         assertFalse(dao.observe(archived = false).first().single().parcel.isArchived)
     }
 
+    @Test fun delete_removes_parcel_and_cascades_events() = runTest {
+        val dao = db().parcelDao()
+        dao.upsertParcel(parcel("a").toEntity())
+        val ev = TrackingEvent(Instant.fromEpochMilliseconds(2000), "Departed facility", "Memphis, TN", TrackingStatus.IN_TRANSIT)
+        dao.replaceEvents("a", listOf(ev.toEntity("a")))
+        dao.deleteParcel("a")
+        assertNull(dao.getById("a"))
+    }
+
     @Test fun domain_mapper_roundtrip() = runTest {
         val dao = db().parcelDao()
         val original = parcel("a").copy(

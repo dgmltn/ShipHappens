@@ -61,6 +61,7 @@ fun ListScreen(
         onClearManual = vm::onClearManual,
         onArchive = vm::onArchive,
         onRestore = vm::onRestore,
+        onDelete = vm::onDelete,
         onUndo = vm::onUndo,
     )
 }
@@ -84,6 +85,7 @@ fun ListContent(
     onClearManual: () -> Unit = {},
     onArchive: (String) -> Unit = {},
     onRestore: (String) -> Unit = {},
+    onDelete: (String) -> Unit = {},
     onUndo: () -> Unit = {},
 ) {
     Box(Modifier.fillMaxSize().background(ShipColors.bg)) {
@@ -106,9 +108,10 @@ fun ListContent(
                                 onPickerToggle, onPickCarrier, onAddManual, onClearManual)
                         }
                     }
-                    items(state.cards, key = { it.id }) { card ->
-                        ParcelRow(card, onClick = { onOpenDetail(card.id) },
-                            onArchive = { onArchive(card.id) }, onRestore = { onRestore(card.id) })
+                    items(state.cards, key = { "${state.tab}-${it.id}" }) { card ->
+                        ParcelRow(card, tab = state.tab, onClick = { onOpenDetail(card.id) },
+                            onArchive = { onArchive(card.id) }, onRestore = { onRestore(card.id) },
+                            onDelete = { onDelete(card.id) })
                     }
                     state.emptyText?.let { item(key = "empty") { EmptyState(it) } }
                 }
@@ -174,9 +177,11 @@ private fun CarrierBadge(accentHex: String, size: Int = 46) {
     ) { Text("📦", fontSize = (size * 0.42).sp) }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ParcelRow(card: ParcelCardUi, onClick: () -> Unit, onArchive: () -> Unit, onRestore: () -> Unit) {
+private fun ParcelRow(
+    card: ParcelCardUi, tab: ListTab, onClick: () -> Unit,
+    onArchive: () -> Unit, onRestore: () -> Unit, onDelete: () -> Unit,
+) {
     val content: @Composable () -> Unit = {
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(ShipColors.card)
@@ -196,37 +201,24 @@ private fun ParcelRow(card: ParcelCardUi, onClick: () -> Unit, onArchive: () -> 
                 }
             }
             when {
-                card.delivered && !card.showRestore -> Text(
+                card.delivered -> Text(
                     "Delivered", color = ShipColors.delivered, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.clip(RoundedCornerShape(9.dp)).background(ShipColors.deliveredBg)
                         .padding(horizontal = 9.dp, vertical = 5.dp),
                 )
-                card.showRestore -> OutlinedButton(onClick = onRestore, shape = RoundedCornerShape(9.dp)) {
-                    Text("Restore", fontSize = 11.sp, color = ShipColors.muted)
-                }
                 card.ring != null -> DaysRing(card.ring, colorFromHex(card.accentHex), card.urgent)
             }
         }
     }
 
+    val (startToEnd, endToStart) = if (tab == ListTab.ACTIVE) {
+        archiveAction(onArchive) to deleteAction(onDelete)
+    } else {
+        deleteAction(onDelete) to restoreAction(onRestore)
+    }
+
     Box(Modifier.padding(vertical = 9.dp)) {
-        if (card.swipeable) {
-            val dismissState = rememberSwipeToDismissBoxState(
-                confirmValueChange = { v ->
-                    if (v == SwipeToDismissBoxValue.EndToStart) { onArchive(); true } else false
-                },
-            )
-            SwipeToDismissBox(
-                state = dismissState, enableDismissFromStartToEnd = false,
-                backgroundContent = {
-                    Row(
-                        Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp)).background(ShipColors.urgent)
-                            .padding(horizontal = 24.dp),
-                        horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically,
-                    ) { Text("Archive", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp) }
-                },
-            ) { content() }
-        } else content()
+        SwipeActionRow(startToEnd, endToStart) { content() }
     }
 }
 
@@ -394,15 +386,15 @@ private fun Preview_ListContent_PopulatedWithRings() {
                 headerSub = "5 arriving soon",
                 cards = listOf(
                     ParcelCardUi("1", "Baseball cap", "USPS", "#1E3A8F", "In transit",
-                        delivered = false, swipeable = false, showRestore = false, ring = RingUi("2", 0.5f), urgent = false),
+                        delivered = false, ring = RingUi("2", 0.5f), urgent = false),
                     ParcelCardUi("2", "Trail running shoes", "FedEx", "#5A1B9A", "Out for delivery",
-                        delivered = false, swipeable = false, showRestore = false, ring = RingUi("1", 0.75f), urgent = true),
+                        delivered = false, ring = RingUi("1", 0.75f), urgent = true),
                     ParcelCardUi("3", "Mechanical keyboard", "UPS", "#5A3A22", "In transit",
-                        delivered = false, swipeable = false, showRestore = false, ring = RingUi("5", 0.5f), urgent = false),
+                        delivered = false, ring = RingUi("5", 0.5f), urgent = false),
                     ParcelCardUi("4", "Ceramic desk lamp", "UPS", "#5A3A22", "Out for delivery today",
-                        delivered = false, swipeable = false, showRestore = false, ring = RingUi("0", 0.75f), urgent = true),
+                        delivered = false, ring = RingUi("0", 0.75f), urgent = true),
                     ParcelCardUi("5", "Clear phone case", "USPS", "#1E3A8F", "Shipped",
-                        delivered = false, swipeable = false, showRestore = false, ring = RingUi("4", 0.25f), urgent = false),
+                        delivered = false, ring = RingUi("4", 0.25f), urgent = false),
                 ),
             ),
         )
@@ -419,9 +411,9 @@ private fun Preview_ListContent_Delivered() {
                 headerSub = "0 arriving soon",
                 cards = listOf(
                     ParcelCardUi("6", "Oat-blend coffee beans", "USPS", "#1E3A8F", "Delivered",
-                        delivered = true, swipeable = true, showRestore = false, ring = null, urgent = false),
+                        delivered = true, ring = null, urgent = false),
                     ParcelCardUi("7", "Paperback — The Overstory", "FedEx", "#5A1B9A", "Delivered",
-                        delivered = true, swipeable = true, showRestore = false, ring = null, urgent = false),
+                        delivered = true, ring = null, urgent = false),
                 ),
                 toast = ToastUi("Package archived", showUndo = true),
             ),
@@ -440,9 +432,9 @@ private fun Preview_ListContent_ArchivedTab() {
                 tab = ListTab.ARCHIVED,
                 cards = listOf(
                     ParcelCardUi("6", "Oat-blend coffee beans", "USPS", "#1E3A8F", "Delivered",
-                        delivered = true, swipeable = false, showRestore = true, ring = null, urgent = false),
+                        delivered = true, ring = null, urgent = false),
                     ParcelCardUi("7", "Paperback — The Overstory", "FedEx", "#5A1B9A", "Delivered",
-                        delivered = true, swipeable = false, showRestore = true, ring = null, urgent = false),
+                        delivered = true, ring = null, urgent = false),
                 ),
             ),
         )
@@ -463,7 +455,7 @@ private fun Preview_ListContent_PendingImport() {
                 ),
                 cards = listOf(
                     ParcelCardUi("1", "Baseball cap", "USPS", "#1E3A8F", "In transit",
-                        delivered = false, swipeable = false, showRestore = false, ring = RingUi("2", 0.5f), urgent = false),
+                        delivered = false, ring = RingUi("2", 0.5f), urgent = false),
                 ),
             ),
         )

@@ -10,6 +10,7 @@ kotlin {
         namespace = "com.shiphappens.design"
         compileSdk = providers.gradleProperty("shiphappens.compileSdk").get().toInt()
         minSdk = providers.gradleProperty("shiphappens.minSdk").get().toInt()
+        androidResources.enable = true
     }
     iosArm64()
     iosSimulatorArm64()
@@ -27,4 +28,4 @@ kotlin {
     }
 }
 
-compose.resources { packageOfResClass = "com.shiphappens.design.res" }
+compose.resources { packageOfResClass = "com.shiphappens.design.res"; publicResClass = true }

@@ -26,6 +26,11 @@ private val STATUS_TEXT = mapOf(
     TrackingStatus.UNKNOWN to "Waiting for first update",
 )
 
+private sealed interface PendingUndo {
+    data class FlagFlip(val reverse: suspend () -> Unit) : PendingUndo
+    data class PendingDelete(val id: String, val job: Job) : PendingUndo
+}
+
 class ListViewModel(
     private val repository: ParcelRepository,
     private val clipboard: ClipboardImportManager,
@@ -38,7 +43,8 @@ class ListViewModel(
     private val pendingName = MutableStateFlow("")
     private val toast = MutableStateFlow<ToastUi?>(null)
     private val refreshing = MutableStateFlow(false)
-    private var lastArchivedId: String? = null
+    private val pendingDeleteIds = MutableStateFlow<Set<String>>(emptySet())
+    private var pendingUndo: PendingUndo? = null
     private var toastJob: Job? = null
 
     init {
@@ -58,18 +64,20 @@ class ListViewModel(
     ) { t, act, arc, pend, man -> Content(t, act, arc, pend, man) }
 
     val state: StateFlow<ListUiState> =
-        combine(content, pendingName, toast, refreshing) { c, pName, t, r ->
-            val parcels = if (c.tab == ListTab.ACTIVE) c.active else c.archived
-            val arriving = c.active.count { it.status != TrackingStatus.DELIVERED }
+        combine(content, pendingName, toast, refreshing, pendingDeleteIds) { c, pName, t, r, del ->
+            val active = c.active.filterNot { it.id in del }
+            val archived = c.archived.filterNot { it.id in del }
+            val parcels = if (c.tab == ListTab.ACTIVE) active else archived
+            val arriving = active.count { it.status != TrackingStatus.DELIVERED }
             ListUiState(
                 dateLabel = clock.today().designFormat(),
                 headerSub = if (c.tab == ListTab.ACTIVE) "$arriving arriving soon"
-                    else "${c.archived.size} package${if (c.archived.size == 1) "" else "s"} archived",
+                    else "${archived.size} package${if (archived.size == 1) "" else "s"} archived",
                 tab = c.tab,
-                cards = parcels.map { it.toCard(c.tab) },
+                cards = parcels.map { it.toCard() },
                 emptyText = if (parcels.isNotEmpty()) null
                     else if (c.tab == ListTab.ACTIVE) "No active deliveries right now."
-                    else "Nothing archived yet. Swipe a delivered package left to archive it.",
+                    else "Nothing archived yet. Swipe a package right to archive it.",
                 pendingImport = if (c.tab == ListTab.ACTIVE) c.pending?.let {
                     PendingImportUi(it.carrier.displayName, it.carrier.accentHex(), it.trackingNumber, pName)
                 } else null,
@@ -79,7 +87,7 @@ class ListViewModel(
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ListUiState())
 
-    private fun Parcel.toCard(tab: ListTab): ParcelCardUi {
+    private fun Parcel.toCard(): ParcelCardUi {
         val delivered = status == TrackingStatus.DELIVERED
         val days = etaDate?.let { clock.today().daysUntil(it) }
         val urgent = !delivered && days != null && days <= 1
@@ -88,8 +96,6 @@ class ListViewModel(
         return ParcelCardUi(
             id = id, name = name, carrierName = carrier.displayName, accentHex = carrier.accentHex(),
             statusText = statusText, delivered = delivered,
-            swipeable = delivered && tab == ListTab.ACTIVE,
-            showRestore = tab == ListTab.ARCHIVED,
             ring = if (delivered) null else RingUi(
                 number = (days?.coerceAtLeast(0) ?: 0).toString(),
                 fraction = (status.stepIndex.coerceAtLeast(0)) / 4f,
@@ -148,15 +154,41 @@ class ListViewModel(
     }
 
     fun onArchive(id: String) {
-        lastArchivedId = id
+        pendingUndo = PendingUndo.FlagFlip { repository.restore(id) }
         viewModelScope.launch { repository.archive(id); flash("Package archived", undo = true, ms = 3_800) }
     }
-    fun onUndo() {
-        val id = lastArchivedId ?: return
-        toastJob?.cancel(); toast.value = null
-        viewModelScope.launch { repository.restore(id) }
+
+    fun onRestore(id: String) {
+        pendingUndo = PendingUndo.FlagFlip { repository.archive(id) }
+        viewModelScope.launch { repository.restore(id); flash("Package restored", undo = true, ms = 3_800) }
     }
-    fun onRestore(id: String) { viewModelScope.launch { repository.restore(id) } }
+
+    fun onDelete(id: String) {
+        pendingDeleteIds.update { it + id }
+        val job = viewModelScope.launch {
+            delay(3_800)
+            repository.delete(id)
+            pendingDeleteIds.update { it - id }
+        }
+        pendingUndo = PendingUndo.PendingDelete(id, job)
+        flash("Package deleted", undo = true, ms = 3_800)
+    }
+
+    fun onUndo() {
+        when (val pending = pendingUndo) {
+            is PendingUndo.FlagFlip -> {
+                toastJob?.cancel(); toast.value = null
+                viewModelScope.launch { pending.reverse() }
+            }
+            is PendingUndo.PendingDelete -> {
+                pending.job.cancel()
+                pendingDeleteIds.update { it - pending.id }
+                toastJob?.cancel(); toast.value = null
+            }
+            null -> return
+        }
+        pendingUndo = null
+    }
 
     fun onRefresh() {
         viewModelScope.launch {

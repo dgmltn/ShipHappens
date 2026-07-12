@@ -61,6 +61,7 @@ class ParcelRepository(
 
     suspend fun archive(id: String) = dao.archive(id, clock.now().toEpochMilliseconds())
     suspend fun restore(id: String) = dao.restore(id)
+    suspend fun delete(id: String) = dao.deleteParcel(id)
 
     suspend fun refresh(id: String): Boolean = refreshRow(id) is RefreshOutcome.Success
 

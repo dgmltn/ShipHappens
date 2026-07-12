@@ -30,6 +30,7 @@ object ShipColors {
     val hairlineStrong = Color(0xFFE2DFD8)
     val segmentBg = Color(0xFFEAE7E0)
     val urgent = Color(0xFFC2410C)
+    val archiveAccent = Color(0xFF2563EB)
     val delivered = Color(0xFF1F7A4D)
     val deliveredBg = Color(0xFFE7F3EC)
     val toggleOff = Color(0xFFDAD6CE)
