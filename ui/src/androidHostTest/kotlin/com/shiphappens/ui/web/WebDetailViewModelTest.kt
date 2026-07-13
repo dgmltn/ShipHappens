@@ -11,6 +11,8 @@ import com.shiphappens.data.source.SourceRegistry
 import com.shiphappens.domain.*
 import com.shiphappens.source.ups.UpsWebSource
 import com.shiphappens.source.webview.NoWebScraper
+import com.shiphappens.source.webview.PageEvent
+import com.shiphappens.source.webview.WebCookieJar
 import androidx.lifecycle.viewModelScope
 import kotlin.io.path.createTempDirectory
 import kotlin.test.*
@@ -32,9 +34,19 @@ class WebDetailViewModelTest {
         override fun today() = LocalDate(2026, 7, 12)
     }
 
+    /** Records flush() calls so tests can prove login flushes cookies (Task 11, Finding 2). */
+    private class FakeWebCookieJar : WebCookieJar {
+        var flushCount = 0
+            private set
+        override fun flush() { flushCount++ }
+        override fun clearForDomain(domain: String) {}
+    }
+
     private lateinit var db: ShipHappensDb
     private lateinit var repo: ParcelRepository
+    private lateinit var settings: SettingsRepository
     private lateinit var vm: WebDetailViewModel
+    private lateinit var cookieJar: FakeWebCookieJar
 
     private val parcel = Parcel(
         id = "p1", name = "Web parcel", trackingNumber = "1Z999AA10123456784",
@@ -44,11 +56,12 @@ class WebDetailViewModelTest {
     private fun TestScope.buildVm(): WebDetailViewModel {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val dir = createTempDirectory("webdetail").toString()
-        val settings = SettingsRepository(PreferenceDataStoreFactory.createWithPath(scope = backgroundScope) { "$dir/s.preferences_pb".toPath() })
+        settings = SettingsRepository(PreferenceDataStoreFactory.createWithPath(scope = backgroundScope) { "$dir/s.preferences_pb".toPath() })
         db = Room.inMemoryDatabaseBuilder<ShipHappensDb>().setDriver(BundledSQLiteDriver()).build()
         val registry = SourceRegistry(listOf(UpsWebSource(NoWebScraper)), settings)
         repo = ParcelRepository(db.parcelDao(), registry, settings, FixedClock())
-        val v = WebDetailViewModel(parcel.id, repo, registry, settings)
+        cookieJar = FakeWebCookieJar()
+        val v = WebDetailViewModel(parcel.id, repo, registry, settings, cookieJar)
         backgroundScope.launch { v.state.collect() }
         vm = v
         return v
@@ -101,6 +114,22 @@ class WebDetailViewModelTest {
         }
         assertEquals("Memphis, TN", assertNotNull(updated).latestLocation)
         assertEquals("ups", updated.sourceId)
+    }
+
+    @Test fun logged_in_event_flushes_cookies_and_persists_flag() = runTest {
+        buildVm()
+        db.parcelDao().upsertParcel(parcel.toEntity())
+        awaitState { it.loaded }
+        val job = vm.onEvent(PageEvent.LoggedIn(true))
+        // Join the write coroutine before the test can return — otherwise it may still be
+        // resuming onto Dispatchers.Main after tearDown's resetMain(), crashing a later test
+        // (same hazard documented on onPayload above).
+        withContext(Dispatchers.Default) { withTimeout(10_000) { assertNotNull(job).join() } }
+        val cfg = withContext(Dispatchers.Default) {
+            withTimeout(10_000) { settings.settings.first { it.sourceConfigs["ups"]?.values?.get("loggedIn") == "true" } }
+        }
+        assertEquals("true", cfg.sourceConfigs["ups"]?.values?.get("loggedIn"))
+        assertEquals(1, cookieJar.flushCount)
     }
 
     @Test fun non_tracking_payload_changes_nothing() = runTest {

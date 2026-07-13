@@ -22,7 +22,7 @@ val uiModule = module {
     viewModelOf(::ListViewModel)
     viewModelOf(::SettingsViewModel)
     viewModel { params -> DetailViewModel(params.get(), get(), get(), get()) }
-    viewModel { params -> com.shiphappens.ui.web.WebDetailViewModel(params.get(), get(), get(), get()) }
+    viewModel { params -> com.shiphappens.ui.web.WebDetailViewModel(params.get(), get(), get(), get(), get()) }
     viewModel { params -> com.shiphappens.ui.web.WebLoginViewModel(params.get(), get(), get(), get()) }
 }
 

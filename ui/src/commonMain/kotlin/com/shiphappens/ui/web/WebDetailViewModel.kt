@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 data class WebDetailUiState(
     val loaded: Boolean = false,
@@ -28,9 +30,15 @@ class WebDetailViewModel(
     private val repository: ParcelRepository,
     registry: SourceRegistry,
     private val settings: SettingsRepository,
+    private val cookieJar: WebCookieJar,
 ) : ViewModel() {
 
     private val webSources = registry.all().filterIsInstance<WebCapableSource>()
+
+    // Serializes onPayload's read-modify-write against repository.applySnapshot: two Tracking
+    // payloads routed close together each launch their own coroutine, and without this lock both
+    // could read the same baseline row and clobber each other's field-preserve branches.
+    private val applyMutex = Mutex()
 
     val state: StateFlow<WebDetailUiState> =
         combine(repository.observeParcel(parcelId), settings.settings) { parcel, appSettings ->
@@ -55,16 +63,20 @@ class WebDetailViewModel(
         val spec = state.value.spec ?: return null
         val routed = PayloadRouter(spec).route(json)
         if (routed !is RouteResult.Tracking) return null
-        return viewModelScope.launch { repository.applySnapshot(parcelId, routed.tracking.toSnapshot(), spec.sourceId) }
+        return viewModelScope.launch {
+            applyMutex.withLock { repository.applySnapshot(parcelId, routed.tracking.toSnapshot(), spec.sourceId) }
+        }
     }
 
-    /** A login that happens mid-browse also flips the persisted flag. */
-    fun onEvent(event: PageEvent) {
-        val spec = state.value.spec ?: return
+    /** A login that happens mid-browse also flips the persisted flag and flushes cookies. */
+    fun onEvent(event: PageEvent): Job? {
+        val spec = state.value.spec ?: return null
         if (event is PageEvent.LoggedIn && event.loggedIn && state.value.showLoginHint) {
-            viewModelScope.launch {
+            return viewModelScope.launch {
                 settings.updateSourceConfig(spec.sourceId) { it.copy(values = it.values + ("loggedIn" to "true")) }
+                cookieJar.flush()  // force cookie persistence so the session survives process death
             }
         }
+        return null
     }
 }

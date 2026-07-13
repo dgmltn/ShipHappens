@@ -37,7 +37,15 @@ class HeadlessWebViewScraper(
         val result = withContext(Dispatchers.Main.immediate) {
             withTimeoutOrNull(SCRAPE_TIMEOUT_MS) { runScrape(spec, url) } ?: ScrapeResult.Timeout
         }
-        if (result is ScrapeResult.Payloads) throttle.record(url, result)
+        // Only cache genuine tracking results (spec §7) — a login-wall, bot-challenge, or
+        // not-found "dom" payload is still a ScrapeResult.Payloads but must NOT be cached,
+        // or a stale failure would shadow a real scrape once the user resolves it.
+        if (result is ScrapeResult.Payloads) {
+            val router = PayloadRouter(spec)
+            if (result.payloads.any { router.route(it) is RouteResult.Tracking }) {
+                throttle.record(url, result)
+            }
+        }
         result
     }
 
