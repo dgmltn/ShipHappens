@@ -66,6 +66,27 @@ class ParcelRepository(
     suspend fun refresh(id: String): Boolean = refreshRow(id) is RefreshOutcome.Success
 
     /**
+     * Persist a snapshot produced OUTSIDE the normal track() path (e.g. the visible web view's
+     * scrape-on-view). Identical merge semantics to a successful refresh: UNKNOWN status and null
+     * fields never clobber existing values, events replace wholesale when non-empty, and the
+     * parcel is pinned to [sourceId]. Returns false when the parcel no longer exists.
+     */
+    suspend fun applySnapshot(id: String, snapshot: TrackingSnapshot, sourceId: String): Boolean {
+        val row = dao.getById(id) ?: return false
+        val updated = row.parcel.copy(
+            status = if (snapshot.status == TrackingStatus.UNKNOWN) row.parcel.status else snapshot.status.name,
+            etaDate = snapshot.etaDate?.toString() ?: row.parcel.etaDate,
+            etaTime = snapshot.etaTime?.toString() ?: row.parcel.etaTime,
+            latestLocation = snapshot.latestLocation ?: row.parcel.latestLocation,
+            sourceId = sourceId,
+            lastRefreshedAt = clock.now().toEpochMilliseconds(),
+        )
+        dao.upsertParcel(updated)
+        if (snapshot.events.isNotEmpty()) dao.replaceEvents(id, snapshot.events.map { it.toEntity(id) })
+        return true
+    }
+
+    /**
      * Outcome of a single-row refresh attempt. [NoSource] (no enabled source resolves for this
      * parcel) is NOT a failure — per spec §9 it must not count toward [RefreshSummary.failed] or
      * surface a "couldn't refresh" toast; the parcel simply stays at whatever status it has.
@@ -87,17 +108,7 @@ class ParcelRepository(
         return when (result) {
             is SourceResult.Failure -> RefreshOutcome.Failed(result.reason)
             is SourceResult.Success -> {
-                val snap = result.value
-                val updated = row.parcel.copy(
-                    status = if (snap.status == TrackingStatus.UNKNOWN) row.parcel.status else snap.status.name,
-                    etaDate = snap.etaDate?.toString() ?: row.parcel.etaDate,
-                    etaTime = snap.etaTime?.toString() ?: row.parcel.etaTime,
-                    latestLocation = snap.latestLocation ?: row.parcel.latestLocation,
-                    sourceId = source.descriptor.id,
-                    lastRefreshedAt = clock.now().toEpochMilliseconds(),
-                )
-                dao.upsertParcel(updated)
-                if (snap.events.isNotEmpty()) dao.replaceEvents(id, snap.events.map { it.toEntity(id) })
+                applySnapshot(id, result.value, source.descriptor.id)
                 RefreshOutcome.Success
             }
         }
