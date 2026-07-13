@@ -75,4 +75,16 @@ class ApplySnapshotTest {
         val r = repo(backgroundScope)
         assertFalse(r.applySnapshot("nope", TrackingSnapshot(status = TrackingStatus.DELIVERED), sourceId = "ups"))
     }
+
+    @Test fun empty_events_snapshot_preserves_existing_events() = runTest {
+        val r = repo(backgroundScope)
+        db.parcelDao().upsertParcel(parcel.toEntity())
+        db.parcelDao().replaceEvents("p1", listOf(TrackingEvent(Instant.parse("2026-07-10T08:00:00Z"), "Picked up", "Origin, IL", TrackingStatus.IN_TRANSIT).toEntity("p1")))
+        val ok = r.applySnapshot("p1", TrackingSnapshot(status = TrackingStatus.DELIVERED), sourceId = "ups")
+        assertTrue(ok)
+        val row = assertNotNull(db.parcelDao().getById("p1"))
+        assertEquals(TrackingStatus.DELIVERED.name, row.parcel.status)
+        assertEquals(1, row.events.size)
+        assertEquals("Picked up", row.events[0].description)
+    }
 }
