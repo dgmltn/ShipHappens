@@ -40,13 +40,18 @@ class AppModulesTest {
         single<ClipboardReader> { object : ClipboardReader { override suspend fun readText(): String? = null } }
     }
 
+    private fun testWebModule(): Module = module {
+        single<com.shiphappens.source.webview.WebScraper> { com.shiphappens.source.webview.NoWebScraper }
+        single<com.shiphappens.source.webview.WebCookieJar> { com.shiphappens.source.webview.NoOpCookieJar }
+    }
+
     @Test fun appModules_graph_resolves() {
-        // appModules() puts platformDataModule() first (documented order); swap it for the
-        // host-test-safe module above and keep the rest of the real graph as-is.
-        val realModulesMinusPlatform = appModules().drop(1)
+        // appModules() puts platformDataModule() then platformWebModule() first (documented
+        // order); swap both for host-test-safe modules and keep the rest of the real graph as-is.
+        val realModulesMinusPlatform = appModules().drop(2)
 
         koinApplication {
-            modules(listOf(testPlatformDataModule()) + realModulesMinusPlatform)
+            modules(listOf(testPlatformDataModule(), testWebModule()) + realModulesMinusPlatform)
         }.checkModules()
     }
 }

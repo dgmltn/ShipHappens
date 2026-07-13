@@ -6,6 +6,7 @@ import com.shiphappens.source.demo.demoSourceModule
 import com.shiphappens.source.fedex.fedexSourceModule
 import com.shiphappens.source.ups.upsSourceModule
 import com.shiphappens.source.usps.uspsSourceModule
+import com.shiphappens.source.webview.di.platformWebModule
 import com.shiphappens.ui.detail.DetailViewModel
 import com.shiphappens.ui.list.ListViewModel
 import com.shiphappens.ui.settings.SettingsViewModel
@@ -26,6 +27,7 @@ val uiModule = module {
 /** Adding a tracking source = implement TrackingSource in a new module + add its Koin module here. */
 fun appModules(): List<Module> = listOf(
     platformDataModule(),
+    platformWebModule(),
     dataModule,
     demoSourceModule,
     upsSourceModule,
