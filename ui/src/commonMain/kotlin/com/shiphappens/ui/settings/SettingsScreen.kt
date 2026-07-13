@@ -32,7 +32,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = koinViewModel()) {
+fun SettingsScreen(onBack: () -> Unit, onOpenLogin: (String) -> Unit = {}, vm: SettingsViewModel = koinViewModel()) {
     val s by vm.state.collectAsState()
     SettingsContent(
         state = s,
@@ -42,6 +42,8 @@ fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = koinViewModel()) 
         onTest = vm::onTest,
         onAutoImport = vm::onAutoImport,
         onFrequency = vm::onFrequency,
+        onSignIn = onOpenLogin,
+        onSignOut = { vm.onSignOut(it) },
     )
 }
 
@@ -54,6 +56,8 @@ fun SettingsContent(
     onTest: (String) -> Unit = {},
     onAutoImport: (Boolean) -> Unit = {},
     onFrequency: (RefreshFrequency) -> Unit = {},
+    onSignIn: (String) -> Unit = {},
+    onSignOut: (String) -> Unit = {},
 ) {
     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(ShipColors.bg)) {
         Column(Modifier.fillMaxSize()) {
@@ -71,10 +75,10 @@ fun SettingsContent(
 
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 34.dp)) {
                 SectionLabel("Universal API")
-                state.universal.forEach { SourceCard(it, onToggle, onField, onTest) }
+                state.universal.forEach { SourceCard(it, onToggle, onField, onTest, onSignIn, onSignOut) }
                 Spacer(Modifier.height(10.dp))
                 SectionLabel("Direct carrier APIs")
-                state.carriers.forEach { SourceCard(it, onToggle, onField, onTest) }
+                state.carriers.forEach { SourceCard(it, onToggle, onField, onTest, onSignIn, onSignOut) }
                 Spacer(Modifier.height(10.dp))
                 SectionLabel("Sync")
                 SyncCard(state.autoImport, state.frequency, onAutoImport, onFrequency)
@@ -115,6 +119,8 @@ private fun SourceCard(
     onToggle: (String) -> Unit,
     onField: (String, String, String) -> Unit,
     onTest: (String) -> Unit,
+    onSignIn: (String) -> Unit,
+    onSignOut: (String) -> Unit,
 ) {
     val accent = colorFromHex(card.accentHex)
     SettingsCard {
@@ -152,6 +158,11 @@ private fun SourceCard(
                     },
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+        }
+        if (card.webCapable && card.enabled) {
+            TextButton(onClick = { if (card.signedIn) onSignOut(card.id) else onSignIn(card.id) }) {
+                Text(if (card.signedIn) "Sign out of ${card.name}" else "Sign in to ${card.name}", fontSize = 13.sp)
             }
         }
         card.endpointText?.let { endpoint ->

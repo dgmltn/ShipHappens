@@ -23,6 +23,7 @@ val uiModule = module {
     viewModelOf(::SettingsViewModel)
     viewModel { params -> DetailViewModel(params.get(), get(), get(), get()) }
     viewModel { params -> com.shiphappens.ui.web.WebDetailViewModel(params.get(), get(), get(), get()) }
+    viewModel { params -> com.shiphappens.ui.web.WebLoginViewModel(params.get(), get(), get(), get()) }
 }
 
 /** Adding a tracking source = implement TrackingSource in a new module + add its Koin module here. */

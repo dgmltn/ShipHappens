@@ -7,6 +7,8 @@ import com.shiphappens.data.settings.RefreshFrequency
 import com.shiphappens.data.settings.SettingsRepository
 import com.shiphappens.data.source.SourceRegistry
 import com.shiphappens.source.api.*
+import com.shiphappens.source.webview.WebCapableSource
+import com.shiphappens.source.webview.WebCookieJar
 import com.shiphappens.design.accentHex
 import com.shiphappens.domain.Carrier
 import kotlinx.coroutines.Job
@@ -19,6 +21,7 @@ data class FieldUi(val key: String, val label: String, val placeholder: String, 
 data class SourceCardUi(
     val id: String, val name: String, val accentHex: String, val enabled: Boolean,
     val statusText: String, val statusColorHex: String, val fields: List<FieldUi>, val endpointText: String?,
+    val webCapable: Boolean = false, val signedIn: Boolean = false,
 )
 
 data class SettingsUiState(
@@ -33,6 +36,7 @@ class SettingsViewModel(
     private val registry: SourceRegistry,
     private val settings: SettingsRepository,
     private val repository: ParcelRepository,
+    private val cookieJar: WebCookieJar,
 ) : ViewModel() {
 
     private val toast = MutableStateFlow<String?>(null)
@@ -50,6 +54,7 @@ class SettingsViewModel(
                 d.kind == SourceKind.UNIVERSAL -> "Connected · 1,000+ couriers" to (d.accentColorHex ?: "#1F7A4D")
                 else -> "Connected · syncing" to "#1F7A4D"
             }
+            val webSpec = (src as? WebCapableSource)?.webSpec
             SourceCardUi(
                 id = d.id, name = d.displayName,
                 accentHex = d.accentColorHex ?: Carrier(d.id, d.displayName).accentHex(),
@@ -59,6 +64,8 @@ class SettingsViewModel(
                     d.kind == SourceKind.CARRIER -> "Production endpoint"
                     else -> null
                 },
+                webCapable = webSpec != null,
+                signedIn = webSpec != null && cfg.values["loggedIn"] == "true",
             )
         }
         SettingsUiState(
@@ -90,6 +97,22 @@ class SettingsViewModel(
                 is SourceResult.Success -> flash("${src.descriptor.displayName} credentials look valid")
                 is SourceResult.Failure -> flash(r.message ?: "Couldn't reach ${src.descriptor.displayName}")
             }
+        }
+    }
+
+    /**
+     * Returns the write Job (null if there's no web-capable source to sign out of) so tests can
+     * await it — settings.updateSourceConfig suspends through DataStore's own dispatchers and can
+     * otherwise resume onto Dispatchers.Main after a test's tearDown() has called resetMain(),
+     * crashing a later test (same hazard as WebDetailViewModel.onPayload, see Task 7). UI call
+     * sites coerce the reference to Unit.
+     */
+    fun onSignOut(sourceId: String): Job? {
+        val spec = (registry.all().firstOrNull { it.descriptor.id == sourceId } as? WebCapableSource)?.webSpec ?: return null
+        return viewModelScope.launch {
+            cookieJar.clearForDomain(spec.cookieDomain)
+            settings.updateSourceConfig(sourceId) { it.copy(values = it.values - "loggedIn") }
+            flash("Signed out of ${spec.carrier.displayName}")
         }
     }
 

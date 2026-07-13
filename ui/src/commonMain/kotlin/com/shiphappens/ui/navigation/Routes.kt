@@ -7,3 +7,4 @@ import kotlinx.serialization.Serializable
 @Serializable data class DetailRoute(val parcelId: String) : NavKey
 @Serializable data class WebDetailRoute(val parcelId: String) : NavKey
 @Serializable data object SettingsRoute : NavKey
+@Serializable data class WebLoginRoute(val sourceId: String) : NavKey

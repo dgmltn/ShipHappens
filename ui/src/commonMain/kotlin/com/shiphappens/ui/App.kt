@@ -11,6 +11,7 @@ import com.shiphappens.ui.list.ListScreen
 import com.shiphappens.ui.navigation.*
 import com.shiphappens.ui.settings.SettingsScreen
 import com.shiphappens.ui.web.WebDetailScreen
+import com.shiphappens.ui.web.WebLoginScreen
 import com.shiphappens.design.ShipTheme
 
 // Navigation 3 API-drift note: the installed runtime (1.1.4) only exposes an unconfigured
@@ -43,7 +44,13 @@ fun App() {
                     )
                 }
                 entry<WebDetailRoute> { route -> WebDetailScreen(route.parcelId, onBack = { backStack.removeLastOrNull() }) }
-                entry<SettingsRoute> { SettingsScreen(onBack = { backStack.removeLastOrNull() }) }
+                entry<SettingsRoute> {
+                    SettingsScreen(
+                        onBack = { backStack.removeLastOrNull() },
+                        onOpenLogin = { sourceId -> backStack.add(WebLoginRoute(sourceId)) },
+                    )
+                }
+                entry<WebLoginRoute> { route -> WebLoginScreen(route.sourceId, onBack = { backStack.removeLastOrNull() }) }
             },
         )
     }

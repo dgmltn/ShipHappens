@@ -12,6 +12,7 @@ import com.shiphappens.source.api.TrackingSource
 import com.shiphappens.source.demo.DemoSource
 import com.shiphappens.source.fedex.FedexSource
 import com.shiphappens.source.ups.UpsWebSource
+import com.shiphappens.source.webview.NoOpCookieJar
 import com.shiphappens.source.webview.NoWebScraper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -77,7 +78,7 @@ class SettingsViewModelTest {
         // since UPS itself no longer has any credentials to configure.
         val registry = SourceRegistry(listOf(demo, UpsWebSource(NoWebScraper)) + extraCarriers, settings)
         repo = ParcelRepository(db.parcelDao(), registry, settings, FixedClock())
-        vm = SettingsViewModel(registry, settings, repo)
+        vm = SettingsViewModel(registry, settings, repo, NoOpCookieJar)
         // Records every emission and keeps WhileSubscribed alive for the whole test.
         backgroundScope.launch { vm.state.collect { check(recordedStates.tryEmit(it)) } }
         // Prime the pipeline: the first combined emission requires settings.settings' initial load.
@@ -163,5 +164,18 @@ class SettingsViewModelTest {
         val s = awaitState { !it.autoImport && it.frequency == RefreshFrequency.ONE_HOUR }
         assertFalse(s.autoImport)
         assertEquals(RefreshFrequency.ONE_HOUR, s.frequency)
+    }
+
+    @Test fun ups_card_is_web_capable_and_sign_out_clears_flag() = runTest {
+        val vm = vm()
+        settings.updateSourceConfig("ups") { it.copy(enabled = true, values = mapOf("loggedIn" to "true")) }
+        val signedIn = awaitState { s -> s.carriers.firstOrNull { it.id == "ups" }?.signedIn == true }
+        assertTrue(signedIn.carriers.first { it.id == "ups" }.webCapable)
+        val job = vm.onSignOut("ups")
+        awaitState { s -> s.carriers.firstOrNull { it.id == "ups" }?.signedIn == false }
+        // Join the write coroutine before the test can return — otherwise it may still be
+        // resuming onto Dispatchers.Main after tearDown's resetMain(), crashing a later test
+        // (same hazard WebDetailViewModelTest documents for onPayload).
+        withContext(Dispatchers.Default) { withTimeout(10_000) { assertNotNull(job).join() } }
     }
 }
