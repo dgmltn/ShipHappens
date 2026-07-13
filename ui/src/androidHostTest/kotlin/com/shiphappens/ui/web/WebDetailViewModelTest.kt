@@ -72,7 +72,10 @@ class WebDetailViewModelTest {
         buildVm()
         db.parcelDao().upsertParcel(parcel.toEntity())
         awaitState { it.loaded }
-        vm.onPayload("""{"kind":"dom","body":"{\"page\":\"ok\",\"tracking\":{\"status\":\"OUT_FOR_DELIVERY\",\"location\":\"Memphis, TN\"}}"}""")
+        val job = vm.onPayload("""{"kind":"dom","body":"{\"page\":\"ok\",\"tracking\":{\"status\":\"OUT_FOR_DELIVERY\",\"location\":\"Memphis, TN\"}}"}""")
+        // Join the write coroutine before the test can return — otherwise it may still be
+        // resuming onto Dispatchers.Main after tearDown's resetMain(), crashing a later test.
+        withContext(Dispatchers.Default) { withTimeout(10_000) { assertNotNull(job).join() } }
         val updated = withContext(Dispatchers.Default) {
             withTimeout(10_000) { repo.observeParcel("p1").first { it?.status == TrackingStatus.OUT_FOR_DELIVERY } }
         }
@@ -84,8 +87,9 @@ class WebDetailViewModelTest {
         buildVm()
         db.parcelDao().upsertParcel(parcel.toEntity())
         awaitState { it.loaded }
-        vm.onPayload("garbage")
-        vm.onPayload("""{"kind":"dom","body":"{\"page\":\"challenge\"}"}""")
+        // Both return null (no write launched) — nothing is left in flight when the test returns.
+        assertNull(vm.onPayload("garbage"))
+        assertNull(vm.onPayload("""{"kind":"dom","body":"{\"page\":\"challenge\"}"}"""))
         // Give writes (if any, wrongly) a chance to land, then confirm status unchanged.
         withContext(Dispatchers.Default) { kotlinx.coroutines.delay(250) }
         assertEquals(TrackingStatus.UNKNOWN, assertNotNull(db.parcelDao().getById("p1")).parcel.status.let { TrackingStatus.valueOf(it) })

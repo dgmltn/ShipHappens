@@ -7,6 +7,7 @@ import com.shiphappens.data.settings.SettingsRepository
 import com.shiphappens.data.source.SourceRegistry
 import com.shiphappens.design.accentHex
 import com.shiphappens.source.webview.*
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -45,13 +46,16 @@ class WebDetailViewModel(
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), WebDetailUiState())
 
-    /** Scrape-on-view: every Tracking payload the page produces is persisted immediately. */
-    fun onPayload(json: String) {
-        val spec = state.value.spec ?: return
+    /**
+     * Scrape-on-view: every Tracking payload the page produces is persisted immediately.
+     * Returns the write Job (null for non-tracking payloads) so tests can await the write;
+     * UI call sites coerce the reference to Unit.
+     */
+    fun onPayload(json: String): Job? {
+        val spec = state.value.spec ?: return null
         val routed = PayloadRouter(spec).route(json)
-        if (routed is RouteResult.Tracking) {
-            viewModelScope.launch { repository.applySnapshot(parcelId, routed.tracking.toSnapshot(), spec.sourceId) }
-        }
+        if (routed !is RouteResult.Tracking) return null
+        return viewModelScope.launch { repository.applySnapshot(parcelId, routed.tracking.toSnapshot(), spec.sourceId) }
     }
 
     /** A login that happens mid-browse also flips the persisted flag. */
