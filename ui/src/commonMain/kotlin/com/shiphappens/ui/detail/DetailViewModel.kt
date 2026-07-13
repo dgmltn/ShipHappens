@@ -4,8 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shiphappens.data.AppClock
 import com.shiphappens.data.ParcelRepository
+import com.shiphappens.data.source.SourceRegistry
 import com.shiphappens.domain.*
 import com.shiphappens.design.accentHex
+import com.shiphappens.source.webview.WebCapableSource
 import com.shiphappens.ui.util.design12h
 import com.shiphappens.ui.util.designFormat
 import kotlinx.coroutines.flow.SharingStarted
@@ -30,6 +32,8 @@ data class DetailUiState(
     val locationText: String? = null,
     val trackingNumber: String = "",
     val timeline: List<TimelineStepUi> = emptyList(),
+    /** Carrier display name when an in-app web page exists for this parcel; null hides the button. */
+    val webCarrierName: String? = null,
 )
 
 private val STEP_LABELS = listOf("Label created", "Shipped", "In transit", "Out for delivery", "Delivered")
@@ -38,7 +42,12 @@ class DetailViewModel(
     parcelId: String,
     repository: ParcelRepository,
     private val clock: AppClock,
+    registry: SourceRegistry,
 ) : ViewModel() {
+
+    private val webCarrierNames: Map<String, String> =
+        registry.all().filterIsInstance<WebCapableSource>()
+            .associate { it.webSpec.carrier.code to it.webSpec.carrier.displayName }
 
     val state: StateFlow<DetailUiState> = repository.observeParcel(parcelId)
         .map { parcel -> parcel?.toDetail() ?: DetailUiState() }
@@ -91,6 +100,7 @@ class DetailViewModel(
             locationText = latestLocation ?: events.lastOrNull()?.location,
             trackingNumber = trackingNumber,
             timeline = timeline,
+            webCarrierName = webCarrierNames[carrier.code],
         )
     }
 }

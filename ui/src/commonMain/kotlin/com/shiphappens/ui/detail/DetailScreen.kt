@@ -25,14 +25,14 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun DetailScreen(parcelId: String, onBack: () -> Unit) {
+fun DetailScreen(parcelId: String, onBack: () -> Unit, onOpenWeb: () -> Unit = {}) {
     val vm: DetailViewModel = koinViewModel(key = parcelId) { parametersOf(parcelId) }
     val s by vm.state.collectAsState()
-    DetailContent(s, onBack)
+    DetailContent(s, onBack, onOpenWeb)
 }
 
 @Composable
-fun DetailContent(state: DetailUiState, onBack: () -> Unit = {}) {
+fun DetailContent(state: DetailUiState, onBack: () -> Unit = {}, onOpenWeb: () -> Unit = {}) {
     val accent = colorFromHex(state.accentHex)
 
     Column(Modifier.fillMaxSize().background(ShipColors.bg)) {
@@ -101,6 +101,18 @@ fun DetailContent(state: DetailUiState, onBack: () -> Unit = {}) {
             DetailCard {
                 CardLabel("${state.carrierName} tracking number")
                 Text(state.trackingNumber, color = ShipColors.ink, fontFamily = monoFamily(), fontSize = 14.sp)
+            }
+            state.webCarrierName?.let { name ->
+                Spacer(Modifier.height(14.dp))
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(ShipColors.card)
+                        .border(1.dp, ShipColors.hairline, RoundedCornerShape(18.dp))
+                        .clickable(onClick = onOpenWeb).padding(horizontal = 18.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("More details on $name", color = ShipColors.ink, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Text("›", color = ShipColors.faint, fontSize = 16.sp)
+                }
             }
         }
     }

@@ -48,8 +48,9 @@ class DetailViewModelTest {
         val dir = kotlin.io.path.createTempDirectory("detail").toString()
         val settings = SettingsRepository(PreferenceDataStoreFactory.createWithPath(scope = backgroundScope) { "$dir/s.preferences_pb".toPath() })
         db = Room.inMemoryDatabaseBuilder<ShipHappensDb>().setDriver(BundledSQLiteDriver()).build()
-        val repo = ParcelRepository(db.parcelDao(), SourceRegistry(emptyList(), settings), settings, FixedClock())
-        val v = DetailViewModel(parcel.id, repo, FixedClock())
+        val registry = SourceRegistry(listOf(com.shiphappens.source.ups.UpsWebSource(com.shiphappens.source.webview.NoWebScraper)), settings)
+        val repo = ParcelRepository(db.parcelDao(), registry, settings, FixedClock())
+        val v = DetailViewModel(parcel.id, repo, FixedClock(), registry)
         backgroundScope.launch { v.state.collect() }
         vm = v
         return v
@@ -116,5 +117,12 @@ class DetailViewModelTest {
         db.parcelDao().upsertParcel(base(TrackingStatus.IN_TRANSIT, LocalDate(2026, 7, 14)).toEntity())
         val second = awaitState { it.headline == "Arrives in 4 days" }
         assertEquals("Arrives in 4 days", second.headline)
+    }
+
+    @Test fun web_button_shows_only_for_web_capable_carrier() = runTest {
+        val ups = base(TrackingStatus.IN_TRANSIT, LocalDate(2026, 7, 14)).copy(carrier = WellKnownCarriers.UPS)
+        vm(ups)
+        db.parcelDao().upsertParcel(ups.toEntity())
+        assertEquals("UPS", awaitState { it.loaded }.webCarrierName)
     }
 }

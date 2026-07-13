@@ -10,6 +10,7 @@ import com.shiphappens.ui.detail.DetailScreen
 import com.shiphappens.ui.list.ListScreen
 import com.shiphappens.ui.navigation.*
 import com.shiphappens.ui.settings.SettingsScreen
+import com.shiphappens.ui.web.WebDetailScreen
 import com.shiphappens.design.ShipTheme
 
 // Navigation 3 API-drift note: the installed runtime (1.1.4) only exposes an unconfigured
@@ -34,7 +35,14 @@ fun App() {
                         onOpenSettings = { backStack.add(SettingsRoute) },
                     )
                 }
-                entry<DetailRoute> { route -> DetailScreen(route.parcelId, onBack = { backStack.removeLastOrNull() }) }
+                entry<DetailRoute> { route ->
+                    DetailScreen(
+                        route.parcelId,
+                        onBack = { backStack.removeLastOrNull() },
+                        onOpenWeb = { backStack.add(WebDetailRoute(route.parcelId)) },
+                    )
+                }
+                entry<WebDetailRoute> { route -> WebDetailScreen(route.parcelId, onBack = { backStack.removeLastOrNull() }) }
                 entry<SettingsRoute> { SettingsScreen(onBack = { backStack.removeLastOrNull() }) }
             },
         )
