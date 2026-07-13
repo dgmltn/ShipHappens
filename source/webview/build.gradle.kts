@@ -28,5 +28,11 @@ kotlin {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
         }
+        getByName("androidMain") {
+            dependencies {
+                implementation(libs.androidx.webkit)
+                implementation(libs.koin.android)
+            }
+        }
     }
 }
