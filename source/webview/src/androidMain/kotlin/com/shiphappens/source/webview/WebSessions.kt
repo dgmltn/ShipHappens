@@ -56,10 +56,9 @@ object WebSessions {
                     onEvent(PageEvent.LoggedIn(value == "true"))
                 }
                 view.postDelayed({
-                    // The view may be destroyed (headless teardown) before the settle delay fires.
-                    if (view.isAttachedToWindow || view.parent == null) {
-                        runCatching { view.evaluateJavascript(BridgeScripts.extractionRunner(spec), null) }
-                    }
+                    // The view may be destroyed (headless teardown) before this fires; there is no
+                    // public "is destroyed" check, so runCatching absorbs the post-destroy call.
+                    runCatching { view.evaluateJavascript(BridgeScripts.extractionRunner(spec), null) }
                 }, SETTLE_MS)
             }
 
