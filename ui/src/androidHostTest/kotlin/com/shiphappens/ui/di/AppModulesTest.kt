@@ -6,8 +6,12 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.shiphappens.data.clipboard.ClipboardReader
 import com.shiphappens.data.db.ShipHappensDb
 import kotlin.io.path.createTempDirectory
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
 import okio.Path.Companion.toPath
 import org.koin.core.module.Module
 import org.koin.dsl.koinApplication
@@ -45,7 +49,22 @@ class AppModulesTest {
         single<com.shiphappens.source.webview.WebCookieJar> { com.shiphappens.source.webview.NoOpCookieJar }
     }
 
+    @AfterTest fun tearDown() { Dispatchers.resetMain() }
+
     @Test fun appModules_graph_resolves() {
+        // uiModule's ListViewModel has an init{} block that eagerly does
+        // `viewModelScope.launch { coordinator.summaries.collect {...} } }`; checkModules() below
+        // constructs every definition in the graph, including it, so that launch fires here too.
+        // viewModelScope dispatches via Dispatchers.Main.immediate, and this test — unlike the
+        // *ViewModelTest classes — never calls Dispatchers.setMain(). Without it, that launch
+        // fails with "platform dispatcher absent", and since `launch` doesn't propagate
+        // synchronously, kotlinx-coroutines-test defers reporting the failure to whichever LATER
+        // test next touches Dispatchers.Main — causing sporadic, seemingly-unrelated failures
+        // elsewhere in the suite. Stubbing Main for the duration lets that launch dispatch
+        // normally; `coordinator.summaries` never emits on its own (RefreshCoordinator only emits
+        // when explicitly triggered), so the resulting collector just sits idle, no further leak.
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+
         // appModules() puts platformDataModule() then platformWebModule() first (documented
         // order); swap both for host-test-safe modules and keep the rest of the real graph as-is.
         val realModulesMinusPlatform = appModules().drop(2)

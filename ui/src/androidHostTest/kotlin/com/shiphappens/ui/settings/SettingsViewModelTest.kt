@@ -14,7 +14,9 @@ import com.shiphappens.source.fedex.FedexSource
 import com.shiphappens.source.ups.UpsWebSource
 import com.shiphappens.source.webview.NoOpCookieJar
 import com.shiphappens.source.webview.NoWebScraper
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -41,6 +43,7 @@ class SettingsViewModelTest {
         override fun today() = LocalDate(2026, 7, 10)
     }
 
+    private lateinit var db: ShipHappensDb
     private lateinit var settings: SettingsRepository
     private lateinit var repo: ParcelRepository
     private lateinit var vm: SettingsViewModel
@@ -69,7 +72,7 @@ class SettingsViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val dir = kotlin.io.path.createTempDirectory("settingsvm").toString()
         settings = SettingsRepository(PreferenceDataStoreFactory.createWithPath(scope = backgroundScope) { "$dir/s.preferences_pb".toPath() })
-        val db = Room.inMemoryDatabaseBuilder<ShipHappensDb>().setDriver(BundledSQLiteDriver()).build()
+        db = Room.inMemoryDatabaseBuilder<ShipHappensDb>().setDriver(BundledSQLiteDriver()).build()
         val demo = DemoSource(today = { LocalDate(2026, 7, 10) }, now = { Instant.fromEpochMilliseconds(1_752_148_800_000) })
         // UpsWebSource(NoWebScraper) is the real webview-scraping source (empty configSpec,
         // testConnection always succeeds; see UpsSource.kt). Tests that need to exercise
@@ -86,7 +89,22 @@ class SettingsViewModelTest {
         return vm
     }
 
-    @AfterTest fun tearDown() { Dispatchers.resetMain() }
+    @AfterTest fun tearDown() {
+        // `state` combines settings.settings (real DataStore dispatcher) with other sources via
+        // WhileSubscribed(5_000) on viewModelScope, same shape as WebDetailViewModelTest's
+        // documented flake: since ViewModel.clear() is never invoked here, that scope would
+        // otherwise leak past this test, and a late real-thread emission resuming on it after
+        // resetMain() crashes with "platform dispatcher absent", misattributed to whichever test
+        // runs next. Cancelling viewModelScope alone isn't enough — Job.cancel() doesn't wait
+        // for an already in-flight blocking Room query (repo also observes Room) to finish, so
+        // it can still resume after resetMain(). Closing the (never-otherwise-closed) Room db
+        // shuts down its invalidation-tracker threads at the source, which is what actually
+        // stops the race deterministically; cancelling the scope first avoids any in-flight
+        // collector seeing a "database closed" failure as a surprise.
+        if (::vm.isInitialized) vm.viewModelScope.cancel()
+        if (::db.isInitialized) db.close()
+        Dispatchers.resetMain()
+    }
 
     @Test fun sources_are_grouped_and_default_disabled() = runTest {
         val vm = vm()

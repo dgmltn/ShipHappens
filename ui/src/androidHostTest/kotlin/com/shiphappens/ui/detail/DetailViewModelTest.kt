@@ -1,6 +1,7 @@
 package com.shiphappens.ui.detail
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.lifecycle.viewModelScope
 import androidx.room3.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.shiphappens.data.*
@@ -10,6 +11,7 @@ import com.shiphappens.data.settings.SettingsRepository
 import com.shiphappens.data.source.SourceRegistry
 import com.shiphappens.domain.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -56,7 +58,24 @@ class DetailViewModelTest {
         return v
     }
 
-    @AfterTest fun tearDown() { Dispatchers.resetMain() }
+    @AfterTest fun tearDown() {
+        // `state` maps Room's observeParcel (real invalidation-tracker threads) via
+        // WhileSubscribed(5_000) on viewModelScope — the same shape as WebDetailViewModelTest's
+        // documented flake, just with one real-thread source instead of two (lower odds, not
+        // zero — this class was still an observed contributor to the full-suite flake).
+        // ViewModel.clear() is never invoked here, so viewModelScope (Dispatchers.Main) would
+        // otherwise leak past this test, and a late real-thread emission resuming on it after
+        // resetMain() crashes with "platform dispatcher absent", misattributed to whichever test
+        // runs next. Cancelling viewModelScope alone isn't enough — Job.cancel() doesn't wait
+        // for an already in-flight blocking Room query to finish, so it can still resume after
+        // resetMain(). Closing the (never-otherwise-closed) Room db shuts down its
+        // invalidation-tracker threads at the source, which is what actually stops the race
+        // deterministically; cancelling the scope first avoids any in-flight collector seeing a
+        // "database closed" failure as a surprise.
+        if (::vm.isInitialized) vm.viewModelScope.cancel()
+        if (::db.isInitialized) db.close()
+        Dispatchers.resetMain()
+    }
 
     private fun base(status: TrackingStatus, eta: LocalDate?) = Parcel(
         id = "p1", name = "Trail running shoes", trackingNumber = "FX 8823 0199 4422",

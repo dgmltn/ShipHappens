@@ -1,6 +1,7 @@
 package com.shiphappens.ui.web
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.lifecycle.viewModelScope
 import com.shiphappens.data.settings.SettingsRepository
 import com.shiphappens.data.source.SourceRegistry
 import com.shiphappens.source.ups.UpsWebSource
@@ -10,6 +11,7 @@ import com.shiphappens.source.webview.PageEvent
 import kotlin.io.path.createTempDirectory
 import kotlin.test.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -33,7 +35,16 @@ class WebLoginViewModelTest {
         return v
     }
 
-    @AfterTest fun tearDown() { Dispatchers.resetMain() }
+    @AfterTest fun tearDown() {
+        // Applied for consistency with the other *ViewModelTest classes in this module (see
+        // WebDetailViewModelTest): viewModelScope (Dispatchers.Main) is never cancelled here
+        // either, since ViewModel.clear() is never invoked in these tests. This VM's `state`
+        // only maps a local MutableStateFlow (no Room/DataStore combine), so it's a much smaller
+        // exposure than the others — but cancel deterministically anyway so nothing belonging to
+        // this VM can resume on Main after resetMain() below.
+        if (::vm.isInitialized) vm.viewModelScope.cancel()
+        Dispatchers.resetMain()
+    }
 
     private suspend fun awaitState(predicate: (WebLoginUiState) -> Boolean): WebLoginUiState =
         withContext(Dispatchers.Default) { withTimeout(10_000) { vm.state.first(predicate) } }

@@ -11,7 +11,9 @@ import com.shiphappens.data.settings.SettingsRepository
 import com.shiphappens.data.source.SourceRegistry
 import com.shiphappens.domain.*
 import com.shiphappens.source.api.*
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -55,6 +57,7 @@ private class FakeSource(
  * the full RECORDED sequence of states. Asserted values are identical to the original spec.
  */
 class ListViewModelTest {
+    private lateinit var db: ShipHappensDb
     private lateinit var repo: ParcelRepository
     private lateinit var clipboard: FakeClipboard
     private lateinit var manager: ClipboardImportManager
@@ -93,7 +96,7 @@ class ListViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val dir = kotlin.io.path.createTempDirectory("listvm").toString()
         settings = SettingsRepository(PreferenceDataStoreFactory.createWithPath(scope = backgroundScope) { "$dir/s.preferences_pb".toPath() })
-        val db = Room.inMemoryDatabaseBuilder<ShipHappensDb>().setDriver(BundledSQLiteDriver()).build()
+        db = Room.inMemoryDatabaseBuilder<ShipHappensDb>().setDriver(BundledSQLiteDriver()).build()
         clock = FixedClock()
         source = FakeSource()
         val registry = SourceRegistry(listOf(source), settings)
@@ -110,7 +113,22 @@ class ListViewModelTest {
         return vm
     }
 
-    @AfterTest fun tearDown() { Dispatchers.resetMain() }
+    @AfterTest fun tearDown() {
+        // `state` combines Room's observeParcels (real invalidation-tracker threads) with other
+        // sources via WhileSubscribed(5_000) on viewModelScope, same shape as
+        // WebDetailViewModelTest's documented flake: since ViewModel.clear() is never invoked
+        // here, that scope would otherwise leak past this test, and a late real-thread emission
+        // resuming on it after resetMain() crashes with "platform dispatcher absent",
+        // misattributed to whichever test runs next. Cancelling viewModelScope alone isn't
+        // enough — Job.cancel() doesn't wait for an already in-flight blocking Room query to
+        // finish, so it can still resume after resetMain(). Closing the (never-otherwise-closed)
+        // Room db shuts down its invalidation-tracker threads at the source, which is what
+        // actually stops the race deterministically; cancelling the scope first avoids any
+        // in-flight collector seeing a "database closed" failure as a surprise.
+        if (::vm.isInitialized) vm.viewModelScope.cancel()
+        if (::db.isInitialized) db.close()
+        Dispatchers.resetMain()
+    }
 
     @Test fun cards_show_ring_days_and_status() = runTest {
         val vm = vm()

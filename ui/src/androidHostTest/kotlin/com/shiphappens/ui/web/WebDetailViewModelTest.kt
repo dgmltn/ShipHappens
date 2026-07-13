@@ -11,10 +11,12 @@ import com.shiphappens.data.source.SourceRegistry
 import com.shiphappens.domain.*
 import com.shiphappens.source.ups.UpsWebSource
 import com.shiphappens.source.webview.NoWebScraper
+import androidx.lifecycle.viewModelScope
 import kotlin.io.path.createTempDirectory
 import kotlin.test.*
 import kotlin.time.Instant
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -52,7 +54,25 @@ class WebDetailViewModelTest {
         return v
     }
 
-    @AfterTest fun tearDown() { Dispatchers.resetMain() }
+    @AfterTest fun tearDown() {
+        // `state` combines Room's observeParcel (real invalidation-tracker threads) with
+        // settings.settings (real DataStore dispatcher) via WhileSubscribed(5_000) on
+        // viewModelScope. The test's only subscriber is the backgroundScope collector below,
+        // which runTest cancels when the test body returns — but WhileSubscribed keeps the
+        // upstream flows hot afterward, and ViewModel.clear() is never invoked here, so
+        // viewModelScope (Dispatchers.Main) would otherwise leak past this test. A late
+        // real-thread emission resuming on it after resetMain() crashes with "platform
+        // dispatcher absent", misattributed to whichever test runs next. Cancelling
+        // viewModelScope alone isn't enough — Job.cancel() doesn't wait for an already
+        // in-flight blocking Room query to finish, so it can still resume after resetMain().
+        // Closing the (never-otherwise-closed) Room db shuts down its invalidation-tracker
+        // threads at the source, which is what actually stops the race deterministically;
+        // cancelling the scope first avoids any in-flight collector seeing a "database closed"
+        // failure as a surprise.
+        if (::vm.isInitialized) vm.viewModelScope.cancel()
+        if (::db.isInitialized) db.close()
+        Dispatchers.resetMain()
+    }
 
     private suspend fun awaitState(predicate: (WebDetailUiState) -> Boolean): WebDetailUiState =
         withContext(Dispatchers.Default) { withTimeout(10_000) { vm.state.first(predicate) } }
