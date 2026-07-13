@@ -1,0 +1,66 @@
+package com.shiphappens.source.ups
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+// Recorded shape of ups.com's in-page tracking API (see QA checklist for re-recording steps).
+private const val FIXTURE = """
+{
+  "statusCode": "200",
+  "trackDetails": [{
+    "trackingNumber": "1Z999AA10123456784",
+    "packageStatus": "On the Way",
+    "packageStatusType": "I",
+    "scheduledDeliveryDate": "07/15/2026",
+    "shipmentProgressActivities": [
+      {"date": "07/11/2026", "time": "8:15 A.M.", "location": "Louisville, KY, United States", "activityScan": "Departed from Facility"},
+      {"date": "07/10/2026", "time": "9:03 P.M.", "location": "Louisville, KY, United States", "activityScan": "Arrived at Facility"},
+      {"date": "07/10/2026", "time": "2:00 P.M.", "location": "United States", "activityScan": "Shipper created a label, UPS has not received the package yet."}
+    ]
+  }]
+}
+"""
+
+class UpsApiParserTest {
+
+    @Test fun parses_status_eta_and_events() {
+        val t = assertNotNull(UpsApiParser.parse(FIXTURE))
+        assertEquals("IN_TRANSIT", t.status)
+        assertEquals("2026-07-15", t.etaDate)
+        assertEquals("Louisville, KY, United States", t.location)  // newest activity's location
+        assertEquals(3, t.events.size)
+        // Events must be chronological ASCENDING (domain expectation); UPS sends newest-first.
+        assertTrue(t.events.first().description.startsWith("Shipper created a label"))
+        assertEquals("LABEL_CREATED", t.events.first().status)
+        assertEquals("IN_TRANSIT", t.events.last().status)
+        // Timestamps are ISO instants (parseable by the canonical layer).
+        assertTrue(t.events.all { runCatching { kotlin.time.Instant.parse(it.timestamp) }.isSuccess })
+    }
+
+    @Test fun status_type_codes_map_to_canonical() {
+        fun withType(type: String, text: String = "x") = """{"trackDetails":[{"packageStatus":"$text","packageStatusType":"$type"}]}"""
+        assertEquals("LABEL_CREATED", UpsApiParser.parse(withType("M"))!!.status)
+        assertEquals("IN_TRANSIT", UpsApiParser.parse(withType("I"))!!.status)
+        assertEquals("OUT_FOR_DELIVERY", UpsApiParser.parse(withType("O"))!!.status)
+        assertEquals("DELIVERED", UpsApiParser.parse(withType("D"))!!.status)
+        assertEquals("EXCEPTION", UpsApiParser.parse(withType("X"))!!.status)
+        assertEquals("OUT_FOR_DELIVERY", UpsApiParser.parse(withType("", "Out for Delivery Today"))!!.status)
+        assertEquals("UNKNOWN", UpsApiParser.parse(withType("", "Some New Wording"))!!.status)
+    }
+
+    @Test fun rejects_non_tracking_json() {
+        assertNull(UpsApiParser.parse("""{"unrelated": true}"""))
+        assertNull(UpsApiParser.parse("""{"trackDetails": []}"""))
+        assertNull(UpsApiParser.parse("not json"))
+    }
+
+    @Test fun tolerates_missing_fields() {
+        val t = assertNotNull(UpsApiParser.parse("""{"trackDetails":[{"packageStatusType":"D"}]}"""))
+        assertEquals("DELIVERED", t.status)
+        assertNull(t.etaDate)
+        assertTrue(t.events.isEmpty())
+    }
+}

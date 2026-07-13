@@ -9,7 +9,8 @@ import com.shiphappens.data.settings.RefreshFrequency
 import com.shiphappens.data.settings.SettingsRepository
 import com.shiphappens.data.source.SourceRegistry
 import com.shiphappens.source.demo.DemoSource
-import com.shiphappens.source.ups.UpsSource
+import com.shiphappens.source.ups.UpsWebSource
+import com.shiphappens.source.webview.NoWebScraper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
@@ -67,7 +68,13 @@ class SettingsViewModelTest {
         settings = SettingsRepository(PreferenceDataStoreFactory.createWithPath(scope = backgroundScope) { "$dir/s.preferences_pb".toPath() })
         val db = Room.inMemoryDatabaseBuilder<ShipHappensDb>().setDriver(BundledSQLiteDriver()).build()
         val demo = DemoSource(today = { LocalDate(2026, 7, 10) }, now = { Instant.fromEpochMilliseconds(1_752_148_800_000) })
-        val registry = SourceRegistry(listOf(demo, UpsSource()), settings)
+        // TODO(Task 8): UpsWebSource(NoWebScraper) is a compile-only stand-in for the removed
+        // UpsSource() OAuth stub — Task 4 rewired UPS onto the webview pipeline (empty
+        // configSpec, testConnection always succeeds). Task 8 rewrites this whole file for the
+        // web login flow; until then, field_edits_persist_and_change_status and
+        // test_connection_toasts below are expected to fail if run (not covered by Task 4's
+        // '*AppModulesTest*' sweep filter).
+        val registry = SourceRegistry(listOf(demo, UpsWebSource(NoWebScraper)), settings)
         repo = ParcelRepository(db.parcelDao(), registry, settings, FixedClock())
         vm = SettingsViewModel(registry, settings, repo)
         // Records every emission and keeps WhileSubscribed alive for the whole test.
