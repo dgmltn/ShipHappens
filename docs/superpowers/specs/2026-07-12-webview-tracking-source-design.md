@@ -168,3 +168,24 @@ the shared session for future headless scrapes.
 - My Choice account-wide package discovery/import.
 - Real `AiPageExtractor` implementation (ML Kit GenAI / Gemini Nano).
 - Additional providers (FedEx, USPS, DHL) via new `WebProviderSpec`s.
+
+## Appendix: Considered alternative — KMP WebView wrapper library
+
+Evaluated `io.github.kevinnzou:compose-webview-multiplatform` (the library staged, but
+unused, in HackerNews-KMP's version catalog) for the visible WebView. Decision:
+**not for v1**, reconsider at the iOS phase.
+
+- Its last release (2.0.3) is from August 2024 — unvalidated against Kotlin 2.4 /
+  Compose MP 1.11, and the ecosystem has fragmented into forks
+  (vickyleu's fork, `parkwoocheol/compose-webview`).
+- Its main value is iOS/desktop composables, which are out of scope for v1; the Android
+  visible WebView is trivial `AndroidView` interop.
+- The scraping design needs `androidx.webkit` document-start injection,
+  `WebMessageListener`, `CookieManager.flush()`, and a custom `WebViewClient` — all below
+  the wrapper's abstraction (reachable only via its `onCreated` native-view escape hatch).
+- Phase 2's headless scraper cannot use a Compose-only wrapper at all.
+
+When implementing the iOS "More details" screen, re-evaluate the healthiest option
+(KevinnZou's library, a maintained fork, or `parkwoocheol/compose-webview`) as a drop-in
+behind our own `PlatformWebView` expect/actual seam — the design's interfaces are ours,
+so this swap stays contained.
