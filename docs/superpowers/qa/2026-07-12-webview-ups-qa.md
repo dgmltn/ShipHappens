@@ -4,6 +4,26 @@ Live carrier pages can't run in unit tests; this checklist covers the JS/live-pa
 Run on a device/emulator with Google Play WebView, with a REAL UPS tracking number.
 Re-run whenever `UpsWebSpec`'s JS or URL patterns change.
 
+## Debugging: use the built-in ScrapeTracer, not ad-hoc logging
+Tracing is on automatically in debug builds (`WebScrapeDebug.enabled` defaults to the app's
+debuggable flag). Filter Logcat with `adb logcat -s ShipScrape` to see the full lifecycle of
+every scrape: `[<sourceId>] scrape START`, `configure`, `API capture` (with the body dumped in
+numbered chunks), `DOM result`, and `scrape DONE`. To capture a full API body to a file for
+`adb pull` (instead of reassembling Logcat chunks), set `WebScrapeDebug.dumpBodiesToFile = true`
+— bodies land in `…/Android/data/com.shiphappens/files/scrape-debug/`.
+
+## What live QA established (2026-07-13, ups.com)
+The current ups.com track page is a heavy Angular SPA. Verified working state to sanity-check against:
+- Tracking data comes from an XHR/fetch to `https://webapis.ups.com/track/api/Track/GetStatus?loc=…`
+  (host is `webapis.ups.com`, matched by the `.*ups\.com/track/api/Track/GetStatus.*` pattern).
+- The status/timeline live in `trackDetails[].shipmentProgressActivities[]`; the ETA is
+  `trackDetails[].sdd` (YYYYMMDD) + `sdt` (end-of-window HH:MM:SS).
+- The SPA fires that XHR ~3–15s in, often BEFORE `onPageFinished` (which sometimes never fires),
+  so the headless scraper completes on the captured API payload, not the DOM extractor.
+  A healthy `scrape DONE … TRACKING found` lands within a second of `API capture`.
+- The bundled DOM-extractor selectors do NOT match this SPA (returns `page:empty`); the API-capture
+  path is the working one. Updating the DOM fallback selectors is a future nicety, not required.
+
 ## Setup
 - [ ] Install debug build; enable the UPS source in Settings.
 - [ ] Add a parcel with a real 1Z tracking number.
@@ -30,7 +50,9 @@ Re-run whenever `UpsWebSpec`'s JS or URL patterns change.
 - [ ] Sign out from Settings; reopen the UPS page: logged out (cookie clear worked).
 
 ## Phase 2 — headless refresh
-- [ ] Pull-to-refresh on the list: UPS parcel updates without opening any web page.
+- [x] Pull-to-refresh on the list: UPS parcel updates without opening any web page.
+      (Verified 2026-07-13: two real 1Z parcels scraped, parsed, and cached; each completed
+      ~3s after start, on the API capture, before onPageFinished — see ShipScrape logs.)
 - [ ] Immediately pull-to-refresh again: completes fast (throttle returned cached result;
       confirm no second page load in Logcat).
 - [ ] Airplane mode: refresh fails with a network toast, not a crash or ANR.
