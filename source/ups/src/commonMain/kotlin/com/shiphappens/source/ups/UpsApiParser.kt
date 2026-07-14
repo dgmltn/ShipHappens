@@ -15,6 +15,11 @@ import kotlinx.serialization.json.Json
 @Serializable private data class UpsTrackDetail(
     val packageStatus: String? = null,
     val packageStatusType: String? = null,
+    // Current ups.com shape: scheduled delivery date "sdd" (compact "YYYYMMDD") + end-of-window
+    // time "sdt" ("HH:MM:SS"). "scheduledDeliveryDate" (MM/DD/YYYY) is the older field, kept as
+    // a fallback.
+    val sdd: String? = null,
+    val sdt: String? = null,
     val scheduledDeliveryDate: String? = null,
     val shipmentProgressActivities: List<UpsActivity>? = null,
 )
@@ -53,7 +58,8 @@ object UpsApiParser {
         }.reversed()  // UPS is newest-first; domain expects chronological ascending
         return ScrapedTracking(
             status = classify(detail.packageStatusType, detail.packageStatus ?: ""),
-            etaDate = parseUpsDate(detail.scheduledDeliveryDate)?.toString(),
+            etaDate = (parseCompactDate(detail.sdd) ?: parseUpsDate(detail.scheduledDeliveryDate))?.toString(),
+            etaTime = parseClockTime(detail.sdt)?.toString(),
             location = activities.firstOrNull()?.location,
             events = events,
         )
@@ -64,6 +70,20 @@ object UpsApiParser {
         val m = Regex("""(\d{2})/(\d{2})/(\d{4})""").find(raw ?: "") ?: return null
         val (mm, dd, yyyy) = m.destructured
         return runCatching { LocalDate(yyyy.toInt(), mm.toInt(), dd.toInt()) }.getOrNull()
+    }
+
+    /** "20260714" -> LocalDate. */
+    private fun parseCompactDate(raw: String?): LocalDate? {
+        val m = Regex("""(\d{4})(\d{2})(\d{2})""").matchEntire(raw?.trim() ?: "") ?: return null
+        val (yyyy, mm, dd) = m.destructured
+        return runCatching { LocalDate(yyyy.toInt(), mm.toInt(), dd.toInt()) }.getOrNull()
+    }
+
+    /** "14:30:00" (24-hour, end of delivery window) -> LocalTime. */
+    private fun parseClockTime(raw: String?): LocalTime? {
+        val m = Regex("""(\d{1,2}):(\d{2})""").find(raw ?: "") ?: return null
+        val (h, min) = m.destructured
+        return runCatching { LocalTime(h.toInt(), min.toInt()) }.getOrNull()
     }
 
     /** "8:15 A.M." / "12:07 P.M." -> LocalTime. */
