@@ -47,6 +47,7 @@ class AppModulesTest {
     private fun testWebModule(): Module = module {
         single<com.shiphappens.source.webview.WebScraper> { com.shiphappens.source.webview.NoWebScraper }
         single<com.shiphappens.source.webview.WebCookieJar> { com.shiphappens.source.webview.NoOpCookieJar }
+        single<com.shiphappens.source.webview.debug.ScrapeTracer> { com.shiphappens.source.webview.debug.NoOpScrapeTracer }
     }
 
     @AfterTest fun tearDown() { Dispatchers.resetMain() }

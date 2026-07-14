@@ -10,6 +10,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.shiphappens.source.webview.PageEvent
 import com.shiphappens.source.webview.WebProviderSpec
 import com.shiphappens.source.webview.WebSessions
+import com.shiphappens.source.webview.debug.ScrapeTracer
+import org.koin.compose.koinInject
 
 @Composable
 actual fun PlatformWebView(
@@ -19,6 +21,9 @@ actual fun PlatformWebView(
     onEvent: (PageEvent) -> Unit,
     modifier: Modifier,
 ) {
+    // Trace the visible scrape-on-view path too, using the same DI-provided tracer as the headless
+    // scraper (gated by WebScrapeDebug.enabled).
+    val tracer = koinInject<ScrapeTracer>()
     // key(url): recreate rather than reload — redirects mutate WebView.url, so an update-block
     // "reload if changed" check would loop.
     key(url) {
@@ -29,7 +34,7 @@ actual fun PlatformWebView(
             modifier = modifier,
             factory = { ctx ->
                 WebView(ctx).apply {
-                    WebSessions.configure(this, spec, onPayload, onEvent)
+                    WebSessions.configure(this, spec, onPayload, onEvent, tracer)
                     loadUrl(url)
                     holder[0] = this
                 }

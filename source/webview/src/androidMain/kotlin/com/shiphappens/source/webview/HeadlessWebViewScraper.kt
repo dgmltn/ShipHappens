@@ -2,13 +2,13 @@ package com.shiphappens.source.webview
 
 import android.content.Context
 import android.webkit.WebView
+import com.shiphappens.source.webview.debug.ScrapeTracer
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.serialization.json.Json
 
 /**
  * Runs a real page load in an off-screen WebView and returns the bridge payloads it produced.
@@ -25,27 +25,38 @@ import kotlinx.serialization.json.Json
 class HeadlessWebViewScraper(
     private val context: Context,
     private val throttle: ScrapeThrottle,
+    private val tracer: ScrapeTracer,
 ) : WebScraper {
 
     override val isAvailable = true
     private val mutex = Mutex()
-    private val json = Json { ignoreUnknownKeys = true }
 
     override suspend fun scrape(spec: WebProviderSpec, trackingNumber: String): ScrapeResult = mutex.withLock {
         val url = spec.trackingUrl(trackingNumber)
-        throttle.cached(url)?.let { return it }
+        tracer.scrapeStarted(spec.sourceId, url)
+        throttle.cached(url)?.let {
+            tracer.cacheHit(spec.sourceId, url)
+            return it
+        }
         val result = withContext(Dispatchers.Main.immediate) {
             withTimeoutOrNull(SCRAPE_TIMEOUT_MS) { runScrape(spec, url) } ?: ScrapeResult.Timeout
         }
         // Only cache genuine tracking results (spec §7) — a login-wall, bot-challenge, or
         // not-found "dom" payload is still a ScrapeResult.Payloads but must NOT be cached,
         // or a stale failure would shadow a real scrape once the user resolves it.
-        if (result is ScrapeResult.Payloads) {
+        val summary = if (result is ScrapeResult.Payloads) {
             val router = PayloadRouter(spec)
-            if (result.payloads.any { router.route(it) is RouteResult.Tracking }) {
+            val routed = result.payloads.map { router.route(it) }
+            if (routed.any { it is RouteResult.Tracking }) {
                 throttle.record(url, result)
+                "${result.payloads.size} payload(s), TRACKING found — cached"
+            } else {
+                "${result.payloads.size} payload(s), NO tracking — routed=${routed.map { it::class.simpleName }}"
             }
+        } else {
+            "${result::class.simpleName} (no payloads)"
         }
+        tracer.scrapeFinished(spec.sourceId, summary)
         result
     }
 
@@ -59,13 +70,24 @@ class HeadlessWebViewScraper(
             WebSessions.configure(
                 webView, spec,
                 onPayload = { payload ->
-                    val kind = runCatching { json.decodeFromString<BridgePayload>(payload).kind }.getOrNull()
                     synchronized(payloads) { payloads += payload }
-                    if (kind == "dom") done.complete(ScrapeResult.Payloads(synchronized(payloads) { payloads.toList() }))
+                    // Complete as soon as a payload routes to a DEFINITIVE outcome — normally the
+                    // captured API JSON (Tracking), which lands well before the heavy UPS SPA fires
+                    // onPageFinished (and sometimes it never fires at all). A DOM "page:empty"
+                    // result routes to Unparsed and must NOT complete the scrape: the DOM extractor
+                    // frequently runs before the tracking XHR lands, so completing on empty would
+                    // discard the API capture that arrives moments later.
+                    when (PayloadRouter(spec).route(payload)) {
+                        is RouteResult.Tracking, is RouteResult.LoginWall,
+                        is RouteResult.Challenge, is RouteResult.NotFound ->
+                            done.complete(ScrapeResult.Payloads(synchronized(payloads) { payloads.toList() }))
+                        is RouteResult.Unparsed -> Unit // keep waiting (empty DOM before the API lands)
+                    }
                 },
                 onEvent = { event ->
                     if (event is PageEvent.LoadFailed) done.complete(ScrapeResult.LoadError(event.message))
                 },
+                tracer = tracer,
             )
             webView.loadUrl(url)
             done.await()
@@ -76,6 +98,8 @@ class HeadlessWebViewScraper(
     }
 
     private companion object {
-        const val SCRAPE_TIMEOUT_MS = 25_000L
+        // The UPS SPA can take ~15-24s to fire its tracking XHR; give margin past that so a slow
+        // API capture still completes before the backstop timeout.
+        const val SCRAPE_TIMEOUT_MS = 30_000L
     }
 }
