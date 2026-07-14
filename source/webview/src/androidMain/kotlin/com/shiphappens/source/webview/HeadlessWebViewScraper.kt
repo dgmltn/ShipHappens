@@ -67,6 +67,7 @@ class HeadlessWebViewScraper(
             webView.layout(0, 0, 1080, 2000)
             val payloads = mutableListOf<String>()
             val done = CompletableDeferred<ScrapeResult>()
+            val router = PayloadRouter(spec)
             WebSessions.configure(
                 webView, spec,
                 onPayload = { payload ->
@@ -77,7 +78,7 @@ class HeadlessWebViewScraper(
                     // result routes to Unparsed and must NOT complete the scrape: the DOM extractor
                     // frequently runs before the tracking XHR lands, so completing on empty would
                     // discard the API capture that arrives moments later.
-                    when (PayloadRouter(spec).route(payload)) {
+                    when (router.route(payload)) {
                         is RouteResult.Tracking, is RouteResult.LoginWall,
                         is RouteResult.Challenge, is RouteResult.NotFound ->
                             done.complete(ScrapeResult.Payloads(synchronized(payloads) { payloads.toList() }))

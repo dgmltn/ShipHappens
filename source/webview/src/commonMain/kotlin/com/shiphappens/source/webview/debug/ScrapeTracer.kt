@@ -1,5 +1,7 @@
 package com.shiphappens.source.webview.debug
 
+import kotlin.concurrent.Volatile
+
 /**
  * Observability seam for the web-scraping framework. The scraper and session call these at each
  * lifecycle point; implementations decide what (if anything) to do. This keeps the core scraping
@@ -56,6 +58,9 @@ object NoOpScrapeTracer : ScrapeTracer
  * instead of reassembled from Logcat chunks.
  */
 object WebScrapeDebug {
-    var enabled: Boolean = false
-    var dumpBodiesToFile: Boolean = false
+    // @Volatile: written once on the main thread during DI graph construction, read on the
+    // WebView JavaBridge thread (WebSessions.trace) — the annotation gives the needed
+    // happens-before so the bridge thread can't observe a stale value.
+    @Volatile var enabled: Boolean = false
+    @Volatile var dumpBodiesToFile: Boolean = false
 }
