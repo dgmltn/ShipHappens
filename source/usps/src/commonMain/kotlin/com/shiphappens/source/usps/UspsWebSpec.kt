@@ -11,7 +11,6 @@ private val USPS_EXTRACTION_JS = """
 function() {
   var text = (document.body && document.body.innerText) || '';
   if (/status not available|could not locate the tracking information/i.test(text)) return {page: 'notFound'};
-  if (/access denied|reference #\d|verify you are a human|unusual activity/i.test(text)) return {page: 'challenge'};
   var statusEl = document.querySelector('.tb-status, .delivery_status h2, [class*="current-status"], [class*="tracking-status"]');
   if (!statusEl) return {page: 'empty'};
   function classify(raw) {
@@ -42,6 +41,11 @@ function() {
     });
   }
   events.reverse();  // page lists newest first; canonical order is ascending
+  var newestLoc = null, newestT = -1;
+  for (var j = 0; j < events.length; j++) {
+    var et = Date.parse(events[j].timestamp);
+    if (events[j].location && et > newestT) { newestT = et; newestLoc = events[j].location; }
+  }
   var etaDate = null;
   var etaText = clean(document.querySelector('.expected_delivery .date, [class*="expected-delivery"], .eta_info'));
   if (etaText) {
@@ -54,7 +58,7 @@ function() {
   return {page: 'ok', tracking: {
     status: classify(statusEl.textContent),
     etaDate: etaDate,
-    location: events.length ? events[events.length - 1].location : null,
+    location: newestLoc,
     events: events
   }};
 }

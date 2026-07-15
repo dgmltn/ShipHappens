@@ -59,7 +59,7 @@ object UspsApiParser {
             status = overall,
             etaDate = parseDate(r.expectedDeliveryDate)?.toString(),
             etaTime = parseTime(r.expectedDeliveryTime)?.toString(),
-            location = r.trackingEvents.orEmpty().firstOrNull()?.let(::locationOf),
+            location = events.lastOrNull { it.location != null }?.location,
             events = events,
         )
     }

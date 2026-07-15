@@ -18,10 +18,12 @@ class UspsWebSpecTest {
         val re = Regex(UspsWebSpec.apiUrlPatterns.single())
         // Broad by design (design spec §Decisions): both the legacy endpoint and any
         // plausible new one must match; non-tracking usps.com XHRs must not.
-        assertTrue(re.matches("https://tools.usps.com/go/TrackConfirmAction?tLabels=9434636106092288655003"))
-        assertTrue(re.matches("https://tools.usps.com/api/tracking/v1/9434636106092288655003"))
-        assertFalse(re.matches("https://tools.usps.com/go/POLocatorAction"))
-        assertFalse(re.matches("https://webapis.ups.com/track/api/Track/GetStatus"))
+        // Runtime matches with JS RegExp.test (substring find), so assert with
+        // containsMatchIn rather than Kotlin's full-match semantics.
+        assertTrue(re.containsMatchIn("https://tools.usps.com/go/TrackConfirmAction?tLabels=9434636106092288655003"))
+        assertTrue(re.containsMatchIn("https://tools.usps.com/api/tracking/v1/9434636106092288655003"))
+        assertFalse(re.containsMatchIn("https://tools.usps.com/go/POLocatorAction"))
+        assertFalse(re.containsMatchIn("https://webapis.ups.com/track/api/Track/GetStatus"))
     }
 
     @Test fun spec_identity_and_origins() {

@@ -88,6 +88,16 @@ class UspsApiParserTest {
         assertNull(UspsApiParser.parse("not json"))
     }
 
+    @Test fun location_comes_from_newest_event_regardless_of_feed_order() {
+        // Ascending feed (opposite of the main fixture's newest-first order).
+        val t = assertNotNull(UspsApiParser.parse(
+            """{"statusCategory":"In Transit","trackingEvents":[
+                 {"eventType":"Accepted at USPS Origin Facility","eventTimestamp":"2026-07-13T15:47:00","eventCity":"SANTA ROSA","eventState":"CA"},
+                 {"eventType":"Departed USPS Regional Facility","eventTimestamp":"2026-07-14T02:18:00","eventCity":"SAN FRANCISCO","eventState":"CA"}]}""",
+        ))
+        assertEquals("SAN FRANCISCO, CA", t.location)
+    }
+
     @Test fun tolerates_missing_fields() {
         val t = assertNotNull(UspsApiParser.parse("""{"statusCategory":"Delivered"}"""))
         assertEquals("DELIVERED", t.status)
