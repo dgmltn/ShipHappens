@@ -3,34 +3,22 @@ package com.shiphappens.source.usps
 import com.shiphappens.domain.Carrier
 import com.shiphappens.domain.WellKnownCarriers
 import com.shiphappens.domain.normalizeTracking
-import com.shiphappens.domain.TrackingSnapshot
-import com.shiphappens.source.api.*
+import com.shiphappens.source.api.TrackingSource
+import com.shiphappens.source.webview.WebScraper
+import com.shiphappens.source.webview.WebViewBasedSource
 import org.koin.core.module.Module
 import org.koin.dsl.bind
 import org.koin.dsl.module
 
-class UspsSource : TrackingSource {
-    override val descriptor = SourceDescriptor(
-        id = "usps", displayName = "USPS", kind = SourceKind.CARRIER,
-        accentColorHex = WellKnownCarriers.USPS.accentColorHex,
-        configSpec = listOf(
-            ConfigField("consumerKey", "Consumer key", "USPS consumer key"),
-            ConfigField("consumerSecret", "Consumer secret", "••••••••", isSecret = true),
-        ),
-        implemented = false,
-    )
+/** USPS via tools.usps.com in a WebView — see docs/superpowers/specs/2026-07-14-usps-webview-source-design.md. */
+class UspsWebSource(scraper: WebScraper) : WebViewBasedSource(UspsWebSpec, scraper) {
     override fun detectCarrier(trackingNumber: String): Carrier? {
         val normalized = normalizeTracking(trackingNumber)
         return WellKnownCarriers.USPS.takeIf {
             Regex("^(94|93|92|95|82)\\d{14,24}$").matches(normalized) ||
-            Regex("^[A-Z]{2}\\d{9}US$").matches(normalized)
+                Regex("^[A-Z]{2}\\d{9}US$").matches(normalized)
         }
     }
-    override suspend fun track(trackingNumber: String, carrier: Carrier?): SourceResult<TrackingSnapshot> =
-        SourceResult.Failure(FailureReason.UNKNOWN, "USPS direct API not implemented yet")
-    override suspend fun testConnection(config: SourceConfig): SourceResult<Unit> =
-        if (descriptor.configSpec.all { config[it.key] != null }) SourceResult.Success(Unit)
-        else SourceResult.Failure(FailureReason.AUTH, "Enter USPS credentials first")
 }
 
-val uspsSourceModule: Module = module { single { UspsSource() } bind TrackingSource::class }
+val uspsSourceModule: Module = module { single { UspsWebSource(get()) } bind TrackingSource::class }
