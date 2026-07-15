@@ -11,7 +11,14 @@ private val USPS_EXTRACTION_JS = """
 function() {
   var text = (document.body && document.body.innerText) || '';
   if (/status not available|could not locate the tracking information/i.test(text)) return {page: 'notFound'};
-  var statusEl = document.querySelector('.tb-status, .delivery_status h2, [class*="current-status"], [class*="tracking-status"]');
+  // Priority chain, NOT a comma list: querySelector('a, b') returns the first match in
+  // DOCUMENT order, and on the live page ancestor wrappers (current-tracking-status-wrapper)
+  // precede the precise node — their concatenated text misclassified a delivered package as
+  // OUT_FOR_DELIVERY (live QA 2026-07-15). .tb-status is unique on the live page (inside the
+  // current .tb-step); .statusSummaryText is the "Latest Update" banner sentence.
+  var statusEl = document.querySelector('.tb-status')
+    || document.querySelector('.delivery_status h2')
+    || document.querySelector('.statusSummaryText');
   if (!statusEl) return {page: 'empty'};
   function classify(raw) {
     var t = (raw || '').toLowerCase();
