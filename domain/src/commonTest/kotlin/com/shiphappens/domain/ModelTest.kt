@@ -27,6 +27,20 @@ class ModelTest {
         assertEquals(-1, TrackingStatus.EXCEPTION.stepIndex)
     }
 
+    @Test fun effective_step_index_uses_status_or_falls_back_to_events() {
+        val base = Parcel(
+            id = "p1", name = "Cap", trackingNumber = "94001118", carrier = WellKnownCarriers.USPS,
+            createdAt = kotlin.time.Instant.fromEpochMilliseconds(0),
+        )
+        assertEquals(0, base.effectiveStepIndex)  // UNKNOWN, no events
+        assertEquals(3, base.copy(status = TrackingStatus.OUT_FOR_DELIVERY).effectiveStepIndex)
+        val events = listOf(
+            TrackingEvent(kotlin.time.Instant.fromEpochMilliseconds(1), "Shipped", status = TrackingStatus.SHIPPED),
+            TrackingEvent(kotlin.time.Instant.fromEpochMilliseconds(2), "In transit", status = TrackingStatus.IN_TRANSIT),
+        )
+        assertEquals(2, base.copy(status = TrackingStatus.EXCEPTION, events = events).effectiveStepIndex)
+    }
+
     @Test fun parcel_exposes_normalized_tracking() {
         val p = Parcel(
             id = "p1", name = "Cap", trackingNumber = "94 001-118", carrier = WellKnownCarriers.USPS,

@@ -6,8 +6,12 @@ import com.shiphappens.data.source.SourceRegistry
 import com.shiphappens.domain.*
 import com.shiphappens.source.api.*
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlin.time.Duration.Companion.minutes
 import kotlin.uuid.Uuid
 
@@ -25,6 +29,11 @@ class ParcelRepository(
     private val settings: SettingsRepository,
     private val clock: AppClock,
 ) {
+    private val _refreshingIds = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Ids of parcels with a refresh currently in flight — drives per-parcel loading indicators. */
+    val refreshingIds: StateFlow<Set<String>> = _refreshingIds.asStateFlow()
+
     fun observeParcels(archived: Boolean): Flow<List<Parcel>> =
         dao.observe(archived).map { rows ->
             val sorted = if (archived) {
@@ -101,16 +110,21 @@ class ParcelRepository(
         val row = dao.getById(id) ?: return RefreshOutcome.Failed(FailureReason.UNKNOWN)
         val parcel = row.toDomain()
         val source = registry.sourceFor(parcel) ?: return RefreshOutcome.NoSource
-        // Guard against a misbehaving source implementation throwing instead of returning
-        // SourceResult.Failure — see TrackingSource.track KDoc.
-        val result = runCatching { source.track(parcel.trackingNumber, parcel.carrier) }
-            .getOrElse { SourceResult.Failure(FailureReason.UNKNOWN, it.message) }
-        return when (result) {
-            is SourceResult.Failure -> RefreshOutcome.Failed(result.reason)
-            is SourceResult.Success -> {
-                applySnapshot(id, result.value, source.descriptor.id)
-                RefreshOutcome.Success
+        _refreshingIds.update { it + id }
+        try {
+            // Guard against a misbehaving source implementation throwing instead of returning
+            // SourceResult.Failure — see TrackingSource.track KDoc.
+            val result = runCatching { source.track(parcel.trackingNumber, parcel.carrier) }
+                .getOrElse { SourceResult.Failure(FailureReason.UNKNOWN, it.message) }
+            return when (result) {
+                is SourceResult.Failure -> RefreshOutcome.Failed(result.reason)
+                is SourceResult.Success -> {
+                    applySnapshot(id, result.value, source.descriptor.id)
+                    RefreshOutcome.Success
+                }
             }
+        } finally {
+            _refreshingIds.update { it - id }
         }
     }
 

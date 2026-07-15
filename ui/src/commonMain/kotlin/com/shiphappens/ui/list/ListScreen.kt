@@ -25,6 +25,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -281,8 +282,16 @@ private fun ParcelRow(
                         color = ShipColors.muted,
                         fontSize = 12.sp,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
+                    if (card.refreshing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(11.dp),
+                            color = colorFromHex(card.accentHex),
+                            strokeWidth = 1.5.dp,
+                        )
+                    }
                 }
             }
             when {
@@ -552,6 +561,28 @@ private fun Preview_ListContent_ArchivedTab() {
                 headerSub = "2 packages archived",
                 tab = ListTab.ARCHIVED,
                 cards = previewParcelCards.subList(5, 7),
+            ),
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview_ListContent_RefreshingAndUnrefreshed() {
+    ShipTheme {
+        ListContent(
+            ListUiState(
+                dateLabel = "Fri, Jul 11",
+                headerSub = "2 arriving soon",
+                cards = listOf(
+                    // Mid-refresh: spinner next to the status text.
+                    previewParcelCards[0].copy(refreshing = true),
+                    // Never refreshed: no ring yet, just the waiting status.
+                    ParcelCardUi(
+                        "8", "Wool socks", "UPS", "#5A3A22", "Waiting for first update",
+                        delivered = false, ring = null, urgent = false, refreshing = true
+                    ),
+                ),
             ),
         )
     }

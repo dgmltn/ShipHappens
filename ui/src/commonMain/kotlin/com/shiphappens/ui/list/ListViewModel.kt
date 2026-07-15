@@ -9,22 +9,13 @@ import com.shiphappens.data.source.BuiltInCarrierDetection
 import com.shiphappens.domain.*
 import com.shiphappens.source.api.FailureReason
 import com.shiphappens.design.accentHex
+import com.shiphappens.ui.util.TRACKING_STEP_LABELS
 import com.shiphappens.ui.util.designFormat
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.datetime.daysUntil
-
-private val STATUS_TEXT = mapOf(
-    TrackingStatus.LABEL_CREATED to "Label created",
-    TrackingStatus.SHIPPED to "Shipped",
-    TrackingStatus.IN_TRANSIT to "In transit",
-    TrackingStatus.OUT_FOR_DELIVERY to "Out for delivery",
-    TrackingStatus.DELIVERED to "Delivered",
-    TrackingStatus.EXCEPTION to "Delivery exception",
-    TrackingStatus.UNKNOWN to "Waiting for first update",
-)
 
 private sealed interface PendingUndo {
     data class FlagFlip(val reverse: suspend () -> Unit) : PendingUndo
@@ -56,12 +47,14 @@ class ListViewModel(
     private data class Content(
         val tab: ListTab, val active: List<Parcel>, val archived: List<Parcel>,
         val pending: PendingImport?, val manual: ManualAddUi,
+        val refreshingIds: Set<String> = emptySet(),
     )
 
     private val content = combine(
         tab, repository.observeParcels(false), repository.observeParcels(true),
         clipboard.pending, manual,
     ) { t, act, arc, pend, man -> Content(t, act, arc, pend, man) }
+        .combine(repository.refreshingIds) { c, ids -> c.copy(refreshingIds = ids) }
 
     val state: StateFlow<ListUiState> =
         combine(content, pendingName, toast, refreshing, pendingDeleteIds) { c, pName, t, r, del ->
@@ -74,7 +67,7 @@ class ListViewModel(
                 headerSub = if (c.tab == ListTab.ACTIVE) "$arriving arriving soon"
                     else "${archived.size} package${if (archived.size == 1) "" else "s"} archived",
                 tab = c.tab,
-                cards = parcels.map { it.toCard() },
+                cards = parcels.map { it.toCard(refreshing = it.id in c.refreshingIds) },
                 emptyText = if (parcels.isNotEmpty()) null
                     else if (c.tab == ListTab.ACTIVE) "No active deliveries right now."
                     else "Nothing archived yet. Swipe a package right to archive it.",
@@ -87,20 +80,26 @@ class ListViewModel(
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ListUiState())
 
-    private fun Parcel.toCard(): ParcelCardUi {
+    private fun Parcel.toCard(refreshing: Boolean): ParcelCardUi {
         val delivered = status == TrackingStatus.DELIVERED
         val days = etaDate?.let { clock.today().daysUntil(it) }
         val urgent = !delivered && days != null && days <= 1
-        val statusText = if (!delivered && days != null && days <= 0 && status != TrackingStatus.EXCEPTION)
-            "Out for delivery today" else STATUS_TEXT.getValue(status)
+        // Same step the detail timeline marks CURRENT, so the two screens never disagree.
+        val statusText = when {
+            status == TrackingStatus.EXCEPTION -> "Delivery exception"
+            lastRefreshedAt == null && status == TrackingStatus.UNKNOWN -> "Waiting for first update"
+            else -> TRACKING_STEP_LABELS[effectiveStepIndex]
+        }
         return ParcelCardUi(
             id = id, name = name, carrierName = carrier.displayName, accentHex = carrier.accentHex(),
             statusText = statusText, delivered = delivered,
-            ring = if (delivered) null else RingUi(
-                number = (days?.coerceAtLeast(0) ?: 0),
-                fraction = (status.stepIndex.coerceAtLeast(0)) / 4f,
+            // No ring until we have an ETA — a never-refreshed parcel has nothing to count down.
+            ring = if (delivered || days == null) null else RingUi(
+                number = days.coerceAtLeast(0),
+                fraction = effectiveStepIndex / 4f,
             ),
             urgent = urgent,
+            refreshing = refreshing,
         )
     }
 

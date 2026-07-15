@@ -7,6 +7,15 @@ import kotlinx.datetime.LocalTime
 fun normalizeTracking(raw: String): String =
     raw.filterNot { it.isWhitespace() || it == '-' }.uppercase()
 
+/**
+ * Current position on the 5-step timeline. Falls back to the furthest step-bearing event when
+ * [Parcel.status] itself doesn't advance the timeline (EXCEPTION/UNKNOWN), so list and detail
+ * screens agree on the current step.
+ */
+val Parcel.effectiveStepIndex: Int
+    get() = if (status.stepIndex >= 0) status.stepIndex
+        else events.mapNotNull { it.status?.stepIndex }.filter { it >= 0 }.maxOrNull() ?: 0
+
 data class Parcel(
     val id: String,
     val name: String,

@@ -42,9 +42,14 @@ private class FakeClipboard(var text: String? = null) : ClipboardReader {
 private class FakeSource(
     var snapshot: TrackingSnapshot = TrackingSnapshot(TrackingStatus.IN_TRANSIT, etaDate = LocalDate(2026, 7, 12)),
 ) : TrackingSource {
+    /** When set, track() suspends until completed — lets tests observe the mid-refresh state. */
+    var gate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
     override val descriptor = SourceDescriptor("fake", "Fake", SourceKind.UNIVERSAL)
     override fun detectCarrier(trackingNumber: String): Carrier? = null
-    override suspend fun track(trackingNumber: String, carrier: Carrier?) = SourceResult.Success(snapshot)
+    override suspend fun track(trackingNumber: String, carrier: Carrier?): SourceResult<TrackingSnapshot> {
+        gate?.await()
+        return SourceResult.Success(snapshot)
+    }
     override suspend fun testConnection(config: SourceConfig) = SourceResult.Success(Unit)
 }
 
@@ -146,16 +151,55 @@ class ListViewModelTest {
         assertEquals("1 arriving soon", s.headerSub)
     }
 
-    @Test fun out_for_delivery_today_is_urgent_with_status_override() = runTest {
+    @Test fun out_for_delivery_shows_step_label_and_is_urgent() = runTest {
         val vm = vm()
         settings.setSourceConfig("fake", SourceConfig(enabled = true))
         source.snapshot = TrackingSnapshot(TrackingStatus.OUT_FOR_DELIVERY, etaDate = LocalDate(2026, 7, 10))
         repo.addParcel("Lamp", "1Z88E0330398765432", WellKnownCarriers.UPS)
-        val s = awaitState { it.cards.size == 1 && it.cards.single().statusText == "Out for delivery today" }
+        val s = awaitState { it.cards.size == 1 && it.cards.single().statusText == "Out for delivery" }
         val card = s.cards.single()
         assertTrue(card.urgent)
-        assertEquals("Out for delivery today", card.statusText)
+        assertEquals("Out for delivery", card.statusText)  // same label as the detail timeline's current step
         assertEquals(0, card.ring?.number)
+    }
+
+    @Test fun status_falls_back_to_events_when_status_unknown_matching_detail() = runTest {
+        val vm = vm()
+        settings.setSourceConfig("fake", SourceConfig(enabled = true))
+        source.snapshot = TrackingSnapshot(
+            TrackingStatus.UNKNOWN,
+            events = listOf(TrackingEvent(Instant.fromEpochMilliseconds(1_752_000_000_000), "On vehicle", status = TrackingStatus.OUT_FOR_DELIVERY)),
+        )
+        repo.addParcel("Lamp", "1Z88E0330398765432", WellKnownCarriers.UPS)
+        // Detail's timeline marks OUT_FOR_DELIVERY current via the event fallback; the list must agree.
+        val s = awaitState { it.cards.size == 1 && it.cards.single().statusText == "Out for delivery" }
+        assertEquals("Out for delivery", s.cards.single().statusText)
+        assertNull(s.cards.single().ring)  // no ETA → no days ring
+    }
+
+    @Test fun unrefreshed_parcel_hides_ring_and_waits_for_first_update() = runTest {
+        val vm = vm()
+        // Source never enabled → refresh resolves no source; parcel stays unrefreshed.
+        repo.addParcel("Socks", "1Z999AA10123456784", WellKnownCarriers.UPS)
+        val s = awaitState { it.cards.size == 1 }
+        val card = s.cards.single()
+        assertNull(card.ring)
+        assertEquals("Waiting for first update", card.statusText)
+        assertFalse(card.delivered)
+    }
+
+    @Test fun card_flags_refreshing_while_refresh_in_flight() = runTest {
+        val vm = vm()
+        settings.setSourceConfig("fake", SourceConfig(enabled = true))
+        repo.addParcel("Keyboard", "1Z999AA10123456784", WellKnownCarriers.UPS)
+        awaitState { it.cards.size == 1 && !it.cards.single().refreshing }
+        source.gate = kotlinx.coroutines.CompletableDeferred()
+        vm.onRefresh()
+        val during = awaitState { it.cards.singleOrNull()?.refreshing == true }
+        assertTrue(during.cards.single().refreshing)
+        source.gate!!.complete(Unit)
+        val after = awaitState { it.cards.singleOrNull()?.refreshing == false && !it.isRefreshing }
+        assertFalse(after.cards.single().refreshing)
     }
 
     @Test fun archive_shows_undo_toast_and_undo_restores() = runTest {

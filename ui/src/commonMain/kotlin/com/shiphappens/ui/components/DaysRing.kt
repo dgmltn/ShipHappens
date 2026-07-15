@@ -64,7 +64,7 @@ fun DaysRing(
                 fontFamily = hankenFamily()
             )
             Text(
-                text = "DAYS",
+                text = if (days == 1) "DAY" else "DAYS",
                 color = ShipColors.faint,
                 fontSize = 8.sp,
                 fontWeight = FontWeight.Bold

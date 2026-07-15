@@ -13,6 +13,7 @@ data class ParcelCardUi(
     val delivered: Boolean,
     val ring: RingUi?,
     val urgent: Boolean,
+    val refreshing: Boolean = false,
 )
 
 data class PendingImportUi(
