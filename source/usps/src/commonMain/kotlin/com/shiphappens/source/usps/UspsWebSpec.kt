@@ -10,7 +10,7 @@ import com.shiphappens.source.webview.WebProviderSpec
 private val USPS_EXTRACTION_JS = """
 function() {
   var text = (document.body && document.body.innerText) || '';
-  if (/status not available|could not locate the tracking information|not found/i.test(text)) return {page: 'notFound'};
+  if (/status not available|could not locate the tracking information/i.test(text)) return {page: 'notFound'};
   if (/access denied|reference #\d|verify you are a human|unusual activity/i.test(text)) return {page: 'challenge'};
   var statusEl = document.querySelector('.tb-status, .delivery_status h2, [class*="current-status"], [class*="tracking-status"]');
   if (!statusEl) return {page: 'empty'};
