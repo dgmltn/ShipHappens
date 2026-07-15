@@ -18,8 +18,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.*
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import com.shiphappens.ui.util.design12h
+import com.shiphappens.ui.util.designFormat
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import okio.Path.Companion.toPath
 import kotlin.time.Instant
 import kotlin.test.*
@@ -125,6 +129,23 @@ class DetailViewModelTest {
         assertEquals("Delivered", s.headline)
         assertEquals("Delivered", s.windowLabel)
         assertTrue(s.timeline.all { it.state == StepState.DONE })
+    }
+
+    @Test fun delivered_window_shows_actual_delivery_time_from_event() = runTest {
+        val deliveredAt = Instant.parse("2026-07-11T19:12:00Z")
+        val delivered = TrackingEvent(deliveredAt, "Delivered, Front Door/Porch", "CARLSBAD, CA 92009", TrackingStatus.DELIVERED)
+        // No ETA at all — the USPS DOM-scrape shape (delivered pages carry no expected-delivery block).
+        val p = base(TrackingStatus.DELIVERED, eta = null).copy(etaTime = null, events = listOf(delivered))
+        vm(p)
+        db.parcelDao().upsertParcel(p.toEntity())
+        db.parcelDao().replaceEvents("p1", p.events.map { it.toEntity("p1") })
+        // Expected string computed with the same tz/formatters as production, so the assertion
+        // is timezone-agnostic; gating on it also waits out the events-join race.
+        val ldt = deliveredAt.toLocalDateTime(TimeZone.currentSystemDefault())
+        val expected = "${ldt.date.designFormat()} · ${ldt.time.design12h()}"
+        val s = awaitState { it.loaded && it.windowText == expected }
+        assertEquals("Delivered", s.windowLabel)
+        assertEquals(expected, s.windowText)
     }
 
     @Test fun arriving_today_and_in_n_days() = runTest {

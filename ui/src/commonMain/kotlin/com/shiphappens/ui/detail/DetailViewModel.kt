@@ -66,14 +66,17 @@ class DetailViewModel(
             days == 1 -> "Arrives tomorrow"
             else -> "Arrives in $days days"
         }
-        val windowText = etaDate?.let { d ->
-            val t = etaTime?.design12h()
-            d.designFormat() + when { t == null -> ""; delivered -> " · $t"; else -> " · by $t" }
-        } ?: "—"
+        val tz = TimeZone.currentSystemDefault()
+        // Delivered parcels show the actual delivery time (last DELIVERED event) rather than a
+        // stale or absent ETA — USPS delivered pages carry no expected-delivery block at all.
+        val deliveredAt = if (delivered) events.lastOrNull { it.status == TrackingStatus.DELIVERED }?.timestamp else null
+        val windowText = deliveredAt?.toLocalDateTime(tz)?.let { "${it.date.designFormat()} · ${it.time.design12h()}" }
+            ?: etaDate?.let { d ->
+                val t = etaTime?.design12h()
+                d.designFormat() + when { t == null -> ""; delivered -> " · $t"; else -> " · by $t" }
+            } ?: "—"
 
         val effectiveStep = effectiveStepIndex
-
-        val tz = TimeZone.currentSystemDefault()
         val timeline = TRACKING_STEP_LABELS.mapIndexed { i, label ->
             val stepState = when {
                 delivered || i < effectiveStep -> StepState.DONE
