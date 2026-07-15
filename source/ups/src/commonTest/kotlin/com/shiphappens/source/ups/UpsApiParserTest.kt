@@ -30,7 +30,39 @@ private const val FIXTURE = """
 }
 """
 
+// Captured live from webapis.ups.com GetStatus on 2026-07-15 for an out-for-delivery package,
+// trimmed to the fields the parser reads. Note UPS keeps packageStatusType "I" (coarse
+// in-transit bucket) even when out for delivery — only the text/progressBar say OFD.
+private const val OFD_FIXTURE = """
+{
+  "statusCode": "200",
+  "trackDetails": [{
+    "trackingNumber": "1ZW463200377332024",
+    "packageStatus": "Out for Delivery",
+    "packageStatusType": "I",
+    "packageStatusCode": "021",
+    "progressBarType": "OutForDelivery",
+    "sdd": "20260715",
+    "sdst": "11:30:00",
+    "sdt": "14:30:00",
+    "shipmentProgressActivities": [
+      {"date": "07/15/2026", "time": "7:47 A.M.", "location": "Carlsbad, CA, United States", "activityScan": "Out For Delivery Today"},
+      {"date": "07/15/2026", "time": "6:14 A.M.", "location": "Carlsbad, CA, United States", "activityScan": "Loaded on Delivery Vehicle "},
+      {"date": "07/10/2026", "time": "11:30 A.M.", "location": "United States", "activityScan": "Shipper created a label, UPS has not received the package yet. "}
+    ]
+  }]
+}
+"""
+
 class UpsApiParserTest {
+
+    @Test fun out_for_delivery_text_wins_over_coarse_type_code() {
+        // Live ups.com reports type "I" for OFD packages; the status text must take precedence.
+        val t = assertNotNull(UpsApiParser.parse(OFD_FIXTURE))
+        assertEquals("OUT_FOR_DELIVERY", t.status)
+        assertEquals("2026-07-15", t.etaDate)
+        assertEquals("OUT_FOR_DELIVERY", t.events.last().status)
+    }
 
     @Test fun parses_status_eta_and_events() {
         val t = assertNotNull(UpsApiParser.parse(FIXTURE))

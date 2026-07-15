@@ -94,24 +94,29 @@ object UpsApiParser {
         return runCatching { LocalTime(hour24, min.toInt()) }.getOrNull()
     }
 
-    private fun classify(typeCode: String?, text: String): String = when (typeCode?.uppercase()) {
-        "M" -> "LABEL_CREATED"
-        "P" -> "SHIPPED"
-        "I" -> "IN_TRANSIT"
-        "O" -> "OUT_FOR_DELIVERY"
-        "D" -> "DELIVERED"
-        "X" -> "EXCEPTION"
-        else -> {
-            val t = text.lowercase()
-            when {
-                "out for delivery" in t -> "OUT_FOR_DELIVERY"
-                "delivered" in t -> "DELIVERED"
-                "exception" in t || "action required" in t || "attempt" in t -> "EXCEPTION"
-                "label" in t || "not received" in t || "order processed" in t -> "LABEL_CREATED"
-                "origin scan" in t || "pickup" in t || "picked up" in t -> "SHIPPED"
-                "on the way" in t || "in transit" in t || "departed" in t || "arrived" in t -> "IN_TRANSIT"
-                else -> "UNKNOWN"
-            }
+    // Status text takes precedence: live ups.com keeps packageStatusType "I" (a coarse
+    // in-transit bucket) even when the package is out for delivery — only the text is specific.
+    // The type code is the fallback for unrecognized or reworded statuses.
+    private fun classify(typeCode: String?, text: String): String {
+        val t = text.lowercase()
+        val fromText = when {
+            "out for delivery" in t -> "OUT_FOR_DELIVERY"
+            "delivered" in t -> "DELIVERED"
+            "exception" in t || "action required" in t || "attempt" in t -> "EXCEPTION"
+            "label" in t || "not received" in t || "order processed" in t -> "LABEL_CREATED"
+            "origin scan" in t || "pickup" in t || "picked up" in t -> "SHIPPED"
+            "on the way" in t || "in transit" in t || "departed" in t || "arrived" in t -> "IN_TRANSIT"
+            else -> "UNKNOWN"
+        }
+        if (fromText != "UNKNOWN") return fromText
+        return when (typeCode?.uppercase()) {
+            "M" -> "LABEL_CREATED"
+            "P" -> "SHIPPED"
+            "I" -> "IN_TRANSIT"
+            "O" -> "OUT_FOR_DELIVERY"
+            "D" -> "DELIVERED"
+            "X" -> "EXCEPTION"
+            else -> "UNKNOWN"
         }
     }
 }
