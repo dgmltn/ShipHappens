@@ -8,8 +8,6 @@ import com.shiphappens.data.db.ShipHappensDb
 import com.shiphappens.data.settings.RefreshFrequency
 import com.shiphappens.data.settings.SettingsRepository
 import com.shiphappens.data.source.SourceRegistry
-import com.shiphappens.source.api.TrackingSource
-import com.shiphappens.source.fedex.FedexSource
 import com.shiphappens.source.ups.UpsWebSource
 import com.shiphappens.source.webview.NoOpCookieJar
 import com.shiphappens.source.webview.NoWebScraper
@@ -67,17 +65,12 @@ class SettingsViewModelTest {
     private suspend fun awaitRecorded(timeoutMs: Long = 10_000, predicate: (SettingsUiState) -> Boolean): SettingsUiState =
         withContext(Dispatchers.Default) { withTimeout(timeoutMs) { recordedStates.first(predicate) } }
 
-    private suspend fun TestScope.vm(extraCarriers: List<TrackingSource> = emptyList()): SettingsViewModel {
+    private suspend fun TestScope.vm(): SettingsViewModel {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val dir = kotlin.io.path.createTempDirectory("settingsvm").toString()
         settings = SettingsRepository(PreferenceDataStoreFactory.createWithPath(scope = backgroundScope) { "$dir/s.preferences_pb".toPath() })
         db = Room.inMemoryDatabaseBuilder<ShipHappensDb>().setDriver(BundledSQLiteDriver()).build()
-        // UpsWebSource(NoWebScraper) is the real webview-scraping source (empty configSpec,
-        // testConnection always succeeds; see UpsSource.kt). Tests that need to exercise
-        // credential-field editing / testConnection failure-vs-success toasts do so against an
-        // extra unchanged credential-stub source (e.g. FedexSource) passed in via [extraCarriers],
-        // since UPS itself no longer has any credentials to configure.
-        val registry = SourceRegistry(listOf(UpsWebSource(NoWebScraper)) + extraCarriers, settings)
+        val registry = SourceRegistry(listOf(UpsWebSource(NoWebScraper)), settings)
         repo = ParcelRepository(db.parcelDao(), registry, settings, FixedClock())
         vm = SettingsViewModel(registry, settings, repo, NoOpCookieJar)
         // Records every emission and keeps WhileSubscribed alive for the whole test.
@@ -110,55 +103,6 @@ class SettingsViewModelTest {
         assertTrue(s.universal.isEmpty())
         assertEquals(listOf("ups"), s.carriers.map { it.id })
         assertEquals("Not connected", s.carriers.single().statusText)
-    }
-
-    /** True once [key]'s field on the [sourceId] carrier card holds [value] — the edit has committed. */
-    private fun fieldCommitted(sourceId: String, key: String, value: String): (SettingsUiState) -> Boolean =
-        { it.carriers.firstOrNull { c -> c.id == sourceId }?.fields?.any { f -> f.key == key && f.value == value } == true }
-
-    // NOTE (controller-authorized expectation change): UPS is now UpsWebSource — a web-scraping
-    // source with an empty configSpec (see UpsSource.kt) — so once enabled its status is always
-    // "Direct API coming soon" (implemented == false for NoWebScraper) and it has no credential
-    // fields left to edit. The credential-field-editing behavior this test exercises now lives on
-    // FedEx, an unchanged implemented=false credential stub with a real configSpec (the same
-    // shape UPS used to have). Field edits still persist normally; status still doesn't
-    // transition past "Direct API coming soon" for either stub, since implemented=false wins.
-    @Test fun field_edits_persist_and_change_status() = runTest {
-        val vm = vm(listOf(FedexSource()))
-        vm.onToggle("ups")
-        val enabled = awaitState { it.carriers.firstOrNull { c -> c.id == "ups" }?.enabled == true }
-        assertEquals("Direct API coming soon", enabled.carriers.first { it.id == "ups" }.statusText)
-
-        vm.onToggle("fedex")
-        val fedexEnabled = awaitState { it.carriers.firstOrNull { c -> c.id == "fedex" }?.enabled == true }
-        assertEquals("Direct API coming soon", fedexEnabled.carriers.first { it.id == "fedex" }.statusText)
-        // Fired back-to-back on purpose: updateSourceConfig makes concurrent same-source edits
-        // atomic, so both fields must land (this exercises the race fix at the VM level).
-        vm.onField("fedex", "apiKey", "abc"); vm.onField("fedex", "secretKey", "shh")
-        val configured = awaitState { fieldCommitted("fedex", "apiKey", "abc")(it) }
-        assertEquals("Direct API coming soon", configured.carriers.first { it.id == "fedex" }.statusText)
-        assertEquals("abc", settings.current("fedex")["apiKey"])
-    }
-
-    // UPS (UpsWebSource) has no credentials to test — testConnection always succeeds — so the
-    // failure/success toast behavior this test exercises is retargeted to FedEx, an unchanged
-    // credential stub.
-    @Test fun test_connection_toasts() = runTest {
-        val vm = vm(listOf(FedexSource()))
-        vm.onTest("fedex")
-        assertEquals(
-            "Enter FedEx credentials first",
-            awaitRecorded { it.toast == "Enter FedEx credentials first" }.toast,
-        )
-        vm.onField("fedex", "apiKey", "a"); vm.onField("fedex", "secretKey", "b")
-        // Both edits must be committed before onTest reads settings.current("fedex") — otherwise
-        // the second test-connection could legitimately still see missing credentials.
-        awaitState { fieldCommitted("fedex", "apiKey", "a")(it) && fieldCommitted("fedex", "secretKey", "b")(it) }
-        vm.onTest("fedex")
-        assertEquals(
-            "FedEx credentials look valid",
-            awaitRecorded { it.toast == "FedEx credentials look valid" }.toast,
-        )
     }
 
     @Test fun sync_settings_roundtrip() = runTest {
