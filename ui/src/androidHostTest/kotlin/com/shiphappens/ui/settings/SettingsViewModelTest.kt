@@ -8,7 +8,9 @@ import com.shiphappens.data.db.ShipHappensDb
 import com.shiphappens.data.settings.RefreshFrequency
 import com.shiphappens.data.settings.SettingsRepository
 import com.shiphappens.data.source.SourceRegistry
+import com.shiphappens.source.amazon.AmazonWebSource
 import com.shiphappens.source.ups.UpsWebSource
+import com.shiphappens.source.usps.UspsWebSource
 import com.shiphappens.source.webview.NoOpCookieJar
 import com.shiphappens.source.webview.NoWebScraper
 import androidx.lifecycle.viewModelScope
@@ -31,8 +33,7 @@ import kotlin.test.*
  * `advanceUntilIdle(); vm.state.value` is racy under androidHostTest. Instead, every state read
  * AWAITS the stable post-condition of the action (real-time timeout via awaitState), and the
  * transient toast (which the ViewModel auto-dismisses on a virtual 2.6s timer) is asserted
- * against the full RECORDED sequence of states (awaitRecorded). Asserted values are identical to
- * the brief's original spec.
+ * against the full RECORDED sequence of states (awaitRecorded).
  */
 class SettingsViewModelTest {
     private class FixedClock : AppClock {
@@ -70,7 +71,13 @@ class SettingsViewModelTest {
         val dir = kotlin.io.path.createTempDirectory("settingsvm").toString()
         settings = SettingsRepository(PreferenceDataStoreFactory.createWithPath(scope = backgroundScope) { "$dir/s.preferences_pb".toPath() })
         db = Room.inMemoryDatabaseBuilder<ShipHappensDb>().setDriver(BundledSQLiteDriver()).build()
-        val registry = SourceRegistry(listOf(UpsWebSource(NoWebScraper)), settings)
+        // The three real web-scraping sources over NoWebScraper: empty configSpec doesn't exist
+        // any more (Task 3), and none are `implemented` without a real scraper, so every card
+        // shows "Coming soon" once enabled — exactly what production shows on iOS/JVM.
+        val registry = SourceRegistry(
+            listOf(UpsWebSource(NoWebScraper), UspsWebSource(NoWebScraper), AmazonWebSource(NoWebScraper)),
+            settings,
+        )
         repo = ParcelRepository(db.parcelDao(), registry, settings, FixedClock())
         vm = SettingsViewModel(registry, settings, repo, NoOpCookieJar)
         // Records every emission and keeps WhileSubscribed alive for the whole test.
@@ -97,11 +104,19 @@ class SettingsViewModelTest {
         Dispatchers.resetMain()
     }
 
-    @Test fun sources_are_grouped_and_default_disabled() = runTest {
+    @Test fun sources_default_disabled() = runTest {
         val vm = vm()
-        val s = awaitState { it.carriers.isNotEmpty() }
-        assertEquals(listOf("ups"), s.carriers.map { it.id })
-        assertEquals("Not connected", s.carriers.single().statusText)
+        val s = awaitState { it.carriers.size == 3 }
+        assertEquals(listOf("ups", "usps", "amazon"), s.carriers.map { it.id })
+        assertTrue(s.carriers.all { it.statusText == "Not connected" })
+    }
+
+    @Test fun toggling_an_unimplemented_source_shows_coming_soon() = runTest {
+        val vm = vm()
+        vm.onToggle("ups")
+        val s = awaitState { it.carriers.firstOrNull { c -> c.id == "ups" }?.enabled == true }
+        // NoWebScraper => WebViewBasedSource.descriptor.implemented == false for every web source.
+        assertEquals("Coming soon", s.carriers.first { it.id == "ups" }.statusText)
     }
 
     @Test fun sync_settings_roundtrip() = runTest {
