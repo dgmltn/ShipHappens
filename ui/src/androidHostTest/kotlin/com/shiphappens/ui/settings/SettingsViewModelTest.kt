@@ -9,7 +9,6 @@ import com.shiphappens.data.settings.RefreshFrequency
 import com.shiphappens.data.settings.SettingsRepository
 import com.shiphappens.data.source.SourceRegistry
 import com.shiphappens.source.api.TrackingSource
-import com.shiphappens.source.demo.DemoSource
 import com.shiphappens.source.fedex.FedexSource
 import com.shiphappens.source.ups.UpsWebSource
 import com.shiphappens.source.webview.NoOpCookieJar
@@ -73,19 +72,18 @@ class SettingsViewModelTest {
         val dir = kotlin.io.path.createTempDirectory("settingsvm").toString()
         settings = SettingsRepository(PreferenceDataStoreFactory.createWithPath(scope = backgroundScope) { "$dir/s.preferences_pb".toPath() })
         db = Room.inMemoryDatabaseBuilder<ShipHappensDb>().setDriver(BundledSQLiteDriver()).build()
-        val demo = DemoSource(today = { LocalDate(2026, 7, 10) }, now = { Instant.fromEpochMilliseconds(1_752_148_800_000) })
         // UpsWebSource(NoWebScraper) is the real webview-scraping source (empty configSpec,
         // testConnection always succeeds; see UpsSource.kt). Tests that need to exercise
         // credential-field editing / testConnection failure-vs-success toasts do so against an
         // extra unchanged credential-stub source (e.g. FedexSource) passed in via [extraCarriers],
         // since UPS itself no longer has any credentials to configure.
-        val registry = SourceRegistry(listOf(demo, UpsWebSource(NoWebScraper)) + extraCarriers, settings)
+        val registry = SourceRegistry(listOf(UpsWebSource(NoWebScraper)) + extraCarriers, settings)
         repo = ParcelRepository(db.parcelDao(), registry, settings, FixedClock())
         vm = SettingsViewModel(registry, settings, repo, NoOpCookieJar)
         // Records every emission and keeps WhileSubscribed alive for the whole test.
         backgroundScope.launch { vm.state.collect { check(recordedStates.tryEmit(it)) } }
         // Prime the pipeline: the first combined emission requires settings.settings' initial load.
-        awaitState { it.universal.isNotEmpty() }
+        awaitState { it.carriers.isNotEmpty() }
         return vm
     }
 
@@ -108,22 +106,10 @@ class SettingsViewModelTest {
 
     @Test fun sources_are_grouped_and_default_disabled() = runTest {
         val vm = vm()
-        val s = awaitState { it.universal.isNotEmpty() && it.carriers.isNotEmpty() }
-        assertEquals(listOf("demo"), s.universal.map { it.id })
+        val s = awaitState { it.carriers.isNotEmpty() }
+        assertTrue(s.universal.isEmpty())
         assertEquals(listOf("ups"), s.carriers.map { it.id })
         assertEquals("Not connected", s.carriers.single().statusText)
-    }
-
-    @Test fun toggle_enables_and_seeds_demo() = runTest {
-        val vm = vm()
-        vm.onToggle("demo")
-        val s = awaitState { it.universal.singleOrNull()?.enabled == true }
-        assertTrue(s.universal.single().enabled)
-        assertEquals("Connected · 1,000+ couriers", s.universal.single().statusText)
-        // Await seeding first (a bare first{} would race the flow's initial empty emission),
-        // then assert the exact count on a FRESH read so over-seeding beyond 7 still fails.
-        repo.observeParcels(false).first { it.size >= 7 }
-        assertEquals(7, repo.observeParcels(false).first().size)  // demo seeds flowed through
     }
 
     /** True once [key]'s field on the [sourceId] carrier card holds [value] — the edit has committed. */

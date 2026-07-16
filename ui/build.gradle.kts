@@ -26,7 +26,6 @@ kotlin {
         commonMain.dependencies {
             api(projects.data)
             api(projects.design)
-            implementation(projects.source.demo)
             implementation(projects.source.ups)
             implementation(projects.source.usps)
             implementation(projects.source.amazon)
