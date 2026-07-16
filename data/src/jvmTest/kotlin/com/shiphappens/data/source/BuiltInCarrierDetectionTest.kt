@@ -16,6 +16,11 @@ class BuiltInCarrierDetectionTest {
         assertEquals(WellKnownCarriers.FEDEX, BuiltInCarrierDetection.detect("123456789012345"))
         assertEquals(WellKnownCarriers.FEDEX, BuiltInCarrierDetection.detect("12345678901234567890"))
     }
+    @Test fun detects_amazon_order_ids() {
+        assertEquals(WellKnownCarriers.AMAZON, BuiltInCarrierDetection.detect("113-1234567-1234567"))
+        assertEquals(WellKnownCarriers.AMAZON, BuiltInCarrierDetection.detect("701-2345678-9012345"))
+        assertNull(BuiltInCarrierDetection.detect("213-1234567-1234567"))
+    }
     @Test fun rejects_short_and_garbage() {
         assertNull(BuiltInCarrierDetection.detect("123"))
         assertNull(BuiltInCarrierDetection.detect("hello world, meeting at 3pm"))
