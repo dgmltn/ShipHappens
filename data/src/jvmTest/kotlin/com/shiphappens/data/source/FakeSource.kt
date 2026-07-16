@@ -5,12 +5,11 @@ import com.shiphappens.source.api.*
 
 class FakeSource(
     id: String,
-    kind: SourceKind = SourceKind.CARRIER,
     private val detects: Carrier? = null,
     var trackResult: SourceResult<TrackingSnapshot> = SourceResult.Success(TrackingSnapshot(TrackingStatus.IN_TRANSIT)),
     implemented: Boolean = true,
 ) : TrackingSource {
-    override val descriptor = SourceDescriptor(id, id.uppercase(), kind, implemented = implemented)
+    override val descriptor = SourceDescriptor(id, id.uppercase(), implemented = implemented)
     val trackedNumbers = mutableListOf<String>()
     override fun detectCarrier(trackingNumber: String): Carrier? = detects
     override suspend fun track(trackingNumber: String, carrier: Carrier?): SourceResult<TrackingSnapshot> {

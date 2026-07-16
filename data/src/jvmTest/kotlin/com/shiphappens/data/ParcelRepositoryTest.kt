@@ -26,18 +26,10 @@ class FixedClock(var instant: Instant = Instant.fromEpochMilliseconds(1_752_148_
     override fun today() = date
 }
 
-class SeedingFake : TrackingSource, SeedingSource {
-    override val descriptor = SourceDescriptor("seeder", "Seeder", SourceKind.UNIVERSAL)
-    override fun detectCarrier(trackingNumber: String): Carrier? = null
-    override suspend fun track(trackingNumber: String, carrier: Carrier?) =
-        SourceResult.Success(TrackingSnapshot(TrackingStatus.IN_TRANSIT))
-    override fun seeds() = listOf(SeedParcel("Baseball cap", "1ZW463200377332024", WellKnownCarriers.USPS))
-}
-
 /** Always throws instead of returning a Failure — exercises the runCatching guard in refreshRow. */
 class ThrowingSource : TrackingSource {
-    override val descriptor = SourceDescriptor("boom", "Boom", SourceKind.UNIVERSAL)
-    override fun detectCarrier(trackingNumber: String): Carrier? = null
+    override val descriptor = SourceDescriptor("boom", "Boom")
+    override fun detectCarrier(trackingNumber: String): Carrier? = WellKnownCarriers.UPS
     override suspend fun track(trackingNumber: String, carrier: Carrier?): SourceResult<TrackingSnapshot> =
         throw IllegalStateException("source exploded")
 }
@@ -65,7 +57,7 @@ class ParcelRepositoryTest {
 
     @Test fun add_refreshes_immediately_when_source_available() = runTest {
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
-        val src = FakeSource("u", kind = SourceKind.UNIVERSAL,
+        val src = FakeSource("u", detects = WellKnownCarriers.UPS,
             trackResult = SourceResult.Success(TrackingSnapshot(TrackingStatus.IN_TRANSIT, etaDate = LocalDate(2026, 7, 15))))
         val r = repo(scope, src)
         settings.setSourceConfig("u", SourceConfig(enabled = true))
@@ -78,7 +70,7 @@ class ParcelRepositoryTest {
 
     @Test fun refresh_failure_keeps_existing_data() = runTest {
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
-        val src = FakeSource("u", kind = SourceKind.UNIVERSAL)
+        val src = FakeSource("u", detects = WellKnownCarriers.UPS)
         val r = repo(scope, src)
         settings.setSourceConfig("u", SourceConfig(enabled = true))
         val added = r.addParcel("Keyboard", "1Z999AA10123456784", null) as AddResult.Added
@@ -92,7 +84,7 @@ class ParcelRepositoryTest {
 
     @Test fun refreshAll_honors_staleness_and_force() = runTest {
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
-        val src = FakeSource("u", kind = SourceKind.UNIVERSAL)
+        val src = FakeSource("u", detects = WellKnownCarriers.UPS)
         val r = repo(scope, src)
         settings.setSourceConfig("u", SourceConfig(enabled = true))
         r.addParcel("Keyboard", "1Z999AA10123456784", null)
@@ -110,21 +102,9 @@ class ParcelRepositoryTest {
         assertEquals(2, src.trackedNumbers.size)
     }
 
-    @Test fun refreshAll_skips_delivered_and_seeds_seeding_sources() = runTest {
-        val scope = CoroutineScope(coroutineContext + SupervisorJob())
-        val seeder = SeedingFake()
-        val r = repo(scope, seeder)
-        settings.setSourceConfig("seeder", SourceConfig(enabled = true))
-        r.refreshAll(force = true)
-        val parcels = r.observeParcels(archived = false).first()
-        assertEquals(listOf("Baseball cap"), parcels.map { it.name })
-        r.refreshAll(force = true)  // seeding is idempotent (dedupe)
-        assertEquals(1, r.observeParcels(archived = false).first().size)
-    }
-
     @Test fun refreshAll_does_not_count_no_source_parcels_as_failures() = runTest {
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
-        val src = FakeSource("u", kind = SourceKind.UNIVERSAL)
+        val src = FakeSource("u")
         val r = repo(scope, src)
         // "u" is never enabled -> the parcel has no resolvable source.
         val added = r.addParcel("Mystery box", "1Z999AA10123456784", WellKnownCarriers.UPS) as AddResult.Added

@@ -9,9 +9,8 @@ import kotlin.test.*
 class UpsSourceTest {
     private val src = UpsWebSource(NoWebScraper)
 
-    @Test fun descriptor_declares_carrier_kind() {
+    @Test fun descriptor_id_and_implemented_flag() {
         assertEquals("ups", src.descriptor.id)
-        assertEquals(SourceKind.CARRIER, src.descriptor.kind)
         assertFalse(src.descriptor.implemented)  // NoWebScraper => not implemented
     }
     @Test fun detects_1z_numbers_only() {

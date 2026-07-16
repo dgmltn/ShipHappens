@@ -44,8 +44,8 @@ private class FakeSource(
 ) : TrackingSource {
     /** When set, track() suspends until completed — lets tests observe the mid-refresh state. */
     var gate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
-    override val descriptor = SourceDescriptor("fake", "Fake", SourceKind.UNIVERSAL)
-    override fun detectCarrier(trackingNumber: String): Carrier? = null
+    override val descriptor = SourceDescriptor("fake", "Fake")
+    override fun detectCarrier(trackingNumber: String): Carrier? = WellKnownCarriers.UPS
     override suspend fun track(trackingNumber: String, carrier: Carrier?): SourceResult<TrackingSnapshot> {
         gate?.await()
         return SourceResult.Success(snapshot)

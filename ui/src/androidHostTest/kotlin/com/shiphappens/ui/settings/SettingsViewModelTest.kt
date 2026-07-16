@@ -100,7 +100,6 @@ class SettingsViewModelTest {
     @Test fun sources_are_grouped_and_default_disabled() = runTest {
         val vm = vm()
         val s = awaitState { it.carriers.isNotEmpty() }
-        assertTrue(s.universal.isEmpty())
         assertEquals(listOf("ups"), s.carriers.map { it.id })
         assertEquals("Not connected", s.carriers.single().statusText)
     }

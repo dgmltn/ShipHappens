@@ -4,7 +4,6 @@ import com.shiphappens.domain.TrackingSnapshot
 import com.shiphappens.domain.Carrier
 import com.shiphappens.source.api.FailureReason
 import com.shiphappens.source.api.SourceDescriptor
-import com.shiphappens.source.api.SourceKind
 import com.shiphappens.source.api.SourceResult
 import com.shiphappens.source.api.TrackingSource
 
@@ -26,7 +25,6 @@ abstract class WebViewBasedSource(
     final override val descriptor = SourceDescriptor(
         id = webSpec.sourceId,
         displayName = webSpec.carrier.displayName,
-        kind = SourceKind.CARRIER,
         accentColorHex = webSpec.carrier.accentColorHex,
         implemented = scraper.isAvailable,
     )

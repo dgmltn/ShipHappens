@@ -66,9 +66,6 @@ fun SettingsContent(
             }
 
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 34.dp)) {
-                SectionLabel("Universal API")
-                state.universal.forEach { SourceCard(it, onToggle, onSignIn, onSignOut) }
-                Spacer(Modifier.height(10.dp))
                 SectionLabel("Direct carrier APIs")
                 state.carriers.forEach { SourceCard(it, onToggle, onSignIn, onSignOut) }
                 Spacer(Modifier.height(10.dp))
@@ -176,12 +173,6 @@ private fun Preview_SettingsContent_SourcesDisabled() {
     ShipTheme {
         SettingsContent(
             SettingsUiState(
-                universal = listOf(
-                    SourceCardUi(
-                        id = "demo", name = "Demo data", accentHex = "#17150F", enabled = false,
-                        statusText = "Not connected", statusColorHex = "#A8A296",
-                    ),
-                ),
                 carriers = listOf(
                     SourceCardUi(
                         id = "ups", name = "UPS", accentHex = "#5A3A22", enabled = false,
@@ -203,19 +194,13 @@ private fun Preview_SettingsContent_SourcesEnabled() {
     ShipTheme {
         SettingsContent(
             SettingsUiState(
-                universal = listOf(
-                    SourceCardUi(
-                        id = "demo", name = "Demo data", accentHex = "#17150F", enabled = true,
-                        statusText = "Connected · demo parcels", statusColorHex = "#1F7A4D",
-                    ),
-                ),
                 carriers = listOf(
                     SourceCardUi(
                         id = "ups", name = "UPS", accentHex = "#5A3A22", enabled = true,
-                        statusText = "Enabled · add your credentials", statusColorHex = "#C2410C",
+                        statusText = "Connected · syncing", statusColorHex = "#1F7A4D",
                     ),
                     SourceCardUi(
-                        id = "fedex", name = "FedEx", accentHex = "#5A1B9A", enabled = true,
+                        id = "amazon", name = "Amazon", accentHex = "#995C00", enabled = true,
                         statusText = "Coming soon", statusColorHex = "#A8A296",
                     ),
                 ),

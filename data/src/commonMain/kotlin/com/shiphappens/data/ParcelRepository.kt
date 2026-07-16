@@ -129,7 +129,6 @@ class ParcelRepository(
     }
 
     suspend fun refreshAll(force: Boolean): RefreshSummary {
-        seedEnabledSources()
         val staleAfter = settings.settings.first().refreshFrequency.staleAfterMinutes
         if (!force && staleAfter == null) return RefreshSummary(0, 0)  // MANUAL
         val cutoff = staleAfter?.let { clock.now() - it.minutes }
@@ -148,11 +147,5 @@ class ParcelRepository(
             }
         }
         return RefreshSummary(candidates.size, failed, firstReason)
-    }
-
-    private suspend fun seedEnabledSources() {
-        registry.enabled().filterIsInstance<SeedingSource>().forEach { seeder ->
-            seeder.seeds().forEach { addParcel(it.name, it.trackingNumber, it.carrier) }
-        }
     }
 }

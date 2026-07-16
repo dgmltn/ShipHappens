@@ -1,7 +1,6 @@
 package com.shiphappens.source.amazon
 
 import com.shiphappens.domain.WellKnownCarriers
-import com.shiphappens.source.api.SourceKind
 import com.shiphappens.source.api.SourceResult
 import com.shiphappens.source.webview.NoWebScraper
 import kotlinx.coroutines.test.runTest
@@ -15,9 +14,8 @@ import kotlin.test.assertTrue
 class AmazonSourceTest {
     private val src = AmazonWebSource(NoWebScraper)
 
-    @Test fun descriptor_is_web_carrier() {
+    @Test fun descriptor_id_and_implemented_flag() {
         assertEquals("amazon", src.descriptor.id)
-        assertEquals(SourceKind.CARRIER, src.descriptor.kind)
         assertFalse(src.descriptor.implemented)  // NoWebScraper => not implemented
     }
 

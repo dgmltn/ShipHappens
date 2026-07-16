@@ -9,9 +9,8 @@ import kotlin.test.*
 class UspsSourceTest {
     private val src = UspsWebSource(NoWebScraper)
 
-    @Test fun descriptor_is_web_carrier() {
+    @Test fun descriptor_id_and_implemented_flag() {
         assertEquals("usps", src.descriptor.id)
-        assertEquals(SourceKind.CARRIER, src.descriptor.kind)
         assertFalse(src.descriptor.implemented)           // NoWebScraper => not implemented
     }
     @Test fun detects_domestic_and_international_numbers() {

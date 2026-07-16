@@ -23,7 +23,6 @@ data class SourceCardUi(
 )
 
 data class SettingsUiState(
-    val universal: List<SourceCardUi> = emptyList(),
     val carriers: List<SourceCardUi> = emptyList(),
     val autoImport: Boolean = true,
     val frequency: RefreshFrequency = RefreshFrequency.FIFTEEN_MIN,
@@ -47,7 +46,6 @@ class SettingsViewModel(
             val (statusText, statusColor) = when {
                 !cfg.enabled -> "Not connected" to "#A8A296"
                 !d.implemented -> "Coming soon" to "#A8A296"
-                d.kind == SourceKind.UNIVERSAL -> "Connected · 1,000+ couriers" to (d.accentColorHex ?: "#1F7A4D")
                 else -> "Connected · syncing" to "#1F7A4D"
             }
             val webSpec = (src as? WebCapableSource)?.webSpec
@@ -60,8 +58,7 @@ class SettingsViewModel(
             )
         }
         SettingsUiState(
-            universal = cards.filter { c -> registry.all().first { it.descriptor.id == c.id }.descriptor.kind == SourceKind.UNIVERSAL },
-            carriers = cards.filter { c -> registry.all().first { it.descriptor.id == c.id }.descriptor.kind == SourceKind.CARRIER },
+            carriers = cards,
             autoImport = s.autoClipboardImport,
             frequency = s.refreshFrequency,
             toast = t,
