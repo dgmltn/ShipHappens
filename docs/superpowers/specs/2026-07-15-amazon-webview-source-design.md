@@ -130,6 +130,9 @@ order ID; signed-out AUTH path; captcha repair loop; throttle; airplane mode.
 
 - Non-US Amazon domains
 - Per-shipment multi-card fidelity (one order → several tracked cards)
-- "Your Orders" bulk import / order discovery
+- "Your Orders" auto-import / order discovery — **planned as the immediate follow-up
+  feature** (decided 2026-07-15): discovery composes on top of this source (login
+  session, `goto` hop, extractors are prerequisites), but its sync/dedup/card-lifecycle
+  questions get their own brainstorm and spec.
 - API-capture parser (`apiUrlPatterns`) — revisit after live QA
 - iOS WKWebView scraper (tracked by the framework spec)
