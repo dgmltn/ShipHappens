@@ -72,7 +72,7 @@ fun SettingsContent(
                 SectionLabel("Sync")
                 SyncCard(state.autoImport, state.frequency, onAutoImport, onFrequency)
                 Text(
-                    "Keys are stored on this device only and used to fetch live tracking status directly from each carrier.",
+                    "Signing in to a carrier is stored on this device only and used to fetch live tracking status from that carrier's website.",
                     color = ShipColors.faint, fontSize = 12.sp, lineHeight = 18.sp,
                     modifier = Modifier.padding(start = 6.dp, end = 6.dp, top = 16.dp),
                 )

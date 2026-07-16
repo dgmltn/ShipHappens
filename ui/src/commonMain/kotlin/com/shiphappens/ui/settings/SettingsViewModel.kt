@@ -68,7 +68,7 @@ class SettingsViewModel(
     fun onToggle(sourceId: String) {
         viewModelScope.launch {
             val new = settings.updateSourceConfig(sourceId) { it.copy(enabled = !it.enabled) }
-            if (new.enabled) repository.refreshAll(force = false)  // just turned ON: seed + refresh
+            if (new.enabled) repository.refreshAll(force = false)  // just turned ON: refresh immediately
         }
     }
 
