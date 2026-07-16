@@ -2,6 +2,7 @@ package com.shiphappens.ui.di
 
 import com.shiphappens.data.di.dataModule
 import com.shiphappens.data.di.platformDataModule
+import com.shiphappens.source.amazon.amazonSourceModule
 import com.shiphappens.source.demo.demoSourceModule
 import com.shiphappens.source.fedex.fedexSourceModule
 import com.shiphappens.source.ups.upsSourceModule
@@ -34,6 +35,7 @@ fun appModules(): List<Module> = listOf(
     demoSourceModule,
     upsSourceModule,
     uspsSourceModule,
+    amazonSourceModule,
     fedexSourceModule,
     uiModule,
 )

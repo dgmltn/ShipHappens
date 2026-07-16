@@ -342,7 +342,7 @@ class ListViewModelTest {
     @Test fun manual_picker_effective_carrier_follows_pick_then_detection() = runTest {
         val vm = vm()
         val options = awaitState { it.manualAdd.options.isNotEmpty() }
-        assertEquals(listOf(null, "ups", "usps", "fedex"), options.manualAdd.options.map { it.code })
+        assertEquals(listOf(null, "ups", "usps", "fedex", "amazon"), options.manualAdd.options.map { it.code })
         vm.onManualTracking("1Z999AA10123456784")
         val ups = awaitState { it.manualAdd.effectiveCarrierName == "UPS" }
         assertEquals("UPS", ups.manualAdd.effectiveCarrierName)

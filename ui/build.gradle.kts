@@ -29,6 +29,7 @@ kotlin {
             implementation(projects.source.demo)
             implementation(projects.source.ups)
             implementation(projects.source.usps)
+            implementation(projects.source.amazon)
             implementation(projects.source.fedex)
             implementation(projects.source.webview)
             implementation(compose.runtime)
