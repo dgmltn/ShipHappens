@@ -19,12 +19,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.MaterialTheme
 import com.shiphappens.data.settings.RefreshFrequency
 import com.shiphappens.ui.components.ToastOverlay
 import com.shiphappens.design.*
@@ -38,8 +34,6 @@ fun SettingsScreen(onBack: () -> Unit, onOpenLogin: (String) -> Unit = {}, vm: S
         state = s,
         onBack = onBack,
         onToggle = vm::onToggle,
-        onField = vm::onField,
-        onTest = vm::onTest,
         onAutoImport = vm::onAutoImport,
         onFrequency = vm::onFrequency,
         onSignIn = onOpenLogin,
@@ -52,8 +46,6 @@ fun SettingsContent(
     state: SettingsUiState,
     onBack: () -> Unit = {},
     onToggle: (String) -> Unit = {},
-    onField: (String, String, String) -> Unit = { _, _, _ -> },
-    onTest: (String) -> Unit = {},
     onAutoImport: (Boolean) -> Unit = {},
     onFrequency: (RefreshFrequency) -> Unit = {},
     onSignIn: (String) -> Unit = {},
@@ -75,10 +67,10 @@ fun SettingsContent(
 
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 34.dp)) {
                 SectionLabel("Universal API")
-                state.universal.forEach { SourceCard(it, onToggle, onField, onTest, onSignIn, onSignOut) }
+                state.universal.forEach { SourceCard(it, onToggle, onSignIn, onSignOut) }
                 Spacer(Modifier.height(10.dp))
                 SectionLabel("Direct carrier APIs")
-                state.carriers.forEach { SourceCard(it, onToggle, onField, onTest, onSignIn, onSignOut) }
+                state.carriers.forEach { SourceCard(it, onToggle, onSignIn, onSignOut) }
                 Spacer(Modifier.height(10.dp))
                 SectionLabel("Sync")
                 SyncCard(state.autoImport, state.frequency, onAutoImport, onFrequency)
@@ -117,8 +109,6 @@ private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
 private fun SourceCard(
     card: SourceCardUi,
     onToggle: (String) -> Unit,
-    onField: (String, String, String) -> Unit,
-    onTest: (String) -> Unit,
     onSignIn: (String) -> Unit,
     onSignOut: (String) -> Unit,
 ) {
@@ -138,44 +128,9 @@ private fun SourceCard(
                 colors = SwitchDefaults.colors(checkedTrackColor = accent, uncheckedTrackColor = ShipColors.toggleOff),
             )
         }
-        card.fields.forEach { f ->
-            Spacer(Modifier.height(11.dp))
-            Column {
-                Text(f.label.uppercase(), color = ShipColors.faint, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.7.sp)
-                Spacer(Modifier.height(5.dp))
-                BasicTextField(
-                    value = f.value, onValueChange = { onField(card.id, f.key, it) }, singleLine = true,
-                    visualTransformation = if (f.isSecret) PasswordVisualTransformation() else VisualTransformation.None,
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = ShipColors.ink, fontFamily = monoFamily(), fontSize = 13.sp),
-                    decorationBox = { inner ->
-                        androidx.compose.foundation.layout.Box(
-                            Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).background(ShipColors.cardAlt)
-                                .border(1.dp, ShipColors.hairline, RoundedCornerShape(11.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
-                        ) {
-                            if (f.value.isEmpty()) Text(f.placeholder, color = ShipColors.faint, fontSize = 13.sp, fontFamily = monoFamily())
-                            inner()
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
         if (card.webCapable && card.enabled) {
             TextButton(onClick = { if (card.signedIn) onSignOut(card.id) else onSignIn(card.id) }) {
                 Text(if (card.signedIn) "Sign out of ${card.name}" else "Sign in to ${card.name}", fontSize = 13.sp)
-            }
-        }
-        card.endpointText?.let { endpoint ->
-            Spacer(Modifier.height(13.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(endpoint, color = ShipColors.faint, fontSize = 11.sp, fontFamily = monoFamily())
-                TextButton(onClick = { onTest(card.id) }) {
-                    Text("Test connection", color = ShipColors.ink,
-                        fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clip(RoundedCornerShape(10.dp))
-                            .background(Color(0xFFF1EFE9))
-                            .padding(horizontal = 13.dp, vertical = 8.dp))
-                }
             }
         }
     }
@@ -225,19 +180,16 @@ private fun Preview_SettingsContent_SourcesDisabled() {
                     SourceCardUi(
                         id = "demo", name = "Demo data", accentHex = "#17150F", enabled = false,
                         statusText = "Not connected", statusColorHex = "#A8A296",
-                        fields = emptyList(), endpointText = null,
                     ),
                 ),
                 carriers = listOf(
                     SourceCardUi(
                         id = "ups", name = "UPS", accentHex = "#5A3A22", enabled = false,
                         statusText = "Not connected", statusColorHex = "#A8A296",
-                        fields = emptyList(), endpointText = "Production endpoint",
                     ),
                     SourceCardUi(
                         id = "usps", name = "USPS", accentHex = "#1E3A8F", enabled = false,
                         statusText = "Not connected", statusColorHex = "#A8A296",
-                        fields = emptyList(), endpointText = "Production endpoint",
                     ),
                 ),
             ),
@@ -255,20 +207,16 @@ private fun Preview_SettingsContent_SourcesEnabled() {
                     SourceCardUi(
                         id = "demo", name = "Demo data", accentHex = "#17150F", enabled = true,
                         statusText = "Connected · demo parcels", statusColorHex = "#1F7A4D",
-                        fields = emptyList(), endpointText = null,
                     ),
                 ),
                 carriers = listOf(
                     SourceCardUi(
                         id = "ups", name = "UPS", accentHex = "#5A3A22", enabled = true,
                         statusText = "Enabled · add your credentials", statusColorHex = "#C2410C",
-                        fields = listOf(FieldUi("clientId", "Client ID", "Your UPS client ID", isSecret = false, value = "")),
-                        endpointText = "Production endpoint",
                     ),
                     SourceCardUi(
                         id = "fedex", name = "FedEx", accentHex = "#5A1B9A", enabled = true,
-                        statusText = "Direct API coming soon", statusColorHex = "#A8A296",
-                        fields = emptyList(), endpointText = "Production endpoint",
+                        statusText = "Coming soon", statusColorHex = "#A8A296",
                     ),
                 ),
                 autoImport = true,

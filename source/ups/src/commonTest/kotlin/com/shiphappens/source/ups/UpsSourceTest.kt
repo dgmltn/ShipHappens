@@ -9,18 +9,16 @@ import kotlin.test.*
 class UpsSourceTest {
     private val src = UpsWebSource(NoWebScraper)
 
-    @Test fun descriptor_declares_oauth_fields() {
+    @Test fun descriptor_declares_carrier_kind() {
         assertEquals("ups", src.descriptor.id)
         assertEquals(SourceKind.CARRIER, src.descriptor.kind)
-        assertTrue(src.descriptor.configSpec.isEmpty())
         assertFalse(src.descriptor.implemented)  // NoWebScraper => not implemented
     }
     @Test fun detects_1z_numbers_only() {
         assertEquals(WellKnownCarriers.UPS, src.detectCarrier("1Z 999 AA1 01 2345 6784"))
         assertNull(src.detectCarrier("9400111899223300112"))
     }
-    @Test fun track_is_not_implemented_and_test_connection_always_succeeds() = runTest {
+    @Test fun track_is_not_implemented() = runTest {
         assertIs<SourceResult.Failure>(src.track("1Z999AA10123456784", null))
-        assertIs<SourceResult.Success<Unit>>(src.testConnection(SourceConfig(enabled = true)))
     }
 }

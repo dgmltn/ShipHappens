@@ -50,7 +50,6 @@ private class FakeSource(
         gate?.await()
         return SourceResult.Success(snapshot)
     }
-    override suspend fun testConnection(config: SourceConfig) = SourceResult.Success(Unit)
 }
 
 /**

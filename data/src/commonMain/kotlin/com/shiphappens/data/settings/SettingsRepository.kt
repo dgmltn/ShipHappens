@@ -6,7 +6,6 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.shiphappens.source.api.SourceConfig
-import com.shiphappens.source.api.SourceConfigProvider
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -29,7 +28,7 @@ private val KEY_AUTO_CLIPBOARD = booleanPreferencesKey("auto_clipboard_import")
 private val KEY_FREQUENCY = stringPreferencesKey("refresh_frequency")
 private val configsSerializer = MapSerializer(String.serializer(), SourceConfig.serializer())
 
-class SettingsRepository(private val dataStore: DataStore<Preferences>) : SourceConfigProvider {
+class SettingsRepository(private val dataStore: DataStore<Preferences>) {
     private val json = Json { ignoreUnknownKeys = true }
 
     val settings: Flow<AppSettings> = dataStore.data.map { prefs ->
@@ -73,7 +72,4 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) : Source
     suspend fun setRefreshFrequency(freq: RefreshFrequency) {
         dataStore.edit { it[KEY_FREQUENCY] = freq.name }
     }
-
-    override suspend fun current(sourceId: String): SourceConfig =
-        settings.first().sourceConfigs[sourceId] ?: SourceConfig()
 }

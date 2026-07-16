@@ -31,14 +31,13 @@ class SettingsRepositoryTest {
         scope.cancel()
     }
 
-    @Test fun source_config_roundtrips_and_provider_returns_it() = runTest {
+    @Test fun source_config_roundtrips() = runTest {
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
         val r = repo(scope)
         val cfg = SourceConfig(enabled = true, values = mapOf("apiKey" to "key-1"))
         r.setSourceConfig("ups", cfg)
         assertEquals(cfg, r.settings.first().sourceConfigs["ups"])
-        assertEquals(cfg, r.current("ups"))
-        assertEquals(SourceConfig(), r.current("never-set"))
+        assertNull(r.settings.first().sourceConfigs["never-set"])
         scope.cancel()
     }
 
@@ -52,7 +51,7 @@ class SettingsRepositoryTest {
                 async { r.updateSourceConfig("ups") { it.copy(values = it.values + ("clientSecret" to "shh")) } },
             ).awaitAll()
         }
-        val cfg = r.current("ups")
+        val cfg = r.settings.first().sourceConfigs.getValue("ups")
         assertEquals("abc", cfg["clientId"])
         assertEquals("shh", cfg["clientSecret"])
         scope.cancel()

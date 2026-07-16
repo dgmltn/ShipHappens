@@ -3,7 +3,6 @@ package com.shiphappens.source.webview
 import com.shiphappens.domain.TrackingSnapshot
 import com.shiphappens.domain.Carrier
 import com.shiphappens.source.api.FailureReason
-import com.shiphappens.source.api.SourceConfig
 import com.shiphappens.source.api.SourceDescriptor
 import com.shiphappens.source.api.SourceKind
 import com.shiphappens.source.api.SourceResult
@@ -16,8 +15,8 @@ interface WebCapableSource {
 
 /**
  * A TrackingSource whose data comes from driving the carrier's own website. Subclasses supply
- * only [detectCarrier]; everything else derives from the [webSpec] recipe. No credentials in
- * configSpec — auth is an optional cookie session established in the login WebView.
+ * only [detectCarrier]; everything else derives from the [webSpec] recipe. No credential fields —
+ * auth is an optional cookie session established in the login WebView.
  */
 abstract class WebViewBasedSource(
     final override val webSpec: WebProviderSpec,
@@ -29,7 +28,6 @@ abstract class WebViewBasedSource(
         displayName = webSpec.carrier.displayName,
         kind = SourceKind.CARRIER,
         accentColorHex = webSpec.carrier.accentColorHex,
-        configSpec = emptyList(),
         implemented = scraper.isAvailable,
     )
 
@@ -66,6 +64,4 @@ abstract class WebViewBasedSource(
             ScrapeResult.Unavailable -> SourceResult.Failure(FailureReason.UNKNOWN, "$name web tracking unavailable")
         }
     }
-
-    final override suspend fun testConnection(config: SourceConfig): SourceResult<Unit> = SourceResult.Success(Unit)
 }

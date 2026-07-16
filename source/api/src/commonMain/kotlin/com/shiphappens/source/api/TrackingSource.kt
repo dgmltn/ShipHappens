@@ -5,19 +5,11 @@ import com.shiphappens.domain.TrackingSnapshot
 
 enum class SourceKind { UNIVERSAL, CARRIER }
 
-data class ConfigField(
-    val key: String,
-    val label: String,
-    val placeholder: String,
-    val isSecret: Boolean = false,
-)
-
 data class SourceDescriptor(
     val id: String,
     val displayName: String,
     val kind: SourceKind,
     val accentColorHex: String? = null,
-    val configSpec: List<ConfigField> = emptyList(),
     /** False for stub sources that declare themselves but don't actually fetch live data yet. */
     val implemented: Boolean = true,
 )
@@ -38,7 +30,6 @@ interface TrackingSource {
      * additionally guards against thrown exceptions.
      */
     suspend fun track(trackingNumber: String, carrier: Carrier?): SourceResult<TrackingSnapshot>
-    suspend fun testConnection(config: SourceConfig): SourceResult<Unit>
 }
 
 data class SeedParcel(val name: String, val trackingNumber: String, val carrier: Carrier)

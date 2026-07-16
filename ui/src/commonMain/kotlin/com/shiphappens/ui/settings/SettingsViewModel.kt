@@ -16,11 +16,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
-data class FieldUi(val key: String, val label: String, val placeholder: String, val isSecret: Boolean, val value: String)
-
 data class SourceCardUi(
     val id: String, val name: String, val accentHex: String, val enabled: Boolean,
-    val statusText: String, val statusColorHex: String, val fields: List<FieldUi>, val endpointText: String?,
+    val statusText: String, val statusColorHex: String,
     val webCapable: Boolean = false, val signedIn: Boolean = false,
 )
 
@@ -46,11 +44,9 @@ class SettingsViewModel(
         val cards = registry.all().map { src ->
             val d = src.descriptor
             val cfg = s.sourceConfigs[d.id] ?: SourceConfig()
-            val configured = d.configSpec.all { cfg[it.key] != null }
             val (statusText, statusColor) = when {
                 !cfg.enabled -> "Not connected" to "#A8A296"
-                !d.implemented -> "Direct API coming soon" to "#A8A296"
-                !configured -> "Enabled · add your credentials" to "#C2410C"
+                !d.implemented -> "Coming soon" to "#A8A296"
                 d.kind == SourceKind.UNIVERSAL -> "Connected · 1,000+ couriers" to (d.accentColorHex ?: "#1F7A4D")
                 else -> "Connected · syncing" to "#1F7A4D"
             }
@@ -59,11 +55,6 @@ class SettingsViewModel(
                 id = d.id, name = d.displayName,
                 accentHex = d.accentColorHex ?: Carrier(d.id, d.displayName).accentHex(),
                 enabled = cfg.enabled, statusText = statusText, statusColorHex = statusColor,
-                fields = d.configSpec.map { f -> FieldUi(f.key, f.label, f.placeholder, f.isSecret, cfg.values[f.key] ?: "") },
-                endpointText = when {
-                    d.kind == SourceKind.CARRIER -> "Production endpoint"
-                    else -> null
-                },
                 webCapable = webSpec != null,
                 signedIn = webSpec != null && cfg.values["loggedIn"] == "true",
             )
@@ -81,22 +72,6 @@ class SettingsViewModel(
         viewModelScope.launch {
             val new = settings.updateSourceConfig(sourceId) { it.copy(enabled = !it.enabled) }
             if (new.enabled) repository.refreshAll(force = false)  // just turned ON: seed + refresh
-        }
-    }
-
-    fun onField(sourceId: String, key: String, value: String) {
-        viewModelScope.launch {
-            settings.updateSourceConfig(sourceId) { it.copy(values = it.values + (key to value)) }
-        }
-    }
-
-    fun onTest(sourceId: String) {
-        viewModelScope.launch {
-            val src = registry.all().firstOrNull { it.descriptor.id == sourceId } ?: return@launch
-            when (val r = src.testConnection(settings.current(sourceId))) {
-                is SourceResult.Success -> flash("${src.descriptor.displayName} credentials look valid")
-                is SourceResult.Failure -> flash(r.message ?: "Couldn't reach ${src.descriptor.displayName}")
-            }
         }
     }
 

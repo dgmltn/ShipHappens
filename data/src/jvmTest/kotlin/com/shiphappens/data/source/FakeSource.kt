@@ -17,5 +17,4 @@ class FakeSource(
         trackedNumbers += trackingNumber
         return trackResult
     }
-    override suspend fun testConnection(config: SourceConfig): SourceResult<Unit> = SourceResult.Success(Unit)
 }

@@ -31,7 +31,6 @@ class SeedingFake : TrackingSource, SeedingSource {
     override fun detectCarrier(trackingNumber: String): Carrier? = null
     override suspend fun track(trackingNumber: String, carrier: Carrier?) =
         SourceResult.Success(TrackingSnapshot(TrackingStatus.IN_TRANSIT))
-    override suspend fun testConnection(config: SourceConfig) = SourceResult.Success(Unit)
     override fun seeds() = listOf(SeedParcel("Baseball cap", "1ZW463200377332024", WellKnownCarriers.USPS))
 }
 
@@ -41,7 +40,6 @@ class ThrowingSource : TrackingSource {
     override fun detectCarrier(trackingNumber: String): Carrier? = null
     override suspend fun track(trackingNumber: String, carrier: Carrier?): SourceResult<TrackingSnapshot> =
         throw IllegalStateException("source exploded")
-    override suspend fun testConnection(config: SourceConfig) = SourceResult.Success(Unit)
 }
 
 class ParcelRepositoryTest {

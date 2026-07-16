@@ -1,7 +1,6 @@
 package com.shiphappens.source.amazon
 
 import com.shiphappens.domain.WellKnownCarriers
-import com.shiphappens.source.api.SourceConfig
 import com.shiphappens.source.api.SourceKind
 import com.shiphappens.source.api.SourceResult
 import com.shiphappens.source.webview.NoWebScraper
@@ -16,10 +15,9 @@ import kotlin.test.assertTrue
 class AmazonSourceTest {
     private val src = AmazonWebSource(NoWebScraper)
 
-    @Test fun descriptor_is_configless_web_carrier() {
+    @Test fun descriptor_is_web_carrier() {
         assertEquals("amazon", src.descriptor.id)
         assertEquals(SourceKind.CARRIER, src.descriptor.kind)
-        assertTrue(src.descriptor.configSpec.isEmpty())
         assertFalse(src.descriptor.implemented)  // NoWebScraper => not implemented
     }
 
@@ -37,8 +35,7 @@ class AmazonSourceTest {
         assertNull(src.detectCarrier("113-1234567-123456"))      // wrong length
     }
 
-    @Test fun track_unavailable_without_scraper_and_test_connection_succeeds() = runTest {
+    @Test fun track_unavailable_without_scraper() = runTest {
         assertIs<SourceResult.Failure>(src.track("113-1234567-1234567", null))
-        assertIs<SourceResult.Success<Unit>>(src.testConnection(SourceConfig(enabled = true)))
     }
 }

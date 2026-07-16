@@ -9,8 +9,3 @@ data class SourceConfig(
 ) {
     operator fun get(key: String): String? = values[key]?.takeIf { it.isNotBlank() }
 }
-
-/** How core hands a source its user-entered settings at call time. */
-interface SourceConfigProvider {
-    suspend fun current(sourceId: String): SourceConfig
-}

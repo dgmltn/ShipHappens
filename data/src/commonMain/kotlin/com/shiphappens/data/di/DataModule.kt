@@ -5,7 +5,6 @@ import com.shiphappens.data.clipboard.ClipboardImportManager
 import com.shiphappens.data.db.ShipHappensDb
 import com.shiphappens.data.settings.SettingsRepository
 import com.shiphappens.data.source.SourceRegistry
-import com.shiphappens.source.api.SourceConfigProvider
 import com.shiphappens.source.api.TrackingSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,7 +16,7 @@ import org.koin.dsl.module
 val dataModule = module {
     single<AppClock> { SystemClock() }
     single { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
-    single { SettingsRepository(get()) } bind SourceConfigProvider::class
+    single { SettingsRepository(get()) }
     single { SourceRegistry(getAll<TrackingSource>(), get()) }
     single { get<ShipHappensDb>().parcelDao() }
     single { ParcelRepository(get(), get(), get(), get()) }
