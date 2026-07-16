@@ -46,6 +46,11 @@ abstract class WebViewBasedSource(
                 val routed = result.payloads.map(router::route)
                 routed.firstNotNullOfOrNull { (it as? RouteResult.Tracking)?.tracking }
                     ?.let { return SourceResult.Success(it.toSnapshot()) }
+                // A goto hop's embedded coarse tracking is the designed fallback when the hop's target
+                // page never produced a rich extraction (design spec §1) — and it outranks the error
+                // ladder because the page that emitted it was already past login and order lookup.
+                routed.firstNotNullOfOrNull { (it as? RouteResult.Goto)?.tracking }
+                    ?.let { return SourceResult.Success(it.toSnapshot()) }
                 when {
                     routed.any { it is RouteResult.LoginWall } ->
                         SourceResult.Failure(FailureReason.AUTH, "Sign in to $name in Settings, then refresh")

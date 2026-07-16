@@ -24,6 +24,12 @@ private class TestWebSource(scraper: WebScraper, spec: WebProviderSpec = testSpe
 
 private fun dom(page: String) = """{"kind":"dom","body":"{\"page\":\"$page\"}"}"""
 
+private fun gotoDom(withTracking: Boolean): String {
+    val tracking = if (withTracking) ""","tracking":{"status":"IN_TRANSIT"}""" else ""
+    val body = """{"page":"goto","url":"https://www.example.com/t/2"$tracking}"""
+    return """{"kind":"dom","body":${kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.json.JsonPrimitive(body))}}"""
+}
+
 class WebViewBasedSourceTest {
 
     @Test fun descriptor_derives_from_spec_and_scraper() {
@@ -64,5 +70,30 @@ class WebViewBasedSourceTest {
         )
         val result = assertIs<SourceResult.Success<com.shiphappens.domain.TrackingSnapshot>>(src.track("1Z1", null))
         assertEquals(TrackingStatus.DELIVERED, result.value.status)
+    }
+
+    @Test fun goto_coarse_tracking_is_the_fallback_result() = runTest {
+        val src = TestWebSource(FakeScraper(ScrapeResult.Payloads(listOf(gotoDom(withTracking = true), dom("empty")))))
+        val result = assertIs<SourceResult.Success<com.shiphappens.domain.TrackingSnapshot>>(src.track("113", null))
+        assertEquals(TrackingStatus.IN_TRANSIT, result.value.status)
+    }
+
+    @Test fun rich_tracking_beats_goto_coarse() = runTest {
+        val rich = """{"kind":"dom","body":"{\"page\":\"ok\",\"tracking\":{\"status\":\"DELIVERED\"}}"}"""
+        val src = TestWebSource(FakeScraper(ScrapeResult.Payloads(listOf(gotoDom(withTracking = true), rich))))
+        val result = assertIs<SourceResult.Success<com.shiphappens.domain.TrackingSnapshot>>(src.track("113", null))
+        assertEquals(TrackingStatus.DELIVERED, result.value.status)
+    }
+
+    @Test fun goto_coarse_beats_error_signals() = runTest {
+        // The order page proved we're logged in and produced a status; a confused post-hop page
+        // must not turn that into an AUTH failure.
+        val src = TestWebSource(FakeScraper(ScrapeResult.Payloads(listOf(gotoDom(withTracking = true), dom("loginWall")))))
+        assertIs<SourceResult.Success<com.shiphappens.domain.TrackingSnapshot>>(src.track("113", null))
+    }
+
+    @Test fun goto_without_tracking_alone_is_unknown_failure() = runTest {
+        val src = TestWebSource(FakeScraper(ScrapeResult.Payloads(listOf(gotoDom(withTracking = false)))))
+        assertEquals(FailureReason.UNKNOWN, assertIs<SourceResult.Failure>(src.track("113", null)).reason)
     }
 }
