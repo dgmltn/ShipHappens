@@ -9,14 +9,31 @@ data class BridgePayload(val kind: String, val url: String? = null, val body: St
 
 /** Parsed body of a `kind == "dom"` payload (the extraction runner's output). */
 @Serializable
-data class DomExtraction(val page: String, val tracking: ScrapedTracking? = null)
+data class DomExtraction(val page: String, val url: String? = null, val tracking: ScrapedTracking? = null)
 
 sealed interface RouteResult {
     data class Tracking(val tracking: ScrapedTracking) : RouteResult
+    /** A validated one-hop navigation request from the extractor, optionally carrying a coarse
+     *  tracking fallback extracted from the page that requested the hop (design spec §1). */
+    data class Goto(val url: String, val tracking: ScrapedTracking?) : RouteResult
     data object NotFound : RouteResult
     data object LoginWall : RouteResult
     data object Challenge : RouteResult
     data object Unparsed : RouteResult
+}
+
+/**
+ * True when [url] is an https URL whose host is [domain] or a subdomain of it — the only targets
+ * a 'goto' hop may navigate to. Plain string parsing (commonMain has no platform URL class);
+ * an authority containing userinfo ('@') is rejected outright rather than parsed around.
+ */
+internal fun isAllowedHopUrl(url: String, domain: String): Boolean {
+    if (!url.startsWith("https://")) return false
+    val authority = url.removePrefix("https://").takeWhile { it != '/' && it != '?' && it != '#' }
+    if ('@' in authority) return false
+    val host = authority.substringBefore(':').lowercase()
+    val d = domain.lowercase()
+    return host == d || host.endsWith(".$d")
 }
 
 /** Routes raw bridge payload JSON to a provider-agnostic [RouteResult]. Pure, commonMain, tested. */
@@ -34,6 +51,13 @@ class PayloadRouter(private val spec: WebProviderSpec) {
                     ?: return RouteResult.Unparsed
                 when (dom.page) {
                     "ok" -> dom.tracking?.let { RouteResult.Tracking(it) } ?: RouteResult.Unparsed
+                    "goto" ->
+                        if (dom.url != null && isAllowedHopUrl(dom.url, spec.cookieDomain)) {
+                            RouteResult.Goto(dom.url, dom.tracking)
+                        } else {
+                            // Bad hop target: salvage the coarse tracking if the extractor sent one.
+                            dom.tracking?.let { RouteResult.Tracking(it) } ?: RouteResult.Unparsed
+                        }
                     "notFound" -> RouteResult.NotFound
                     "loginWall" -> RouteResult.LoginWall
                     "challenge" -> RouteResult.Challenge
