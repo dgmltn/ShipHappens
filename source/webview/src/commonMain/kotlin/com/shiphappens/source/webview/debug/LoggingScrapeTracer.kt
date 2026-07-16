@@ -32,6 +32,8 @@ class LoggingScrapeTracer(
 
     override fun pageFinished(sourceId: String, url: String) = trace { log.i { "[$sourceId] pageFinished url=$url" } }
 
+    override fun hopStarted(sourceId: String, url: String) = trace { log.i { "[$sourceId] goto HOP url=$url" } }
+
     override fun loginState(sourceId: String, loggedIn: Boolean) = trace { log.i { "[$sourceId] isLoggedIn=$loggedIn" } }
 
     override fun apiCaptured(sourceId: String, url: String?, body: String) = trace {

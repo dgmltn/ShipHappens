@@ -1,14 +1,18 @@
 package com.shiphappens.source.webview
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.webkit.WebView
 import com.shiphappens.source.webview.debug.ScrapeTracer
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.Json
 
 /**
  * Runs a real page load in an off-screen WebView and returns the bridge payloads it produced.
@@ -30,6 +34,11 @@ class HeadlessWebViewScraper(
 
     override val isAvailable = true
     private val mutex = Mutex()
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val json = Json { ignoreUnknownKeys = true }
+
+    private fun isDomPayload(payload: String): Boolean =
+        runCatching { json.decodeFromString<BridgePayload>(payload).kind }.getOrNull() == "dom"
 
     override suspend fun scrape(spec: WebProviderSpec, trackingNumber: String): ScrapeResult = mutex.withLock {
         val url = spec.trackingUrl(trackingNumber)
@@ -47,7 +56,9 @@ class HeadlessWebViewScraper(
         val summary = if (result is ScrapeResult.Payloads) {
             val router = PayloadRouter(spec)
             val routed = result.payloads.map { router.route(it) }
-            if (routed.any { it is RouteResult.Tracking }) {
+            // A Goto with embedded coarse tracking is a genuine result (WebViewBasedSource will
+            // surface it), so it gets the same politeness caching as a rich extraction.
+            if (routed.any { it is RouteResult.Tracking || (it is RouteResult.Goto && it.tracking != null) }) {
                 throttle.record(url, result)
                 "${result.payloads.size} payload(s), TRACKING found — cached"
             } else {
@@ -68,21 +79,39 @@ class HeadlessWebViewScraper(
             val payloads = mutableListOf<String>()
             val done = CompletableDeferred<ScrapeResult>()
             val router = PayloadRouter(spec)
+            val hopped = AtomicBoolean(false)
             WebSessions.configure(
                 webView, spec,
                 onPayload = { payload ->
                     synchronized(payloads) { payloads += payload }
+                    fun completeWithPayloads() = done.complete(ScrapeResult.Payloads(synchronized(payloads) { payloads.toList() }))
                     // Complete as soon as a payload routes to a DEFINITIVE outcome — normally the
                     // captured API JSON (Tracking), which lands well before the heavy UPS SPA fires
                     // onPageFinished (and sometimes it never fires at all). A DOM "page:empty"
                     // result routes to Unparsed and must NOT complete the scrape: the DOM extractor
                     // frequently runs before the tracking XHR lands, so completing on empty would
                     // discard the API capture that arrives moments later.
-                    when (router.route(payload)) {
+                    when (val routed = router.route(payload)) {
                         is RouteResult.Tracking, is RouteResult.LoginWall,
-                        is RouteResult.Challenge, is RouteResult.NotFound ->
-                            done.complete(ScrapeResult.Payloads(synchronized(payloads) { payloads.toList() }))
-                        is RouteResult.Unparsed -> Unit // keep waiting (empty DOM before the API lands)
+                        is RouteResult.Challenge, is RouteResult.NotFound -> completeWithPayloads()
+                        is RouteResult.Goto ->
+                            // Bounded to ONE hop per scrape (design spec §1): the first goto navigates to
+                            // the shipment tracker within the same session/cookies; any later goto ends the
+                            // scrape instead, so a page cycle can't loop the WebView until timeout.
+                            if (hopped.compareAndSet(false, true)) {
+                                tracer.hopStarted(spec.sourceId, routed.url)
+                                // This callback runs on the WebView JavaBridge thread; WebView methods
+                                // must be called on main. The view may already be destroyed — absorb.
+                                mainHandler.post { runCatching { webView.loadUrl(routed.url) } }
+                            } else {
+                                completeWithPayloads()
+                            }
+                        is RouteResult.Unparsed ->
+                            // Pre-hop: keep waiting (empty DOM often precedes the API capture). Post-hop:
+                            // the target page's dom payload is the only terminator a DOM-only provider
+                            // will ever send, so even page:'empty' ends the scrape — the goto's embedded
+                            // coarse tracking still yields a result downstream.
+                            if (hopped.get() && isDomPayload(payload)) completeWithPayloads()
                     }
                 },
                 onEvent = { event ->

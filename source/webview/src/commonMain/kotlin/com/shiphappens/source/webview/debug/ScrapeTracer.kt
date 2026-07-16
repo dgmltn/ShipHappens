@@ -26,6 +26,9 @@ interface ScrapeTracer {
     /** The page finished loading. Not guaranteed to fire on heavy SPAs. */
     fun pageFinished(sourceId: String, url: String) {}
 
+    /** The extractor requested a goto hop and the scraper is navigating to [url] in-session. */
+    fun hopStarted(sourceId: String, url: String) {}
+
     /** The logged-in probe evaluated. */
     fun loginState(sourceId: String, loggedIn: Boolean) {}
 
