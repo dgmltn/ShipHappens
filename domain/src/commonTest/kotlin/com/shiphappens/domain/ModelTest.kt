@@ -15,6 +15,11 @@ class ModelTest {
         assertNull(WellKnownCarriers.byCode("dhl"))
     }
 
+    @Test fun amazon_carrier_is_well_known() {
+        assertEquals("#995C00", WellKnownCarriers.AMAZON.accentColorHex)
+        assertEquals(WellKnownCarriers.AMAZON, WellKnownCarriers.byCode("Amazon"))
+    }
+
     @Test fun fallback_color_is_deterministic_and_from_palette() {
         assertEquals(fallbackAccentColor("dhl"), fallbackAccentColor("dhl"))
         assertTrue(fallbackAccentColor("dhl").startsWith("#"))
