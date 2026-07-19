@@ -6,7 +6,8 @@ import com.shiphappens.source.webview.WebProviderSpec
 // DOM extractor for BOTH Amazon pages a scrape can visit (design spec §3). The scrape lands on
 // the order-details page (needs a signed-in session), picks the first undelivered shipment, and
 // emits {page:'goto'} toward its progress-tracker page, carrying the shipment's coarse status as
-// the fallback tracking. On the tracker page it extracts the full event history. Selector
+// the fallback tracking. On the tracker page it extracts the full event history plus the raw
+// delivery-window phrase (normalized by parseEtaWindow in the webview module, not here). Selector
 // constants are validated against the live site during device QA (Amazon requires login, so
 // off-device recon can't see these pages); the returned JSON shape is what unit tests and
 // PayloadRouter lock down.
@@ -52,6 +53,15 @@ function() {
   function etaFromArriving(t) {
     return (t && /arriving/i.test(t)) ? parseDay(('' + t).replace(/.*arriving/i, '')) : null;
   }
+  // Grabs the delivery-window phrase verbatim ("3:00 PM - 5:00 PM", "by 10 PM") for Kotlin's
+  // parseEtaWindow to normalize. No conversion here: the repo has no JS engine in commonTest, so
+  // anything clever in this blob is only verifiable by device QA.
+  function windowText(t) {
+    if (!t) return null;
+    var m = ('' + t).match(/\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:-|–|—|to)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)/i)
+         || ('' + t).match(/\bby\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)/i);
+    return m ? m[0] : null;
+  }
 
   if (/progress-tracker|ship-track/.test(href)) {
     // --- Shipment tracker page: the rich layer ---
@@ -81,12 +91,17 @@ function() {
     }
     events.reverse();  // page lists newest first; canonical order is ascending
     if (!statusText && !events.length) return {page: 'empty'};
-    var etaDay = parseDay(clean(document.querySelector('[class*="promise"], #expected-delivery-date'))) || etaFromArriving(statusText);
+    var promiseText = clean(document.querySelector('[class*="promise"], #expected-delivery-date'));
+    var etaDay = parseDay(promiseText) || etaFromArriving(statusText);
+    // Status line first (where Amazon quotes the window), promise element as the fallback. Never
+    // document.body — an event row's timestamp is not the promise.
+    var etaWindow = windowText(statusText) || windowText(promiseText);
     var newestLoc = null;
     for (var j = events.length - 1; j >= 0; j--) { if (events[j].location) { newestLoc = events[j].location; break; } }
     return {page: 'ok', tracking: {
       status: classify(statusText || (events.length ? events[events.length - 1].description : '')),
       etaDate: etaDay ? isoDate(etaDay) : null,
+      etaWindowText: etaWindow,
       location: newestLoc,
       events: events
     }};

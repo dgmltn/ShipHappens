@@ -15,7 +15,10 @@ import kotlinx.serialization.Serializable
  *
  * `status` values are [TrackingStatus] enum names; `timestamp` is an ISO-8601 instant;
  * `etaDate` is an ISO local date; `etaWindowStart`/`etaWindowEnd` are ISO local times bounding the
- * delivery window (start omitted => open-ended "by <end>"). Unknown or malformed values degrade gracefully
+ * delivery window (start omitted => open-ended "by <end>"). `etaWindowText` is the raw window phrase
+ * as it appeared on the page ("3:00 PM - 5:00 PM", "by 10 PM") for extractors that cannot normalize
+ * times themselves; it is parsed only when the ISO fields are absent, and is never persisted.
+ * Unknown or malformed values degrade gracefully
  * (UNKNOWN status, dropped event, null eta) rather than failing the whole scrape.
  */
 @Serializable
@@ -24,6 +27,7 @@ data class ScrapedTracking(
     val etaDate: String? = null,
     val etaWindowStart: String? = null,
     val etaWindowEnd: String? = null,
+    val etaWindowText: String? = null,
     val location: String? = null,
     val events: List<ScrapedEvent> = emptyList(),
 )
@@ -39,15 +43,21 @@ data class ScrapedEvent(
 private fun statusOrNull(name: String?): TrackingStatus? =
     name?.let { n -> TrackingStatus.entries.firstOrNull { it.name == n } }
 
-fun ScrapedTracking.toSnapshot(): TrackingSnapshot = TrackingSnapshot(
-    status = statusOrNull(status) ?: TrackingStatus.UNKNOWN,
-    etaDate = etaDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
-    etaWindowStart = etaWindowStart?.let { runCatching { LocalTime.parse(it) }.getOrNull() },
-    etaWindowEnd = etaWindowEnd?.let { runCatching { LocalTime.parse(it) }.getOrNull() },
-    latestLocation = location,
-    events = events.mapNotNull { e ->
-        runCatching { Instant.parse(e.timestamp) }.getOrNull()?.let { ts ->
-            TrackingEvent(timestamp = ts, description = e.description, location = e.location, status = statusOrNull(e.status))
-        }
-    },
-)
+fun ScrapedTracking.toSnapshot(): TrackingSnapshot {
+    val start = etaWindowStart?.let { runCatching { LocalTime.parse(it) }.getOrNull() }
+    val end = etaWindowEnd?.let { runCatching { LocalTime.parse(it) }.getOrNull() }
+    // Explicit ISO times win; free text is the fallback for DOM extractors (see EtaWindowParser).
+    val window = if (start != null || end != null) EtaWindow(start, end) else parseEtaWindow(etaWindowText)
+    return TrackingSnapshot(
+        status = statusOrNull(status) ?: TrackingStatus.UNKNOWN,
+        etaDate = etaDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+        etaWindowStart = window?.start,
+        etaWindowEnd = window?.end,
+        latestLocation = location,
+        events = events.mapNotNull { e ->
+            runCatching { Instant.parse(e.timestamp) }.getOrNull()?.let { ts ->
+                TrackingEvent(timestamp = ts, description = e.description, location = e.location, status = statusOrNull(e.status))
+            }
+        },
+    )
+}

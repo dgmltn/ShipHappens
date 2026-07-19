@@ -39,4 +39,10 @@ class AmazonWebSpecTest {
         assertTrue(AmazonWebSpec.extractionJs.contains("progress-tracker"))   // tracker-page branch
         assertTrue(AmazonWebSpec.extractionJs.contains("'goto'"))             // order-details hop
     }
+
+    @Test fun extraction_js_emits_raw_eta_window_text() {
+        // The blob only grabs the phrase; parsing lives in EtaWindowParser, where tests can reach it.
+        assertTrue(AmazonWebSpec.extractionJs.contains("etaWindowText"))
+        assertTrue(AmazonWebSpec.extractionJs.contains("windowText("))
+    }
 }

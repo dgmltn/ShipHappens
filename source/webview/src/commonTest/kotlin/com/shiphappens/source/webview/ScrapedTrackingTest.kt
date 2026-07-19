@@ -49,4 +49,28 @@ class ScrapedTrackingTest {
         assertEquals("kept", snap.events[0].description)
         assertNull(snap.events[0].status)          // unknown status string -> null
     }
+
+    @Test fun toSnapshot_parses_eta_window_text() {
+        val snap = ScrapedTracking(
+            status = "OUT_FOR_DELIVERY", etaDate = "2026-07-15",
+            etaWindowText = "Arriving today 3:00 PM - 5:00 PM",
+        ).toSnapshot()
+        assertEquals(LocalTime(15, 0), snap.etaWindowStart)
+        assertEquals(LocalTime(17, 0), snap.etaWindowEnd)
+    }
+
+    @Test fun explicit_window_times_win_over_text() {
+        val snap = ScrapedTracking(
+            status = "IN_TRANSIT", etaWindowEnd = "21:00",
+            etaWindowText = "3:00 PM - 5:00 PM",
+        ).toSnapshot()
+        assertNull(snap.etaWindowStart)
+        assertEquals(LocalTime(21, 0), snap.etaWindowEnd)
+    }
+
+    @Test fun unparseable_window_text_leaves_both_bounds_null() {
+        val snap = ScrapedTracking(status = "IN_TRANSIT", etaWindowText = "sometime tomorrow").toSnapshot()
+        assertNull(snap.etaWindowStart)
+        assertNull(snap.etaWindowEnd)
+    }
 }
