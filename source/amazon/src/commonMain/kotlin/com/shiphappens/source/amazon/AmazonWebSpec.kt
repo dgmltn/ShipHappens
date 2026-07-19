@@ -47,6 +47,11 @@ function() {
   function isoDate(d) {
     return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
   }
+  // "Arriving today" / "Arriving Tue, Jul 22" carries the ETA inside the status text on both the
+  // order-details header and the tracker page; strip everything up to "arriving" and parse the day.
+  function etaFromArriving(t) {
+    return (t && /arriving/i.test(t)) ? parseDay(('' + t).replace(/.*arriving/i, '')) : null;
+  }
 
   if (/progress-tracker|ship-track/.test(href)) {
     // --- Shipment tracker page: the rich layer ---
@@ -76,8 +81,7 @@ function() {
     }
     events.reverse();  // page lists newest first; canonical order is ascending
     if (!statusText && !events.length) return {page: 'empty'};
-    var etaDay = parseDay(clean(document.querySelector('[class*="promise"], #expected-delivery-date')));
-    if (!etaDay && statusText && /arriving/i.test(statusText)) etaDay = parseDay(statusText.replace(/.*arriving/i, ''));
+    var etaDay = parseDay(clean(document.querySelector('[class*="promise"], #expected-delivery-date'))) || etaFromArriving(statusText);
     var newestLoc = null;
     for (var j = events.length - 1; j >= 0; j--) { if (events[j].location) { newestLoc = events[j].location; break; } }
     return {page: 'ok', tracking: {
@@ -94,14 +98,17 @@ function() {
   var picks = [];
   for (var k = 0; k < cards.length; k++) {
     var head = clean(cards[k].querySelector('.shipment-top-row, [class*="shipment-status"], h4, h5')) || '';
-    picks.push({card: cards[k], status: classify(head)});
+    picks.push({card: cards[k], status: classify(head), head: head});
   }
   // First undelivered shipment; when everything is delivered, the last card (design spec §Decisions).
   var pick = null;
   for (var m = 0; m < picks.length; m++) { if (picks[m].status !== 'DELIVERED') { pick = picks[m]; break; } }
   if (!pick && picks.length) pick = picks[picks.length - 1];
   if (!pick) return {page: 'empty'};
-  var coarse = pick.status === 'UNKNOWN' ? null : {status: pick.status, etaDate: null, location: null, events: []};
+  // The order-details header already carries the ETA ("Arriving today") — capture it here so a
+  // shipment with no tracker link to hop to still yields a countdown, not a bare status.
+  var coarseEta = etaFromArriving(pick.head);
+  var coarse = pick.status === 'UNKNOWN' ? null : {status: pick.status, etaDate: coarseEta ? isoDate(coarseEta) : null, location: null, events: []};
   var link = pick.card.querySelector('a[href*="progress-tracker"], a[href*="ship-track"]');
   if (link && link.href) return {page: 'goto', url: link.href, tracking: coarse};
   if (coarse) return {page: 'ok', tracking: coarse};  // no tracker link (e.g. old delivered order)
