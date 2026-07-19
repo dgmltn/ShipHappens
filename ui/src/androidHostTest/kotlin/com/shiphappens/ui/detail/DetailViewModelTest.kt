@@ -159,6 +159,28 @@ class DetailViewModelTest {
         assertEquals("Arrives in 4 days", second.headline)
     }
 
+    @Test fun in_transit_without_eta_shows_status_not_waiting() = runTest {
+        // Amazon commonly reports status IN_TRANSIT with no etaDate. The top-bar headline must
+        // reflect the real status ("In transit"), matching the home card and the timeline — not
+        // fall through to "Waiting for first update", which is reserved for never-refreshed parcels.
+        val p = base(TrackingStatus.IN_TRANSIT, eta = null).copy(
+            carrier = WellKnownCarriers.AMAZON, lastRefreshedAt = Instant.fromEpochMilliseconds(1_752_100_000_000),
+        )
+        vm(p)
+        db.parcelDao().upsertParcel(p.toEntity())
+        val s = awaitState { it.loaded }
+        assertEquals("In transit", s.headline)
+    }
+
+    @Test fun never_refreshed_unknown_still_waits() = runTest {
+        // Genuinely no tracking data yet: UNKNOWN status, never refreshed, no ETA.
+        val p = base(TrackingStatus.UNKNOWN, eta = null).copy(etaTime = null)
+        vm(p)
+        db.parcelDao().upsertParcel(p.toEntity())
+        val s = awaitState { it.loaded }
+        assertEquals("Waiting for first update", s.headline)
+    }
+
     @Test fun web_button_shows_only_for_web_capable_carrier() = runTest {
         val ups = base(TrackingStatus.IN_TRANSIT, LocalDate(2026, 7, 14)).copy(carrier = WellKnownCarriers.UPS)
         vm(ups)

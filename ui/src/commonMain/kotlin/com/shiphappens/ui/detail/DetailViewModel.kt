@@ -61,7 +61,12 @@ class DetailViewModel(
         val headline = when {
             delivered -> "Delivered"
             status == TrackingStatus.EXCEPTION -> "Delivery exception"
-            days == null -> "Waiting for first update"
+            // Reserve "Waiting for first update" for a genuinely never-refreshed parcel — same
+            // guard as the home card (ListViewModel). A known status with no ETA (common for
+            // Amazon IN_TRANSIT parcels) falls back to the timeline label so the top bar, the
+            // timeline, and the home card can't disagree.
+            lastRefreshedAt == null && status == TrackingStatus.UNKNOWN -> "Waiting for first update"
+            days == null -> TRACKING_STEP_LABELS[effectiveStepIndex]
             days <= 0 -> "Arriving today"
             days == 1 -> "Arrives tomorrow"
             else -> "Arrives in $days days"
