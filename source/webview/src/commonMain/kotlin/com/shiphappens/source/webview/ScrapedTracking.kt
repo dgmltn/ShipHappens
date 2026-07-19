@@ -14,14 +14,16 @@ import kotlinx.serialization.Serializable
  * everything downstream of the JS bridge is provider-agnostic Kotlin.
  *
  * `status` values are [TrackingStatus] enum names; `timestamp` is an ISO-8601 instant;
- * `etaDate`/`etaTime` are ISO local date/time. Unknown or malformed values degrade gracefully
+ * `etaDate` is an ISO local date; `etaWindowStart`/`etaWindowEnd` are ISO local times bounding the
+ * delivery window (start omitted => open-ended "by <end>"). Unknown or malformed values degrade gracefully
  * (UNKNOWN status, dropped event, null eta) rather than failing the whole scrape.
  */
 @Serializable
 data class ScrapedTracking(
     val status: String,
     val etaDate: String? = null,
-    val etaTime: String? = null,
+    val etaWindowStart: String? = null,
+    val etaWindowEnd: String? = null,
     val location: String? = null,
     val events: List<ScrapedEvent> = emptyList(),
 )
@@ -40,7 +42,8 @@ private fun statusOrNull(name: String?): TrackingStatus? =
 fun ScrapedTracking.toSnapshot(): TrackingSnapshot = TrackingSnapshot(
     status = statusOrNull(status) ?: TrackingStatus.UNKNOWN,
     etaDate = etaDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
-    etaTime = etaTime?.let { runCatching { LocalTime.parse(it) }.getOrNull() },
+    etaWindowStart = etaWindowStart?.let { runCatching { LocalTime.parse(it) }.getOrNull() },
+    etaWindowEnd = etaWindowEnd?.let { runCatching { LocalTime.parse(it) }.getOrNull() },
     latestLocation = location,
     events = events.mapNotNull { e ->
         runCatching { Instant.parse(e.timestamp) }.getOrNull()?.let { ts ->

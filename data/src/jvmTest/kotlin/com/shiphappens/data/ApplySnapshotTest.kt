@@ -44,7 +44,7 @@ class ApplySnapshotTest {
             "p1",
             TrackingSnapshot(
                 status = TrackingStatus.IN_TRANSIT,
-                etaDate = LocalDate(2026, 7, 15), etaTime = LocalTime(21, 0),
+                etaDate = LocalDate(2026, 7, 15), etaWindowEnd = LocalTime(21, 0),
                 latestLocation = "Louisville, KY",
                 events = listOf(TrackingEvent(Instant.parse("2026-07-11T12:15:00Z"), "Departed from Facility", "Louisville, KY", TrackingStatus.IN_TRANSIT)),
             ),
@@ -54,6 +54,8 @@ class ApplySnapshotTest {
         val row = assertNotNull(db.parcelDao().getById("p1"))
         assertEquals(TrackingStatus.IN_TRANSIT.name, row.parcel.status)
         assertEquals("2026-07-15", row.parcel.etaDate)
+        assertEquals("21:00", row.parcel.etaWindowEnd)
+        assertNull(row.parcel.etaWindowStart)
         assertEquals("ups", row.parcel.sourceId)
         assertEquals(1_752_300_000_000, row.parcel.lastRefreshedAt)
         assertEquals(1, row.events.size)
@@ -69,6 +71,25 @@ class ApplySnapshotTest {
         assertEquals(TrackingStatus.IN_TRANSIT.name, row.parcel.status)
         assertEquals("2026-07-14", row.parcel.etaDate)
         assertEquals("Memphis, TN", row.parcel.latestLocation)
+    }
+
+    @Test fun end_only_snapshot_clears_stored_window_start() = runTest {
+        val r = repo(backgroundScope)
+        db.parcelDao().upsertParcel(
+            parcel.copy(etaWindowStart = LocalTime(15, 0), etaWindowEnd = LocalTime(17, 0)).toEntity(),
+        )
+        val ok = r.applySnapshot(
+            "p1",
+            TrackingSnapshot(status = TrackingStatus.UNKNOWN, etaWindowEnd = LocalTime(22, 0)),
+            sourceId = "ups",
+        )
+        assertTrue(ok)
+        val row = assertNotNull(db.parcelDao().getById("p1"))
+        // The window is one value split across two columns: a coarser end-only snapshot must
+        // clear the stale start rather than pairing it with the new end (which would render a
+        // window the carrier never quoted, e.g. "3:00 PM - 10:00 PM").
+        assertNull(row.parcel.etaWindowStart)
+        assertEquals("22:00", row.parcel.etaWindowEnd)
     }
 
     @Test fun missing_parcel_returns_false() = runTest {

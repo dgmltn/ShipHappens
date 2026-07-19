@@ -59,7 +59,7 @@ object UpsApiParser {
         return ScrapedTracking(
             status = classify(detail.packageStatusType, detail.packageStatus ?: ""),
             etaDate = (parseCompactDate(detail.sdd) ?: parseUpsDate(detail.scheduledDeliveryDate))?.toString(),
-            etaTime = parseClockTime(detail.sdt)?.toString(),
+            etaWindowEnd = parseClockTime(detail.sdt)?.toString(),
             location = activities.firstOrNull()?.location,
             events = events,
         )

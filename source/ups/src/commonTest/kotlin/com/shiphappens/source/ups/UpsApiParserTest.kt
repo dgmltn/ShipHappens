@@ -68,7 +68,8 @@ class UpsApiParserTest {
         val t = assertNotNull(UpsApiParser.parse(FIXTURE))
         assertEquals("IN_TRANSIT", t.status)
         assertEquals("2026-07-14", t.etaDate)  // from "sdd":"20260714"
-        assertEquals("14:30", t.etaTime)        // from "sdt":"14:30:00" (end of delivery window)
+        assertEquals("14:30", t.etaWindowEnd)   // from "sdt":"14:30:00" (end of delivery window)
+        assertNull(t.etaWindowStart)            // UPS gives no window start
         assertEquals("Riverside, CA, United States", t.location)  // newest activity's location
         assertEquals(4, t.events.size)
         // Events must be chronological ASCENDING (domain expectation); UPS sends newest-first.
@@ -85,7 +86,7 @@ class UpsApiParserTest {
             """{"trackDetails":[{"packageStatusType":"I","scheduledDeliveryDate":"07/15/2026"}]}""",
         ))
         assertEquals("2026-07-15", t.etaDate)
-        assertNull(t.etaTime)
+        assertNull(t.etaWindowEnd)
     }
 
     @Test fun status_type_codes_map_to_canonical() {

@@ -11,6 +11,7 @@ import com.shiphappens.source.webview.WebCapableSource
 import com.shiphappens.ui.util.TRACKING_STEP_LABELS
 import com.shiphappens.ui.util.design12h
 import com.shiphappens.ui.util.designFormat
+import com.shiphappens.ui.util.formatEtaWindow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -77,8 +78,10 @@ class DetailViewModel(
         val deliveredAt = if (delivered) events.lastOrNull { it.status == TrackingStatus.DELIVERED }?.timestamp else null
         val windowText = deliveredAt?.toLocalDateTime(tz)?.let { "${it.date.designFormat()} · ${it.time.design12h()}" }
             ?: etaDate?.let { d ->
-                val t = etaTime?.design12h()
-                d.designFormat() + when { t == null -> ""; delivered -> " · $t"; else -> " · by $t" }
+                // Delivered parcels show a bare time (no "by"/range); otherwise render the window.
+                val w = if (delivered) etaWindowEnd?.design12h()
+                        else formatEtaWindow(etaWindowStart, etaWindowEnd)
+                d.designFormat() + if (w == null) "" else " · $w"
             } ?: "—"
 
         val effectiveStep = effectiveStepIndex

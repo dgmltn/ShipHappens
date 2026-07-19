@@ -82,10 +82,16 @@ class ParcelRepository(
      */
     suspend fun applySnapshot(id: String, snapshot: TrackingSnapshot, sourceId: String): Boolean {
         val row = dao.getById(id) ?: return false
+        // etaWindowStart/etaWindowEnd are two halves of one value, so they're merged as a unit:
+        // if the snapshot carries either bound, take both from the snapshot (a start-less
+        // snapshot clears a stored start rather than leaving it paired with a new end); only
+        // when the snapshot carries neither bound do we preserve the existing row's window.
+        val newWindow = snapshot.etaWindowStart != null || snapshot.etaWindowEnd != null
         val updated = row.parcel.copy(
             status = if (snapshot.status == TrackingStatus.UNKNOWN) row.parcel.status else snapshot.status.name,
             etaDate = snapshot.etaDate?.toString() ?: row.parcel.etaDate,
-            etaTime = snapshot.etaTime?.toString() ?: row.parcel.etaTime,
+            etaWindowStart = if (newWindow) snapshot.etaWindowStart?.toString() else row.parcel.etaWindowStart,
+            etaWindowEnd = if (newWindow) snapshot.etaWindowEnd?.toString() else row.parcel.etaWindowEnd,
             latestLocation = snapshot.latestLocation ?: row.parcel.latestLocation,
             sourceId = sourceId,
             lastRefreshedAt = clock.now().toEpochMilliseconds(),

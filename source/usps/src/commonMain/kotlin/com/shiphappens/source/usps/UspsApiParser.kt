@@ -58,7 +58,7 @@ object UspsApiParser {
         return ScrapedTracking(
             status = overall,
             etaDate = parseDate(r.expectedDeliveryDate)?.toString(),
-            etaTime = parseTime(r.expectedDeliveryTime)?.toString(),
+            etaWindowEnd = parseTime(r.expectedDeliveryTime)?.toString(),
             location = events.lastOrNull { it.location != null }?.location,
             events = events,
         )

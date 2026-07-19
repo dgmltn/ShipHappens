@@ -62,7 +62,8 @@ class ParcelDaoTest {
         val dao = db().parcelDao()
         val original = parcel("a").copy(
             etaDate = kotlinx.datetime.LocalDate(2026, 7, 15),
-            etaTime = kotlinx.datetime.LocalTime(20, 0),
+            etaWindowStart = kotlinx.datetime.LocalTime(18, 0),
+            etaWindowEnd = kotlinx.datetime.LocalTime(20, 0),
             latestLocation = "Louisville, KY",
             sourceId = "ups",
         )

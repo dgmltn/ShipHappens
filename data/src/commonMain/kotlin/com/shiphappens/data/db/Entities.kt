@@ -14,7 +14,8 @@ data class ParcelEntity(
     val sourceId: String?,
     val status: String,
     val etaDate: String?,       // ISO-8601 LocalDate
-    val etaTime: String?,       // ISO-8601 LocalTime
+    val etaWindowStart: String?, // ISO-8601 LocalTime; null = open-ended ("by <end>")
+    val etaWindowEnd: String?,   // ISO-8601 LocalTime; the cutoff / "by" time
     val latestLocation: String?,
     val isArchived: Boolean,
     val archivedAt: Long?,      // epoch millis, for archived-tab ordering

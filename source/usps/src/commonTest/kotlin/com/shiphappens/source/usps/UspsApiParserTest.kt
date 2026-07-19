@@ -32,7 +32,7 @@ class UspsApiParserTest {
         val t = assertNotNull(UspsApiParser.parse(FIXTURE))
         assertEquals("IN_TRANSIT", t.status)
         assertEquals("2026-07-16", t.etaDate)
-        assertEquals("20:00", t.etaTime)
+        assertEquals("20:00", t.etaWindowEnd)
         assertEquals("SAN FRANCISCO, CA", t.location)  // newest event's city/state
         assertEquals(4, t.events.size)
         // Events chronological ASCENDING (domain expectation); USPS sends newest-first.
@@ -67,7 +67,7 @@ class UspsApiParserTest {
             """{"statusCategory":"In Transit","expectedDeliveryDate":"Wednesday, July 16, 2026","expectedDeliveryTime":"8:00pm"}""",
         ))
         assertEquals("2026-07-16", t.etaDate)
-        assertEquals("20:00", t.etaTime)
+        assertEquals("20:00", t.etaWindowEnd)
         val slash = assertNotNull(UspsApiParser.parse(
             """{"statusCategory":"In Transit","expectedDeliveryDate":"07/16/2026"}""",
         ))
@@ -102,7 +102,7 @@ class UspsApiParserTest {
         val t = assertNotNull(UspsApiParser.parse("""{"statusCategory":"Delivered"}"""))
         assertEquals("DELIVERED", t.status)
         assertNull(t.etaDate)
-        assertNull(t.etaTime)
+        assertNull(t.etaWindowEnd)
         assertNull(t.location)
         assertTrue(t.events.isEmpty())
     }

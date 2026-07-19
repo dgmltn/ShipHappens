@@ -83,7 +83,7 @@ class DetailViewModelTest {
 
     private fun base(status: TrackingStatus, eta: LocalDate?) = Parcel(
         id = "p1", name = "Trail running shoes", trackingNumber = "FX 8823 0199 4422",
-        carrier = WellKnownCarriers.FEDEX, status = status, etaDate = eta, etaTime = LocalTime(21, 0),
+        carrier = WellKnownCarriers.FEDEX, status = status, etaDate = eta, etaWindowEnd = LocalTime(21, 0),
         createdAt = Instant.fromEpochMilliseconds(0),
     )
 
@@ -97,6 +97,16 @@ class DetailViewModelTest {
         assertEquals("Estimated delivery", s.windowLabel)
         assertEquals("Sat, Jul 11 · by 9:00 PM", s.windowText)
         assertEquals("FedEx", s.carrierName)
+    }
+
+    @Test fun window_with_both_bounds_renders_a_range() = runTest {
+        val p = base(TrackingStatus.OUT_FOR_DELIVERY, LocalDate(2026, 7, 11))
+            .copy(etaWindowStart = LocalTime(15, 0), etaWindowEnd = LocalTime(17, 0))
+        vm(p)
+        db.parcelDao().upsertParcel(p.toEntity())
+        val s = awaitState { it.loaded }
+        assertEquals("Estimated delivery", s.windowLabel)
+        assertEquals("Sat, Jul 11 · 3:00 – 5:00 PM", s.windowText)
     }
 
     @Test fun timeline_marks_done_current_todo() = runTest {
@@ -135,7 +145,7 @@ class DetailViewModelTest {
         val deliveredAt = Instant.parse("2026-07-11T19:12:00Z")
         val delivered = TrackingEvent(deliveredAt, "Delivered, Front Door/Porch", "CARLSBAD, CA 92009", TrackingStatus.DELIVERED)
         // No ETA at all — the USPS DOM-scrape shape (delivered pages carry no expected-delivery block).
-        val p = base(TrackingStatus.DELIVERED, eta = null).copy(etaTime = null, events = listOf(delivered))
+        val p = base(TrackingStatus.DELIVERED, eta = null).copy(etaWindowEnd = null, events = listOf(delivered))
         vm(p)
         db.parcelDao().upsertParcel(p.toEntity())
         db.parcelDao().replaceEvents("p1", p.events.map { it.toEntity("p1") })
@@ -174,7 +184,7 @@ class DetailViewModelTest {
 
     @Test fun never_refreshed_unknown_still_waits() = runTest {
         // Genuinely no tracking data yet: UNKNOWN status, never refreshed, no ETA.
-        val p = base(TrackingStatus.UNKNOWN, eta = null).copy(etaTime = null)
+        val p = base(TrackingStatus.UNKNOWN, eta = null).copy(etaWindowEnd = null)
         vm(p)
         db.parcelDao().upsertParcel(p.toEntity())
         val s = awaitState { it.loaded }

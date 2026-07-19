@@ -13,7 +13,7 @@ class ScrapedTrackingTest {
 
     @Test fun decodes_canonical_json() {
         val decoded = json.decodeFromString<ScrapedTracking>(
-            """{"status":"IN_TRANSIT","etaDate":"2026-07-15","etaTime":"21:00","location":"Louisville, KY",
+            """{"status":"IN_TRANSIT","etaDate":"2026-07-15","etaWindowEnd":"21:00","location":"Louisville, KY",
                 "events":[{"timestamp":"2026-07-11T12:15:00Z","description":"Departed from Facility","location":"Louisville, KY","status":"IN_TRANSIT"}]}""",
         )
         assertEquals("IN_TRANSIT", decoded.status)
@@ -22,12 +22,13 @@ class ScrapedTrackingTest {
 
     @Test fun toSnapshot_maps_all_fields() {
         val snap = ScrapedTracking(
-            status = "OUT_FOR_DELIVERY", etaDate = "2026-07-15", etaTime = "21:00", location = "Memphis, TN",
+            status = "OUT_FOR_DELIVERY", etaDate = "2026-07-15", etaWindowEnd = "21:00", location = "Memphis, TN",
             events = listOf(ScrapedEvent("2026-07-11T12:15:00Z", "Departed", "Louisville, KY", "IN_TRANSIT")),
         ).toSnapshot()
         assertEquals(TrackingStatus.OUT_FOR_DELIVERY, snap.status)
         assertEquals(LocalDate(2026, 7, 15), snap.etaDate)
-        assertEquals(LocalTime(21, 0), snap.etaTime)
+        assertEquals(LocalTime(21, 0), snap.etaWindowEnd)
+        assertNull(snap.etaWindowStart)
         assertEquals("Memphis, TN", snap.latestLocation)
         assertEquals(1, snap.events.size)
         assertEquals(TrackingStatus.IN_TRANSIT, snap.events[0].status)
@@ -35,7 +36,7 @@ class ScrapedTrackingTest {
 
     @Test fun toSnapshot_tolerates_garbage() {
         val snap = ScrapedTracking(
-            status = "SOMETHING_NEW", etaDate = "not-a-date", etaTime = "late",
+            status = "SOMETHING_NEW", etaDate = "not-a-date", etaWindowEnd = "late",
             events = listOf(
                 ScrapedEvent("garbage-timestamp", "dropped", null, null),
                 ScrapedEvent("2026-07-11T12:15:00Z", "kept", null, "NOT_A_STATUS"),
@@ -43,7 +44,7 @@ class ScrapedTrackingTest {
         ).toSnapshot()
         assertEquals(TrackingStatus.UNKNOWN, snap.status)
         assertNull(snap.etaDate)
-        assertNull(snap.etaTime)
+        assertNull(snap.etaWindowEnd)
         assertEquals(1, snap.events.size)          // bad-timestamp event dropped
         assertEquals("kept", snap.events[0].description)
         assertNull(snap.events[0].status)          // unknown status string -> null

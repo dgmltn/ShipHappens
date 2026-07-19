@@ -28,6 +28,7 @@ data class TrackingSnapshot(
     val status: TrackingStatus,
     val events: List<TrackingEvent> = emptyList(),
     val etaDate: LocalDate? = null,
-    val etaTime: LocalTime? = null,
+    val etaWindowStart: LocalTime? = null,
+    val etaWindowEnd: LocalTime? = null,
     val latestLocation: String? = null,
 )
