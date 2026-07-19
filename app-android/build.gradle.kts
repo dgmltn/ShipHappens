@@ -20,6 +20,7 @@ android {
 dependencies {
     implementation(projects.ui)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.core.splashscreen)
     implementation(platform(libs.koin.bom))
     implementation(libs.koin.android)
 }

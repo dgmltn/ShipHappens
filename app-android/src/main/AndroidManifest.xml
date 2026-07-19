@@ -4,7 +4,9 @@
     <application
         android:name=".ShipHappensApplication"
         android:label="@string/app_name"
-        android:theme="@style/Theme.ShipHappens"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:theme="@style/Theme.ShipHappens.Starting"
         android:supportsRtl="true">
         <activity
             android:name=".MainActivity"

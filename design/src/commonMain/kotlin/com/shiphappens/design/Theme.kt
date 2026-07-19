@@ -31,6 +31,7 @@ object ShipColors {
     val card = Color(0xFFFFFFFF)
     val cardAlt = Color(0xFFFBFAF7)
     val ink = Color(0xFF17150F)
+    val brand = Color(0xFF1E3A8F)
     val muted = Color(0xFF8A857C)
     val faint = Color(0xFFA8A296)
     val hairline = Color(0xFFECEAE3)

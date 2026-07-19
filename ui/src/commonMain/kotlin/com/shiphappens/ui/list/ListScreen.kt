@@ -184,7 +184,7 @@ private fun Header(state: ListUiState, onOpenSettings: () -> Unit) {
             )
             Text(
                 "Ship Happens",
-                color = ShipColors.ink,
+                color = ShipColors.brand,
                 fontSize = 31.sp,
                 fontWeight = FontWeight.ExtraBold,
                 fontFamily = hankenFamily()
