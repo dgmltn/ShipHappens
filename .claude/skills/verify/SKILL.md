@@ -8,8 +8,8 @@ description: Build, launch, and drive Ship Happens on an Android emulator to ver
 ## Build & launch
 
 ```bash
-./gradlew :app-android:installDebug            # applicationId com.shiphappens
-adb -s <serial> shell am start -n com.shiphappens/com.shiphappens.android.MainActivity
+./gradlew :app-android:installDebug            # applicationId com.dgmltn.shiphappens
+adb -s <serial> shell am start -n com.dgmltn.shiphappens/com.dgmltn.shiphappens.android.MainActivity
 adb -s <serial> exec-out screencap -p > shot.png
 ```
 

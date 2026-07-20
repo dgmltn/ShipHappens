@@ -6,7 +6,7 @@ plugins {
 
 kotlin {
     android {
-        namespace = "com.shiphappens.source.webview"
+        namespace = "com.dgmltn.shiphappens.source.webview"
         compileSdk = providers.gradleProperty("shiphappens.compileSdk").get().toInt()
         minSdk = providers.gradleProperty("shiphappens.minSdk").get().toInt()
     }

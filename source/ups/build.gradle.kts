@@ -6,7 +6,7 @@ plugins {
 
 kotlin {
     android {
-        namespace = "com.shiphappens.source.ups"
+        namespace = "com.dgmltn.shiphappens.source.ups"
         compileSdk = providers.gradleProperty("shiphappens.compileSdk").get().toInt()
         minSdk = providers.gradleProperty("shiphappens.minSdk").get().toInt()
     }

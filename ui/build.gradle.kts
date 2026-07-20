@@ -8,7 +8,7 @@ plugins {
 
 kotlin {
     android {
-        namespace = "com.shiphappens.ui"
+        namespace = "com.dgmltn.shiphappens.ui"
         compileSdk = providers.gradleProperty("shiphappens.compileSdk").get().toInt()
         minSdk = providers.gradleProperty("shiphappens.minSdk").get().toInt()
         // Host tests: un-mocked Android SDK methods return default values instead of throwing

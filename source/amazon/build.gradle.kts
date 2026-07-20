@@ -5,7 +5,7 @@ plugins {
 
 kotlin {
     android {
-        namespace = "com.shiphappens.source.amazon"
+        namespace = "com.dgmltn.shiphappens.source.amazon"
         compileSdk = providers.gradleProperty("shiphappens.compileSdk").get().toInt()
         minSdk = providers.gradleProperty("shiphappens.minSdk").get().toInt()
     }

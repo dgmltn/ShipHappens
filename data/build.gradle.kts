@@ -7,7 +7,7 @@ plugins {
 
 kotlin {
     android {
-        namespace = "com.shiphappens.data"
+        namespace = "com.dgmltn.shiphappens.data"
         compileSdk = providers.gradleProperty("shiphappens.compileSdk").get().toInt()
         minSdk = providers.gradleProperty("shiphappens.minSdk").get().toInt()
     }

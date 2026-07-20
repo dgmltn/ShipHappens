@@ -36,7 +36,7 @@ app-ios/       iOS application shell (SwiftUI entry point hosting the shared Com
 Dependency direction is one-way: `source/*` depends on `source/api` (and `domain` for domain
 types) but never on `data` or `ui`; `data` depends on `source/api` for the `TrackingSource`
 contract but not on any specific source; `design` depends only on `domain`; `ui` wires everything
-together in `ui/src/commonMain/kotlin/com/shiphappens/ui/di/AppModules.kt`.
+together in `ui/src/commonMain/kotlin/com/dgmltn/shiphappens/ui/di/AppModules.kt`.
 
 ## Build & run
 
@@ -47,7 +47,7 @@ together in `ui/src/commonMain/kotlin/com/shiphappens/ui/di/AppModules.kt`.
 ```
 
 Produces `app-android/build/outputs/apk/debug/app-android-debug.apk` (applicationId
-`com.shiphappens`). Install with `adb install` or run the `app-android` configuration from
+`com.dgmltn.shiphappens`). Install with `adb install` or run the `app-android` configuration from
 Android Studio / IntelliJ.
 
 ### iOS
@@ -101,7 +101,7 @@ touches `domain` or `data`:
    val myNewSourceModule: Module = module { single { MyNewSource() } bind TrackingSource::class }
    ```
 3. **Register it** in `appModules()` in
-   `ui/src/commonMain/kotlin/com/shiphappens/ui/di/AppModules.kt` — add the module to the list
+   `ui/src/commonMain/kotlin/com/dgmltn/shiphappens/ui/di/AppModules.kt` — add the module to the list
    returned there. `SourceRegistry` (in `data`) picks up every bound `TrackingSource`
    automatically; nothing in `data` needs to change.
 

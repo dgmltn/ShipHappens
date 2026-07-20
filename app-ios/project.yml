@@ -1,6 +1,6 @@
 name: ShipHappens
 options:
-  bundleIdPrefix: com.shiphappens
+  bundleIdPrefix: com.dgmltn.shiphappens
   deploymentTarget:
     iOS: "16.0"
 settings:
@@ -19,7 +19,7 @@ targets:
         CADisableMinimumFrameDurationOnPhone: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.shiphappens
+        PRODUCT_BUNDLE_IDENTIFIER: com.dgmltn.shiphappens
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         OTHER_LDFLAGS: $(inherited) -framework SharedUI
         FRAMEWORK_SEARCH_PATHS: $(inherited) $(SRCROOT)/../ui/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)

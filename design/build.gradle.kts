@@ -7,7 +7,7 @@ plugins {
 
 kotlin {
     android {
-        namespace = "com.shiphappens.design"
+        namespace = "com.dgmltn.shiphappens.design"
         compileSdk = providers.gradleProperty("shiphappens.compileSdk").get().toInt()
         minSdk = providers.gradleProperty("shiphappens.minSdk").get().toInt()
         androidResources.enable = true
@@ -28,4 +28,4 @@ kotlin {
     }
 }
 
-compose.resources { packageOfResClass = "com.shiphappens.design.res"; publicResClass = true }
+compose.resources { packageOfResClass = "com.dgmltn.shiphappens.design.res"; publicResClass = true }
