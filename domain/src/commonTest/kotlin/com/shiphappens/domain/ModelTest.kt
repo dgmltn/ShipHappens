@@ -16,7 +16,7 @@ class ModelTest {
     }
 
     @Test fun amazon_carrier_is_well_known() {
-        assertEquals("#995C00", WellKnownCarriers.AMAZON.accentColorHex)
+        assertEquals("#FEBD69", WellKnownCarriers.AMAZON.accentColorHex)
         assertEquals(WellKnownCarriers.AMAZON, WellKnownCarriers.byCode("Amazon"))
     }
 

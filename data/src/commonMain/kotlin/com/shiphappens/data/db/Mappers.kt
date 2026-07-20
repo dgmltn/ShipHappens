@@ -22,7 +22,10 @@ fun TrackingEvent.toEntity(parcelId: String) = TrackingEventEntity(
 
 fun ParcelWithEvents.toDomain(): Parcel = Parcel(
     id = parcel.id, name = parcel.name, trackingNumber = parcel.trackingNumber,
-    carrier = Carrier(parcel.carrierCode, parcel.carrierName, parcel.carrierColor),
+    // Well-known carriers resolve their accent from code so brand-color changes reach
+    // parcels already in the DB; unknown carriers keep whatever color was stored.
+    carrier = WellKnownCarriers.byCode(parcel.carrierCode)?.copy(displayName = parcel.carrierName)
+        ?: Carrier(parcel.carrierCode, parcel.carrierName, parcel.carrierColor),
     sourceId = parcel.sourceId,
     status = runCatching { TrackingStatus.valueOf(parcel.status) }.getOrDefault(TrackingStatus.UNKNOWN),
     etaDate = parcel.etaDate?.let(LocalDate::parse),
