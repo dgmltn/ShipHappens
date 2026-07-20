@@ -40,6 +40,20 @@ class AmazonWebSpecTest {
         assertTrue(AmazonWebSpec.extractionJs.contains("'goto'"))             // order-details hop
     }
 
+    @Test fun extraction_js_targets_the_data_component_order_details_layout() {
+        // Regression guard for the 2026-07-19 QA failure: the class-based card/status selectors
+        // matched the wrong elements on the live page, classifying every shipment UNKNOWN and
+        // returning page:'empty'. These are the attributes the live DOM actually exposes.
+        assertTrue(AmazonWebSpec.extractionJs.contains("""[data-component="shipmentCard"]"""))
+        assertTrue(AmazonWebSpec.extractionJs.contains("""[data-component="shipmentStatus"]"""))
+    }
+
+    @Test fun extraction_js_reports_why_it_gave_up() {
+        // page:'empty' alone can't be debugged off-device — each bail-out names its branch.
+        assertTrue(AmazonWebSpec.extractionJs.contains("noShipmentCards"))
+        assertTrue(AmazonWebSpec.extractionJs.contains("cardHasNoStatusOrLink"))
+    }
+
     @Test fun extraction_js_emits_raw_eta_window_text() {
         // The blob only grabs the phrase; parsing lives in EtaWindowParser, where tests can reach it.
         assertTrue(AmazonWebSpec.extractionJs.contains("etaWindowText"))

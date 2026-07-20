@@ -73,7 +73,9 @@ object BridgeScripts {
     var extractor = (${spec.extractionJs});
     post(extractor() || {page: 'empty'});
   } catch (e) {
-    post({page: 'empty'});
+    // A thrown extractor and a genuinely empty page both route to Unparsed; without 'why' the
+    // trace log can't tell them apart, and a selector hunt would start from the wrong premise.
+    post({page: 'empty', why: 'extractorThrew', error: '' + (e && e.message ? e.message : e)});
   }
 })();
 """.trimIndent()

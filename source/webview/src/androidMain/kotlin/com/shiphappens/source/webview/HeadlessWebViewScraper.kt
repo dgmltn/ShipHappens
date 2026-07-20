@@ -107,11 +107,16 @@ class HeadlessWebViewScraper(
                                 completeWithPayloads()
                             }
                         is RouteResult.Unparsed ->
-                            // Pre-hop: keep waiting (empty DOM often precedes the API capture). Post-hop:
-                            // the target page's dom payload is the only terminator a DOM-only provider
-                            // will ever send, so even page:'empty' ends the scrape — the goto's embedded
-                            // coarse tracking still yields a result downstream.
-                            if (hopped.get() && isDomPayload(payload)) completeWithPayloads()
+                            // Post-hop: the target page's dom payload is the only terminator a DOM-only
+                            // provider will ever send, so even page:'empty' ends the scrape — the goto's
+                            // embedded coarse tracking still yields a result downstream.
+                            // Pre-hop: normally keep waiting, because an empty DOM often precedes the
+                            // API capture. But a provider with no apiUrlPatterns has no second source to
+                            // wait for, so waiting can only ever end in the backstop timeout — end the
+                            // scrape now and report the failure in seconds instead of hanging 30s.
+                            if (isDomPayload(payload) && (hopped.get() || spec.apiUrlPatterns.isEmpty())) {
+                                completeWithPayloads()
+                            }
                     }
                 },
                 onEvent = { event ->

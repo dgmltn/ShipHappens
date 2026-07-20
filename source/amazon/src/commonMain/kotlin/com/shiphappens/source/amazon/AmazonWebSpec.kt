@@ -33,6 +33,30 @@ function() {
     return 'UNKNOWN';
   }
   function clean(el) { return el ? el.textContent.replace(/\s+/g, ' ').trim() : null; }
+  // Amazon needs a login to reach these pages, so selectors can only be verified on-device. A bare
+  // {page:'empty'} can't say WHICH branch bailed, so every empty return carries why/probe/detail:
+  // the tracer logs it (debug builds only, bounded length) and that log IS the recon that a
+  // selector fix has to be based on. Extra keys are ignored by DomExtraction's decoder.
+  function probe() {
+    var sel = ['.shipment', '[class*="shipment-info-container"]', '[data-component="shipments"] .a-box',
+               '[data-component]', '.a-box', 'a[href*="progress-tracker"]', 'a[href*="ship-track"]'];
+    var out = {};
+    for (var p = 0; p < sel.length; p++) {
+      try { out[sel[p]] = document.querySelectorAll(sel[p]).length; } catch (e) { out[sel[p]] = -1; }
+    }
+    var dc = document.querySelectorAll('[data-component]');
+    var names = [];
+    for (var n = 0; n < dc.length && names.length < 20; n++) {
+      var v = dc[n].getAttribute('data-component');
+      if (v && names.indexOf(v) < 0) names.push(v);
+    }
+    out.dataComponents = names;
+    return out;
+  }
+  function empty(why, detail) {
+    return {page: 'empty', why: why, url: href, textHead: text.replace(/\s+/g, ' ').slice(0, 300),
+            probe: probe(), detail: detail || null};
+  }
   // Amazon's day labels ("Today", "Yesterday", "Tuesday, July 15") omit the year; V8 would guess
   // 2001, so append the current year, with a rollover guard for December events read in January.
   function parseDay(label) {
@@ -90,7 +114,7 @@ function() {
       });
     }
     events.reverse();  // page lists newest first; canonical order is ascending
-    if (!statusText && !events.length) return {page: 'empty'};
+    if (!statusText && !events.length) return empty('trackerNoStatusNoEvents', 'nodes=' + nodes.length);
     var promiseText = clean(document.querySelector('[class*="promise"], #expected-delivery-date'));
     var etaDay = parseDay(promiseText) || etaFromArriving(statusText);
     // Status line first (where Amazon quotes the window), promise element as the fallback. Never
@@ -109,17 +133,25 @@ function() {
 
   // --- Order-details page: pick the target shipment, hop to its tracker ---
   if (/problem finding this order|couldn't find that order|can't find that order|not a valid order/i.test(text)) return {page: 'notFound'};
-  var cards = document.querySelectorAll('.shipment, [class*="shipment-info-container"], [data-component="shipments"] .a-box');
+  // Live QA (2026-07-19) showed this page is built from data-component attributes, not the classes
+  // below: '[data-component="shipments"] .a-box' matched inner boxes whose status text and tracker
+  // link both live elsewhere, so every card classified UNKNOWN and the scrape bailed as empty. Real
+  // card is 'shipmentCard'; the class selectors stay as fallbacks for older/A-B layouts.
+  var cards = document.querySelectorAll('[data-component="shipmentCard"]');
+  if (!cards.length) cards = document.querySelectorAll('.shipment, [class*="shipment-info-container"], [data-component="shipments"] .a-box');
   var picks = [];
   for (var k = 0; k < cards.length; k++) {
-    var head = clean(cards[k].querySelector('.shipment-top-row, [class*="shipment-status"], h4, h5')) || '';
+    var head = clean(cards[k].querySelector('[data-component="shipmentStatus"], .shipment-top-row, [class*="shipment-status"], h4, h5')) || '';
+    // Last resort: the card's own leading text is the status headline ("Delivered today"). Bounded
+    // to one line so trailing action buttons ("Return items") can't trip the EXCEPTION branch.
+    if (!head) head = (('' + (cards[k].innerText || '')).split('\n')[0] || '').trim();
     picks.push({card: cards[k], status: classify(head), head: head});
   }
   // First undelivered shipment; when everything is delivered, the last card (design spec §Decisions).
   var pick = null;
   for (var m = 0; m < picks.length; m++) { if (picks[m].status !== 'DELIVERED') { pick = picks[m]; break; } }
   if (!pick && picks.length) pick = picks[picks.length - 1];
-  if (!pick) return {page: 'empty'};
+  if (!pick) return empty('noShipmentCards');
   // The order-details header already carries the ETA ("Arriving today") — capture it here so a
   // shipment with no tracker link to hop to still yields a countdown, not a bare status.
   var coarseEta = etaFromArriving(pick.head);
@@ -127,7 +159,7 @@ function() {
   var link = pick.card.querySelector('a[href*="progress-tracker"], a[href*="ship-track"]');
   if (link && link.href) return {page: 'goto', url: link.href, tracking: coarse};
   if (coarse) return {page: 'ok', tracking: coarse};  // no tracker link (e.g. old delivered order)
-  return {page: 'empty'};
+  return empty('cardHasNoStatusOrLink', 'cards=' + cards.length + ' head=' + pick.head);
 }
 """.trimIndent()
 
