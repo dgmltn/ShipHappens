@@ -1,7 +1,10 @@
 package com.dgmltn.shiphappens.source.amazon
 
+import com.dgmltn.shiphappens.source.webview.DomCard
+import com.dgmltn.shiphappens.source.webview.DomRaw
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -37,7 +40,24 @@ class AmazonWebSpecTest {
     @Test fun extraction_js_is_a_function_expression_covering_both_pages() {
         assertTrue(AmazonWebSpec.extractionJs.trimStart().startsWith("function"))
         assertTrue(AmazonWebSpec.extractionJs.contains("progress-tracker"))   // tracker-page branch
-        assertTrue(AmazonWebSpec.extractionJs.contains("'goto'"))             // order-details hop
+        assertTrue(AmazonWebSpec.extractionJs.contains("kind: 'cards'"))      // order-details branch
+    }
+
+    @Test fun extraction_js_decides_nothing_it_only_reads() {
+        // The blob has no test harness (no JS engine in commonTest), so status vocabulary and
+        // shipment selection must stay in AmazonPageLogic where AmazonPageLogicTest can reach them.
+        // Guarding the absence keeps a "quick fix" from drifting back into the untestable layer.
+        assertFalse(AmazonWebSpec.extractionJs.contains("DELIVERED"))
+        assertFalse(AmazonWebSpec.extractionJs.contains("EXCEPTION"))
+        assertFalse(AmazonWebSpec.extractionJs.contains("classify"))
+    }
+
+    @Test fun raw_extractions_are_routed_through_kotlin() {
+        val cards = DomRaw(
+            kind = "cards",
+            cards = listOf(DomCard(head = "Arriving today", href = "https://www.amazon.com/progress-tracker/p")),
+        )
+        assertEquals("goto", AmazonWebSpec.parseRaw(cards)?.page)
     }
 
     @Test fun extraction_js_targets_the_data_component_order_details_layout() {
@@ -51,7 +71,7 @@ class AmazonWebSpecTest {
     @Test fun extraction_js_reports_why_it_gave_up() {
         // page:'empty' alone can't be debugged off-device — each bail-out names its branch.
         assertTrue(AmazonWebSpec.extractionJs.contains("noShipmentCards"))
-        assertTrue(AmazonWebSpec.extractionJs.contains("cardHasNoStatusOrLink"))
+        assertTrue(AmazonWebSpec.extractionJs.contains("trackerNoStatusNoEvents"))
     }
 
     @Test fun extraction_js_emits_raw_eta_window_text() {

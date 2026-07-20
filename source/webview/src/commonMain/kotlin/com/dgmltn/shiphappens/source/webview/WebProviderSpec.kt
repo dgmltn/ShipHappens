@@ -10,7 +10,9 @@ import com.dgmltn.shiphappens.domain.Carrier
  * JS fields are small, versioned-in-code scripts:
  *  - [isLoggedInJs]: expression evaluating to a boolean in page context.
  *  - [extractionJs]: a JS *function expression* `function(){...}` returning
- *    `{page: 'ok'|'notFound'|'loginWall'|'challenge'|'empty', tracking: <canonical ScrapedTracking>}`.
+ *    `{page: 'ok'|'goto'|'raw'|'notFound'|'loginWall'|'challenge'|'empty', tracking: <canonical
+ *    ScrapedTracking>}`. Prefer `'raw'` + [parseRaw] over classifying in JS: commonTest has no JS
+ *    engine, so decisions made in the blob can only be checked by scraping on a device.
  *  - [apiUrlPatterns]: JS-compatible regex source strings matched against fetch/XHR URLs.
  */
 class WebProviderSpec(
@@ -24,6 +26,12 @@ class WebProviderSpec(
     val challengeMarkers: List<String>,
     val extractionJs: String,
     val parseApi: (url: String?, body: String) -> ScrapedTracking?,
+    /**
+     * Turns a `page:'raw'` extraction's verbatim page text into an outcome, so status vocabulary
+     * and card-selection rules live in unit-testable Kotlin instead of [extractionJs] (see [DomRaw]).
+     * Returning null, or another `page:'raw'`, routes to Unparsed.
+     */
+    val parseRaw: (DomRaw) -> DomExtraction? = { null },
 ) {
     /** Origin rules for androidx.webkit's WebMessageListener / document-start script APIs. */
     fun allowedOriginRules(): List<String> = listOf("https://*.$cookieDomain", "https://$cookieDomain")

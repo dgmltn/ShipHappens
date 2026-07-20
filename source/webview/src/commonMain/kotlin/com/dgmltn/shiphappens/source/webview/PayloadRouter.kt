@@ -9,7 +9,41 @@ data class BridgePayload(val kind: String, val url: String? = null, val body: St
 
 /** Parsed body of a `kind == "dom"` payload (the extraction runner's output). */
 @Serializable
-data class DomExtraction(val page: String, val url: String? = null, val tracking: ScrapedTracking? = null)
+data class DomExtraction(
+    val page: String,
+    val url: String? = null,
+    val tracking: ScrapedTracking? = null,
+    val raw: DomRaw? = null,
+)
+
+/**
+ * Verbatim page text for extractors that classify in Kotlin rather than in the JS blob.
+ *
+ * commonTest has no JS engine, so anything decided inside [WebProviderSpec.extractionJs] is
+ * verifiable only by rescraping on a device — which is how a status-vocabulary bug shipped to QA
+ * on 2026-07-19. A `page:'raw'` extraction therefore carries the strings it read and nothing
+ * more; [WebProviderSpec.parseRaw] turns them into an outcome in testable Kotlin.
+ *
+ * [kind] names which page produced this ("cards" for an order/shipment list, "tracker" for a
+ * detail page); the fields each kind populates are provider-documented.
+ */
+@Serializable
+data class DomRaw(
+    val kind: String,
+    val cards: List<DomCard> = emptyList(),
+    val statusText: String? = null,
+    val etaDate: String? = null,
+    val etaWindowText: String? = null,
+    val events: List<DomRawEvent> = emptyList(),
+)
+
+/** One shipment card from a list page: its status headline and detail-page link, unclassified. */
+@Serializable
+data class DomCard(val head: String = "", val href: String? = null, val etaDate: String? = null)
+
+/** One event row, timestamp already normalized to ISO-8601 by the page's own date context. */
+@Serializable
+data class DomRawEvent(val timestamp: String, val description: String, val location: String? = null)
 
 sealed interface RouteResult {
     data class Tracking(val tracking: ScrapedTracking) : RouteResult
@@ -49,22 +83,32 @@ class PayloadRouter(private val spec: WebProviderSpec) {
             "dom" -> {
                 val dom = runCatching { json.decodeFromString<DomExtraction>(payload.body) }.getOrNull()
                     ?: return RouteResult.Unparsed
-                when (dom.page) {
-                    "ok" -> dom.tracking?.let { RouteResult.Tracking(it) } ?: RouteResult.Unparsed
-                    "goto" ->
-                        if (dom.url != null && isAllowedHopUrl(dom.url, spec.cookieDomain)) {
-                            RouteResult.Goto(dom.url, dom.tracking)
-                        } else {
-                            // Bad hop target: salvage the coarse tracking if the extractor sent one.
-                            dom.tracking?.let { RouteResult.Tracking(it) } ?: RouteResult.Unparsed
-                        }
-                    "notFound" -> RouteResult.NotFound
-                    "loginWall" -> RouteResult.LoginWall
-                    "challenge" -> RouteResult.Challenge
-                    else -> RouteResult.Unparsed
-                }
+                routeDom(dom)
             }
             else -> RouteResult.Unparsed
         }
+    }
+
+    private fun routeDom(dom: DomExtraction): RouteResult = when (dom.page) {
+        "ok" -> dom.tracking?.let { RouteResult.Tracking(it) } ?: RouteResult.Unparsed
+        "goto" ->
+            if (dom.url != null && isAllowedHopUrl(dom.url, spec.cookieDomain)) {
+                RouteResult.Goto(dom.url, dom.tracking)
+            } else {
+                // Bad hop target: salvage the coarse tracking if the extractor sent one.
+                dom.tracking?.let { RouteResult.Tracking(it) } ?: RouteResult.Unparsed
+            }
+        // Provider Kotlin decides the outcome, then that outcome routes by the same rules above —
+        // notably the hop-URL check, which a provider must not be able to opt out of. Re-entering
+        // 'raw' is refused so a hook can't loop.
+        "raw" -> dom.raw
+            ?.let { spec.parseRaw(it) }
+            ?.takeIf { it.page != "raw" }
+            ?.let { routeDom(it) }
+            ?: RouteResult.Unparsed
+        "notFound" -> RouteResult.NotFound
+        "loginWall" -> RouteResult.LoginWall
+        "challenge" -> RouteResult.Challenge
+        else -> RouteResult.Unparsed
     }
 }

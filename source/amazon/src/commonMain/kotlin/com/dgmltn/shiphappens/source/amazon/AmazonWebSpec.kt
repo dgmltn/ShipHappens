@@ -3,14 +3,15 @@ package com.dgmltn.shiphappens.source.amazon
 import com.dgmltn.shiphappens.domain.WellKnownCarriers
 import com.dgmltn.shiphappens.source.webview.WebProviderSpec
 
-// DOM extractor for BOTH Amazon pages a scrape can visit (design spec §3). The scrape lands on
-// the order-details page (needs a signed-in session), picks the first undelivered shipment, and
-// emits {page:'goto'} toward its progress-tracker page, carrying the shipment's coarse status as
-// the fallback tracking. On the tracker page it extracts the full event history plus the raw
-// delivery-window phrase (normalized by parseEtaWindow in the webview module, not here). Selector
-// constants are validated against the live site during device QA (Amazon requires login, so
-// off-device recon can't see these pages); the returned JSON shape is what unit tests and
-// PayloadRouter lock down.
+// DOM *reader* for BOTH Amazon pages a scrape can visit (design spec §3). It finds elements and
+// returns their text; it decides nothing. Both branches emit {page:'raw'} and AmazonPageLogic.kt
+// classifies statuses and picks the shipment in Kotlin, where commonTest can reach that logic —
+// this blob has no test harness at all (no JS engine in commonTest), and a status-vocabulary bug
+// living here reached device QA on 2026-07-19.
+//
+// Selector constants are still validated only against the live site during device QA (Amazon
+// requires login, so off-device recon can't see these pages), which is why every bail-out carries
+// why/probe/detail for the tracer to log.
 private val AMAZON_EXTRACTION_JS = """
 function() {
   var text = (document.body && document.body.innerText) || '';
@@ -19,19 +20,6 @@ function() {
   // Signed-out: order pages bounce to /ap/signin (selector fallbacks for A/B variants).
   if (/\/ap\/signin/.test(href) || document.querySelector('form[name="signIn"], #ap_email, #signInSubmit')) return {page: 'loginWall'};
 
-  function classify(raw) {
-    var t = (raw || '').toLowerCase();
-    if (t.indexOf('out for delivery') >= 0) return 'OUT_FOR_DELIVERY';
-    if (t.indexOf('delivered') >= 0) return 'DELIVERED';
-    if (t.indexOf('undeliverable') >= 0 || t.indexOf('running late') >= 0 || t.indexOf('delayed') >= 0 ||
-        t.indexOf('problem') >= 0 || t.indexOf('return') >= 0 || t.indexOf('lost') >= 0) return 'EXCEPTION';
-    if (t.indexOf('not yet shipped') >= 0 || t.indexOf('not shipped') >= 0 || t.indexOf('order placed') >= 0 ||
-        t.indexOf('ordered') >= 0 || t.indexOf('preparing for shipment') >= 0) return 'LABEL_CREATED';
-    if (t.indexOf('shipped') >= 0 || t.indexOf('dispatched') >= 0 || t.indexOf('picked up') >= 0) return 'SHIPPED';
-    if (t.indexOf('arriving') >= 0 || t.indexOf('arrives') >= 0 || t.indexOf('in transit') >= 0 ||
-        t.indexOf('on the way') >= 0 || t.indexOf('on its way') >= 0 || t.indexOf('at carrier') >= 0) return 'IN_TRANSIT';
-    return 'UNKNOWN';
-  }
   function clean(el) { return el ? el.textContent.replace(/\s+/g, ' ').trim() : null; }
   // Amazon needs a login to reach these pages, so selectors can only be verified on-device. A bare
   // {page:'empty'} can't say WHICH branch bailed, so every empty return carries why/probe/detail:
@@ -105,12 +93,10 @@ function() {
       var timeText = clean(nodes[i].querySelector('[class*="event-time"], .tracking-event-time'));
       var ts = new Date(day.toDateString() + ' ' + (timeText || '00:00'));
       if (isNaN(ts.getTime())) ts = new Date(day.toDateString());
-      var st = classify(msg);
       events.push({
         timestamp: ts.toISOString(),
         description: msg,
-        location: clean(nodes[i].querySelector('[class*="event-location"], .tracking-event-location')),
-        status: st === 'UNKNOWN' ? null : st
+        location: clean(nodes[i].querySelector('[class*="event-location"], .tracking-event-location'))
       });
     }
     events.reverse();  // page lists newest first; canonical order is ascending
@@ -120,13 +106,11 @@ function() {
     // Status line first (where Amazon quotes the window), promise element as the fallback. Never
     // document.body — an event row's timestamp is not the promise.
     var etaWindow = windowText(statusText) || windowText(promiseText);
-    var newestLoc = null;
-    for (var j = events.length - 1; j >= 0; j--) { if (events[j].location) { newestLoc = events[j].location; break; } }
-    return {page: 'ok', tracking: {
-      status: classify(statusText || (events.length ? events[events.length - 1].description : '')),
+    return {page: 'raw', raw: {
+      kind: 'tracker',
+      statusText: statusText,
       etaDate: etaDay ? isoDate(etaDay) : null,
       etaWindowText: etaWindow,
-      location: newestLoc,
       events: events
     }};
   }
@@ -139,27 +123,23 @@ function() {
   // card is 'shipmentCard'; the class selectors stay as fallbacks for older/A-B layouts.
   var cards = document.querySelectorAll('[data-component="shipmentCard"]');
   if (!cards.length) cards = document.querySelectorAll('.shipment, [class*="shipment-info-container"], [data-component="shipments"] .a-box');
-  var picks = [];
+  if (!cards.length) return empty('noShipmentCards');
+  // Read every card verbatim and let Kotlin choose. An order mixes shipment cards with RMA cards
+  // ("Replacement complete — We've received your return"), and telling them apart is exactly the
+  // judgement that belongs in tested code, so no filtering happens here.
+  var out = [];
   for (var k = 0; k < cards.length; k++) {
     var head = clean(cards[k].querySelector('[data-component="shipmentStatus"], .shipment-top-row, [class*="shipment-status"], h4, h5')) || '';
-    // Last resort: the card's own leading text is the status headline ("Delivered today"). Bounded
-    // to one line so trailing action buttons ("Return items") can't trip the EXCEPTION branch.
+    // Last resort: the card's own leading text is the status headline ("Delivered today"), bounded
+    // to one line so trailing action buttons don't join the status.
     if (!head) head = (('' + (cards[k].innerText || '')).split('\n')[0] || '').trim();
-    picks.push({card: cards[k], status: classify(head), head: head});
+    // The headline also carries the ETA ("Arriving today"); parse it here where the page's own
+    // date context is available.
+    var cardEta = etaFromArriving(head);
+    var link = cards[k].querySelector('a[href*="progress-tracker"], a[href*="ship-track"]');
+    out.push({head: head, href: (link && link.href) ? link.href : null, etaDate: cardEta ? isoDate(cardEta) : null});
   }
-  // First undelivered shipment; when everything is delivered, the last card (design spec §Decisions).
-  var pick = null;
-  for (var m = 0; m < picks.length; m++) { if (picks[m].status !== 'DELIVERED') { pick = picks[m]; break; } }
-  if (!pick && picks.length) pick = picks[picks.length - 1];
-  if (!pick) return empty('noShipmentCards');
-  // The order-details header already carries the ETA ("Arriving today") — capture it here so a
-  // shipment with no tracker link to hop to still yields a countdown, not a bare status.
-  var coarseEta = etaFromArriving(pick.head);
-  var coarse = pick.status === 'UNKNOWN' ? null : {status: pick.status, etaDate: coarseEta ? isoDate(coarseEta) : null, location: null, events: []};
-  var link = pick.card.querySelector('a[href*="progress-tracker"], a[href*="ship-track"]');
-  if (link && link.href) return {page: 'goto', url: link.href, tracking: coarse};
-  if (coarse) return {page: 'ok', tracking: coarse};  // no tracker link (e.g. old delivered order)
-  return empty('cardHasNoStatusOrLink', 'cards=' + cards.length + ' head=' + pick.head);
+  return {page: 'raw', raw: {kind: 'cards', cards: out}};
 }
 """.trimIndent()
 
@@ -192,6 +172,7 @@ val AmazonWebSpec = WebProviderSpec(
     // DOM-only in v1 (design spec §Decisions): no stable public tracking-JSON vocabulary to
     // target blind. Live-QA ScrapeTracer captures can justify API patterns later.
     apiUrlPatterns = emptyList(),
+    parseRaw = ::parseAmazonRaw,
     challengeMarkers = listOf(
         "Enter the characters you see",
         "Type the characters you see",
