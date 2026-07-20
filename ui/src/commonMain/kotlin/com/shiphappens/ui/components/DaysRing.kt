@@ -22,7 +22,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -30,7 +29,6 @@ import androidx.compose.ui.unit.sp
 import com.shiphappens.design.ShipColors
 import com.shiphappens.design.ShipPreview
 import com.shiphappens.design.hankenFamily
-import com.shiphappens.ui.list.RingUi
 
 
 @Composable
@@ -75,7 +73,7 @@ fun DaysRing(
 
 @Preview
 @Composable
-fun Preview_DaysRing() {
+private fun Preview_DaysRing() {
     var fraction by remember { mutableStateOf(0.7f) }
     ShipPreview {
         Column(

@@ -46,10 +46,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shiphappens.design.ShipColors
 import com.shiphappens.design.ShipPreview
-import com.shiphappens.design.ShipTheme
 import com.shiphappens.design.res.Res
-import com.shiphappens.design.res.ic_archive_outline
-import com.shiphappens.design.res.ic_archive_outline_open
+import com.shiphappens.design.res.ic_box_closed
+import com.shiphappens.design.res.ic_box_open
 import com.shiphappens.design.res.ic_trash_outline
 import com.shiphappens.design.res.ic_trash_outline_open
 import kotlin.math.abs
@@ -69,15 +68,15 @@ data class SwipeAction(
 
 fun archiveAction(onTrigger: () -> Unit) = SwipeAction(
     label = "Archive", background = ShipColors.archiveAccent,
-    closedIcon = Res.drawable.ic_archive_outline,
-    openIcon = Res.drawable.ic_archive_outline_open,
+    closedIcon = Res.drawable.ic_box_closed,
+    openIcon = Res.drawable.ic_box_open,
     onTrigger = onTrigger,
 )
 
 fun restoreAction(onTrigger: () -> Unit) = SwipeAction(
     label = "Restore", background = ShipColors.archiveAccent,
-    closedIcon = Res.drawable.ic_archive_outline,
-    openIcon = Res.drawable.ic_archive_outline_open,
+    closedIcon = Res.drawable.ic_box_closed,
+    openIcon = Res.drawable.ic_box_open,
     onTrigger = onTrigger,
 )
 
