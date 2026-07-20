@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.shiphappens.design.ShipColors
 import com.shiphappens.design.colorFromHex
+import com.shiphappens.ui.LightStatusBarIcons
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -27,6 +28,7 @@ fun WebLoginScreen(sourceId: String, onBack: () -> Unit) {
     val s by vm.state.collectAsState()
 
     LaunchedEffect(s.done) { if (s.done) onBack() }
+    LightStatusBarIcons()
 
     Column(Modifier.fillMaxSize().background(ShipColors.bg)) {
         Row(
