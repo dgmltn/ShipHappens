@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dgmltn.shiphappens.design.ShipColors
 import com.dgmltn.shiphappens.design.colorFromHex
-import com.dgmltn.shiphappens.ui.LightStatusBarIcons
+import com.dgmltn.shiphappens.ui.StatusBarIconsForHeader
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -26,7 +26,7 @@ fun WebDetailScreen(parcelId: String, onBack: () -> Unit) {
     val vm: WebDetailViewModel = koinViewModel(key = "web-$parcelId") { parametersOf(parcelId) }
     val s by vm.state.collectAsState()
     val accent = colorFromHex(s.accentHex)
-    LightStatusBarIcons()
+    StatusBarIconsForHeader(accent)
 
     Column(Modifier.fillMaxSize().background(ShipColors.bg)) {
         Row(

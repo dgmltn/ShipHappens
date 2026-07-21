@@ -28,7 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dgmltn.shiphappens.design.*
-import com.dgmltn.shiphappens.ui.LightStatusBarIcons
+import com.dgmltn.shiphappens.ui.StatusBarIconsForHeader
 import androidx.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -37,7 +37,7 @@ import org.koin.core.parameter.parametersOf
 fun DetailScreen(parcelId: String, onBack: () -> Unit, onOpenWeb: () -> Unit = {}) {
     val vm: DetailViewModel = koinViewModel(key = parcelId) { parametersOf(parcelId) }
     val s by vm.state.collectAsState()
-    LightStatusBarIcons()
+    StatusBarIconsForHeader(colorFromHex(s.accentHex))
     DetailContent(s, onBack, onOpenWeb)
 }
 

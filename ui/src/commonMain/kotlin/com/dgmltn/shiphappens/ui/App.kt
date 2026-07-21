@@ -25,6 +25,7 @@ import com.dgmltn.shiphappens.design.ShipTheme
 @Composable
 fun App() {
     ShipTheme {
+        StatusBarIconsEffect()
         val backStack = remember { NavBackStack<NavKey>(ListRoute) }
         NavDisplay(
             backStack = backStack,
