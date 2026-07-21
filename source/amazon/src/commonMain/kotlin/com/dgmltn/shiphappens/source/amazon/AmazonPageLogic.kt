@@ -25,9 +25,14 @@ private val EXCEPTION_PHRASES = listOf(
     "package was lost",
     "lost in transit",
 )
-private val LABEL_CREATED_PHRASES = listOf("not yet shipped", "not shipped", "order placed", "preparing for shipment")
+private val LABEL_CREATED_PHRASES = listOf("not yet shipped", "not shipped", "ordered", "order placed", "preparing for shipment")
 private val SHIPPED_PHRASES = listOf("shipped", "dispatched", "picked up")
-private val IN_TRANSIT_PHRASES = listOf("arriving", "arrives", "in transit", "on the way", "on its way", "at carrier")
+// "Arriving <day>" is deliberately NOT here: Amazon shows it as the delivery-date promise the moment
+// an order is placed, before anything ships, so it says nothing about the shipment's transit state —
+// it only carries the ETA (parsed separately in AmazonWebSpec's etaFromArriving). Conflating the two
+// made a not-yet-shipped "Arriving tomorrow" order report IN_TRANSIT. Real movement is signaled by
+// the tracker page's events/status line, which classify below.
+private val IN_TRANSIT_PHRASES = listOf("in transit", "on the way", "on its way", "at carrier")
 
 /**
  * Maps an Amazon status headline to a status, or null when the text isn't a shipping status at all.
@@ -72,10 +77,14 @@ internal fun pickShipmentCard(cards: List<DomCard>): DomCard? {
 /** Order-details page: choose a shipment and either hop to its tracker or report its coarse state. */
 internal fun resolveAmazonCards(raw: DomRaw): DomExtraction {
     val pick = pickShipmentCard(raw.cards) ?: return DomExtraction(page = "empty")
-    // The headline carries the ETA ("Arriving today"), so a shipment with no tracker link to hop
-    // to still yields a countdown rather than a bare status.
-    val coarse = classifyAmazonStatus(pick.head)
-        ?.let { ScrapedTracking(status = it.name, etaDate = pick.etaDate) }
+    // The headline's "Arriving <day>" carries the ETA but not a transit state (see IN_TRANSIT_PHRASES),
+    // so a card can have a delivery date with no classifiable status. Keep the ETA regardless — a
+    // shipment with no tracker link still yields a countdown — and leave status UNKNOWN until a real
+    // signal (the tracker hop, or delivered/shipped/exception phrasing) supplies one.
+    val status = classifyAmazonStatus(pick.head)
+    val coarse = if (status != null || pick.etaDate != null) {
+        ScrapedTracking(status = (status ?: TrackingStatus.UNKNOWN).name, etaDate = pick.etaDate)
+    } else null
     return when {
         pick.href != null -> DomExtraction(page = "goto", url = pick.href, tracking = coarse)
         coarse != null -> DomExtraction(page = "ok", tracking = coarse)

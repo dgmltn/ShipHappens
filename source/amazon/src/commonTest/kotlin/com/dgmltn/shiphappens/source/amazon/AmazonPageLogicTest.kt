@@ -60,11 +60,40 @@ class AmazonPageLogicTest {
     }
 
     @Test fun still_prefers_an_in_flight_shipment_over_a_delivered_one() {
+        // "Arriving today" is a delivery-date promise, not a transit state: the card is still picked
+        // over the delivered one and its ETA is carried, but status stays UNKNOWN (the tracker hop
+        // supplies the real state) — it must NOT be reported as IN_TRANSIT.
         val arriving = DomCard(head = "Arriving today", href = "https://www.amazon.com/progress-tracker/p2", etaDate = "2026-07-19")
         val result = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(deliveredCard, arriving)))
         assertEquals(arriving.href, result.url)
-        assertEquals(TrackingStatus.IN_TRANSIT.name, result.tracking?.status)
+        assertEquals(TrackingStatus.UNKNOWN.name, result.tracking?.status)
         assertEquals("2026-07-19", result.tracking?.etaDate)
+    }
+
+    @Test fun arriving_is_an_eta_not_a_transit_status() {
+        assertNull(classifyAmazonStatus("Arriving tomorrow"))
+        assertNull(classifyAmazonStatus("Arriving Tue, Jul 22"))
+    }
+
+    @Test fun an_ordered_status_is_not_yet_shipped() {
+        // The tracker page reports "Ordered" for a placed-but-unshipped order; that is label-created,
+        // never in-transit.
+        assertEquals(TrackingStatus.LABEL_CREATED, classifyAmazonStatus("Ordered"))
+    }
+
+    @Test fun genuine_transit_phrasing_still_classifies_in_transit() {
+        assertEquals(TrackingStatus.IN_TRANSIT, classifyAmazonStatus("Package is on the way"))
+        assertEquals(TrackingStatus.IN_TRANSIT, classifyAmazonStatus("In transit to next facility"))
+    }
+
+    @Test fun arriving_only_card_keeps_its_eta_with_unknown_status() {
+        // No tracker link and only a delivery-date headline: report the ETA with an honest UNKNOWN
+        // status rather than inventing IN_TRANSIT or dropping the countdown.
+        val arriving = DomCard(head = "Arriving tomorrow", href = null, etaDate = "2026-07-21")
+        val result = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(arriving)))
+        assertEquals("ok", result.page)
+        assertEquals(TrackingStatus.UNKNOWN.name, result.tracking?.status)
+        assertEquals("2026-07-21", result.tracking?.etaDate)
     }
 
     @Test fun card_without_a_tracker_link_reports_its_coarse_status() {

@@ -24,10 +24,13 @@ private class TestWebSource(scraper: WebScraper, spec: WebProviderSpec = testSpe
 
 private fun dom(page: String) = """{"kind":"dom","body":"{\"page\":\"$page\"}"}"""
 
+/** Wraps a DomExtraction JSON string as a `kind:"dom"` bridge payload (JSON-escaped body). */
+private fun domBody(body: String) =
+    """{"kind":"dom","body":${kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.json.JsonPrimitive(body))}}"""
+
 private fun gotoDom(withTracking: Boolean): String {
     val tracking = if (withTracking) ""","tracking":{"status":"IN_TRANSIT"}""" else ""
-    val body = """{"page":"goto","url":"https://www.example.com/t/2"$tracking}"""
-    return """{"kind":"dom","body":${kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.json.JsonPrimitive(body))}}"""
+    return domBody("""{"page":"goto","url":"https://www.example.com/t/2"$tracking}""")
 }
 
 class WebViewBasedSourceTest {
@@ -90,6 +93,26 @@ class WebViewBasedSourceTest {
         // must not turn that into an AUTH failure.
         val src = TestWebSource(FakeScraper(ScrapeResult.Payloads(listOf(gotoDom(withTracking = true), dom("loginWall")))))
         assertIs<SourceResult.Success<com.dgmltn.shiphappens.domain.TrackingSnapshot>>(src.track("113", null))
+    }
+
+    @Test fun rich_result_backfills_missing_eta_and_status_from_coarse() = runTest {
+        // Order page knew "Arriving tomorrow" (IN_TRANSIT + ETA); the ship-track hop landed on a
+        // page that read UNKNOWN with no ETA. The impoverished rich result must not blank the ETA.
+        val coarse = domBody("""{"page":"goto","url":"https://www.example.com/t/2","tracking":{"status":"IN_TRANSIT","etaDate":"2026-07-21"}}""")
+        val rich = domBody("""{"page":"ok","tracking":{"status":"UNKNOWN"}}""")
+        val src = TestWebSource(FakeScraper(ScrapeResult.Payloads(listOf(coarse, rich))))
+        val result = assertIs<SourceResult.Success<com.dgmltn.shiphappens.domain.TrackingSnapshot>>(src.track("113", null))
+        assertEquals(TrackingStatus.IN_TRANSIT, result.value.status)
+        assertEquals(kotlinx.datetime.LocalDate(2026, 7, 21), result.value.etaDate)
+    }
+
+    @Test fun rich_result_keeps_its_own_eta_and_status_over_coarse() = runTest {
+        val coarse = domBody("""{"page":"goto","url":"https://www.example.com/t/2","tracking":{"status":"IN_TRANSIT","etaDate":"2026-07-21"}}""")
+        val rich = domBody("""{"page":"ok","tracking":{"status":"OUT_FOR_DELIVERY","etaDate":"2026-07-20"}}""")
+        val src = TestWebSource(FakeScraper(ScrapeResult.Payloads(listOf(coarse, rich))))
+        val result = assertIs<SourceResult.Success<com.dgmltn.shiphappens.domain.TrackingSnapshot>>(src.track("113", null))
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, result.value.status)
+        assertEquals(kotlinx.datetime.LocalDate(2026, 7, 20), result.value.etaDate)
     }
 
     @Test fun goto_without_tracking_alone_is_unknown_failure() = runTest {

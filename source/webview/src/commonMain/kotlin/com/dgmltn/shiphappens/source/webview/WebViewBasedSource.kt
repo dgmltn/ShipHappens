@@ -40,11 +40,14 @@ abstract class WebViewBasedSource(
             is ScrapeResult.Payloads -> {
                 val router = PayloadRouter(webSpec)
                 val routed = result.payloads.map(router::route)
-                routed.firstRichTracking()?.let { return SourceResult.Success(it.toSnapshot()) }
                 // A goto hop's embedded coarse tracking is the designed fallback when the hop's target
                 // page never produced a rich extraction (design spec §1) — and it outranks the error
-                // ladder because the page that emitted it was already past login and order lookup.
-                routed.firstCoarseTracking()?.let { return SourceResult.Success(it.toSnapshot()) }
+                // ladder because the page that emitted it was already past login and order lookup. It
+                // also backfills a rich result that landed on an impoverished tracker page (UNKNOWN,
+                // no ETA), so that page can't blank an ETA the order page already knew.
+                val coarse = routed.firstCoarseTracking()
+                routed.firstRichTracking()?.let { return SourceResult.Success(it.backfilledFrom(coarse).toSnapshot()) }
+                coarse?.let { return SourceResult.Success(it.toSnapshot()) }
                 when {
                     routed.has<RouteResult.LoginWall>() ->
                         SourceResult.Failure(FailureReason.AUTH, "Sign in to $name in Settings, then refresh")

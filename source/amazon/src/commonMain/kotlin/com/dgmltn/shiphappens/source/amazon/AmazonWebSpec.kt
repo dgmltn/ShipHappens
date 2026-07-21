@@ -51,7 +51,13 @@ function() {
     var now = new Date();
     var l = (label || '').toLowerCase();
     if (l.indexOf('today') >= 0) return now;
+    if (l.indexOf('tomorrow') >= 0) return new Date(now.getTime() + 864e5);
     if (l.indexOf('yesterday') >= 0) return new Date(now.getTime() - 864e5);
+    // Past the relative words we need an explicit calendar date. Appending the year lets V8 parse
+    // "Tuesday, July 15", but V8 also "parses" wordy labels — "tomorrow 2026", "Sunday 2026" — into
+    // Jan 1, defeating the isNaN guard below (this shipped: an "Arriving tomorrow" card produced
+    // etaDate 2026-01-01). Require a real month/day token first so junk returns null, not Jan 1.
+    if (!/\d/.test(l) && !/jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/.test(l)) return null;
     var d = new Date(('' + label).replace(/^[a-z]+,\s*/i, '') + ' ' + now.getFullYear());
     if (isNaN(d.getTime())) return null;
     if (d.getTime() - now.getTime() > 45 * 864e5) d.setFullYear(d.getFullYear() - 1);
