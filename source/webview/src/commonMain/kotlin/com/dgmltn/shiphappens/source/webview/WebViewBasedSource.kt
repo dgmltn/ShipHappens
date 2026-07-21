@@ -40,19 +40,17 @@ abstract class WebViewBasedSource(
             is ScrapeResult.Payloads -> {
                 val router = PayloadRouter(webSpec)
                 val routed = result.payloads.map(router::route)
-                routed.firstNotNullOfOrNull { (it as? RouteResult.Tracking)?.tracking }
-                    ?.let { return SourceResult.Success(it.toSnapshot()) }
+                routed.firstRichTracking()?.let { return SourceResult.Success(it.toSnapshot()) }
                 // A goto hop's embedded coarse tracking is the designed fallback when the hop's target
                 // page never produced a rich extraction (design spec §1) — and it outranks the error
                 // ladder because the page that emitted it was already past login and order lookup.
-                routed.firstNotNullOfOrNull { (it as? RouteResult.Goto)?.tracking }
-                    ?.let { return SourceResult.Success(it.toSnapshot()) }
+                routed.firstCoarseTracking()?.let { return SourceResult.Success(it.toSnapshot()) }
                 when {
-                    routed.any { it is RouteResult.LoginWall } ->
+                    routed.has<RouteResult.LoginWall>() ->
                         SourceResult.Failure(FailureReason.AUTH, "Sign in to $name in Settings, then refresh")
-                    routed.any { it is RouteResult.Challenge } ->
+                    routed.has<RouteResult.Challenge>() ->
                         SourceResult.Failure(FailureReason.RATE_LIMITED, "$name wants a human check — open More details to continue")
-                    routed.any { it is RouteResult.NotFound } ->
+                    routed.has<RouteResult.NotFound>() ->
                         SourceResult.Failure(FailureReason.NOT_FOUND, "$name doesn't recognize this number")
                     else -> SourceResult.Failure(FailureReason.UNKNOWN, "Couldn't read tracking data from $name")
                 }
@@ -62,4 +60,33 @@ abstract class WebViewBasedSource(
             ScrapeResult.Unavailable -> SourceResult.Failure(FailureReason.UNKNOWN, "$name web tracking unavailable")
         }
     }
+}
+
+/*
+ * These three read like `firstNotNullOfOrNull { (it as? T)?.tracking }` and `any { it is T }` written
+ * the long way, and that is deliberate. Kotlin/Native 2.4.0 miscompiles those inline-lambda forms when
+ * they scan this list inside `track`: the "found nothing" path yields an uninitialized reference rather
+ * than null, the null check passes, and `toSnapshot()` then segfaults on a garbage pointer
+ * (failure_taxonomy_mapping, iosSimulatorArm64 only — the JVM target is fine). Plain iterator loops
+ * compile correctly. Revisit when the Kotlin version is bumped; see WebViewBasedSourceTest.
+ */
+
+private fun List<RouteResult>.firstRichTracking(): ScrapedTracking? {
+    for (r in this) if (r is RouteResult.Tracking) return r.tracking
+    return null
+}
+
+private fun List<RouteResult>.firstCoarseTracking(): ScrapedTracking? {
+    for (r in this) {
+        if (r is RouteResult.Goto) {
+            val t = r.tracking
+            if (t != null) return t
+        }
+    }
+    return null
+}
+
+private inline fun <reified T : RouteResult> List<RouteResult>.has(): Boolean {
+    for (r in this) if (r is T) return true
+    return false
 }
