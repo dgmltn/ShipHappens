@@ -1,5 +1,6 @@
 package com.dgmltn.shiphappens.source.usps
 
+import com.dgmltn.shiphappens.source.webview.DomRaw
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -37,5 +38,11 @@ class UspsWebSpecTest {
         val t = UspsWebSpec.parseApi(null, """{"statusCategory":"Delivered"}""")
         assertEquals("DELIVERED", t?.status)
         assertEquals(null, UspsWebSpec.parseApi(null, """{"unrelated":true}"""))
+    }
+
+    @Test fun parse_raw_delegates_to_usps_page_logic() {
+        val result = UspsWebSpec.parseRaw(DomRaw(kind = "tracker", statusText = "On the Way"))
+        assertEquals("ok", result?.page)
+        assertEquals("IN_TRANSIT", result?.tracking?.status)
     }
 }

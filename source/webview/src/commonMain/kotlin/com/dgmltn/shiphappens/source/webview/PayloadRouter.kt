@@ -33,6 +33,10 @@ data class DomRaw(
     val cards: List<DomCard> = emptyList(),
     val statusText: String? = null,
     val etaDate: String? = null,
+    /** Verbatim text of the page's ETA banner, for providers whose date needs Kotlin-side parsing
+     *  (USPS splits it across spans with tooltip copy interleaved); [etaDate] is for extractors
+     *  that can produce ISO themselves. */
+    val etaText: String? = null,
     val etaWindowText: String? = null,
     val events: List<DomRawEvent> = emptyList(),
 )

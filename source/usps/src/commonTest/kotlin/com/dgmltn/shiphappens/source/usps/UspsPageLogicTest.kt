@@ -1,0 +1,109 @@
+package com.dgmltn.shiphappens.source.usps
+
+import com.dgmltn.shiphappens.domain.TrackingStatus
+import com.dgmltn.shiphappens.source.webview.DomRaw
+import com.dgmltn.shiphappens.source.webview.DomRawEvent
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+
+/**
+ * Strings here are verbatim from the 2026-07-24 live scrape of 9400150106851001311909
+ * (ScrapeTracer log) — the scrape that classified an in-transit package UNKNOWN because
+ * "On the Way" wasn't in the JS blob's vocabulary, and lost the July 28 ETA because the
+ * selector read only the bare day number "28" out of USPS's split-span date markup.
+ */
+class UspsPageLogicTest {
+
+    // The .expected_delivery banner, textContent-flattened: the date is split across
+    // .day/.date/.month_year spans and two tooltips interleave their copy into the text.
+    private val etaBanner = "Expected Delivery by: Tuesday 28 July 2026 Expected Delivery Date " +
+        "Expected delivery on the date provided is the latest information on when the Postal Service " +
+        "expects to deliver your package. by 9:00pm Expected Delivery Time The timeframe provided is " +
+        "the estimated timeframe when the carrier will attempt to deliver your package."
+
+    private val liveRaw = DomRaw(
+        kind = "tracker",
+        statusText = "On the Way",
+        etaText = etaBanner,
+        events = listOf(
+            DomRawEvent("2026-07-22T13:17:00.000Z", "Shipping Label Created", "ROCHESTER, NY 14609"),
+            DomRawEvent("2026-07-23T23:11:00.000Z", "Accepted at USPS Facility", "ROCHESTER, NY 14609"),
+            DomRawEvent("2026-07-24T00:26:00.000Z", "Arrived at USPS Facility", "NORTHWEST ROCHESTER NY DISTRIBUTION CENTER"),
+            DomRawEvent("2026-07-24T09:44:00.000Z", "Departed USPS Facility", "NORTHWEST ROCHESTER NY DISTRIBUTION CENTER"),
+        ),
+    )
+
+    @Test fun on_the_way_classifies_in_transit() {
+        assertEquals(TrackingStatus.IN_TRANSIT, classifyUspsStatus("On the Way"))
+        assertEquals(TrackingStatus.IN_TRANSIT, classifyUspsStatus("Your package is on its way to a USPS facility"))
+    }
+
+    @Test fun existing_vocabulary_is_unchanged() {
+        assertEquals(TrackingStatus.LABEL_CREATED, classifyUspsStatus("Shipping Label Created, USPS Awaiting Item"))
+        assertEquals(TrackingStatus.SHIPPED, classifyUspsStatus("Accepted at USPS Origin Facility"))
+        assertEquals(TrackingStatus.IN_TRANSIT, classifyUspsStatus("Moving Through Network"))
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, classifyUspsStatus("Out for Delivery"))
+        assertEquals(TrackingStatus.DELIVERED, classifyUspsStatus("Delivered, In/At Mailbox"))
+        assertEquals(TrackingStatus.EXCEPTION, classifyUspsStatus("Alert"))
+        assertNull(classifyUspsStatus("Some New Wording"))
+        assertNull(classifyUspsStatus(null))
+    }
+
+    @Test fun eta_date_survives_split_spans_and_tooltip_copy() {
+        assertEquals("2026-07-28", parseUspsEtaDate(etaBanner)?.toString())
+    }
+
+    @Test fun eta_date_also_parses_month_first_wording() {
+        // The "Expected Delivery on" variants render "Monday, July 28, 2026".
+        assertEquals("2026-07-28", parseUspsEtaDate("Expected Delivery on Monday, July 28, 2026")?.toString())
+    }
+
+    @Test fun eta_date_is_null_when_banner_is_absent_or_junk() {
+        assertNull(parseUspsEtaDate(null))
+        assertNull(parseUspsEtaDate("Get More Out of USPS Tracking:"))
+    }
+
+    @Test fun eta_window_cutoff_is_extracted_verbatim() {
+        assertEquals("by 9:00pm", uspsEtaWindowText(etaBanner))
+        assertNull(uspsEtaWindowText("Expected Delivery by: Tuesday 28 July 2026"))
+        assertNull(uspsEtaWindowText(null))
+    }
+
+    @Test fun live_scrape_regression_full_raw_parse() {
+        // The whole 2026-07-24 bug in one assertion set: IN_TRANSIT (not UNKNOWN — which the
+        // repository merge would have discarded, leaving the stale LABEL_CREATED on the card),
+        // ETA July 28, window "by 9:00pm", location from the newest event.
+        val result = assertNotNull(parseUspsRaw(liveRaw))
+        assertEquals("ok", result.page)
+        val t = assertNotNull(result.tracking)
+        assertEquals(TrackingStatus.IN_TRANSIT.name, t.status)
+        assertEquals("2026-07-28", t.etaDate)
+        assertEquals("by 9:00pm", t.etaWindowText)
+        assertEquals("NORTHWEST ROCHESTER NY DISTRIBUTION CENTER", t.location)
+        assertEquals(
+            listOf("LABEL_CREATED", "SHIPPED", "IN_TRANSIT", "IN_TRANSIT"),
+            t.events.map { it.status },
+        )
+        assertEquals("Departed USPS Facility", t.events.last().description)
+    }
+
+    @Test fun unreadable_status_falls_back_to_newest_classifiable_event() {
+        val result = assertNotNull(parseUspsRaw(liveRaw.copy(statusText = "Latest Update")))
+        assertEquals(TrackingStatus.IN_TRANSIT.name, result.tracking?.status)
+    }
+
+    @Test fun unreadable_status_with_no_events_is_unknown_not_a_crash() {
+        val result = assertNotNull(parseUspsRaw(DomRaw(kind = "tracker", statusText = "Latest Update")))
+        assertEquals(TrackingStatus.UNKNOWN.name, result.tracking?.status)
+    }
+
+    @Test fun nothing_readable_is_empty() {
+        assertEquals("empty", parseUspsRaw(DomRaw(kind = "tracker"))?.page)
+    }
+
+    @Test fun unknown_raw_kind_is_refused() {
+        assertNull(parseUspsRaw(DomRaw(kind = "cards")))
+    }
+}

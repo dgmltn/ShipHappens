@@ -48,6 +48,8 @@ class UspsApiParserTest {
         assertEquals("LABEL_CREATED", UspsApiParser.parse(withCategory("Pre-Shipment"))!!.status)
         assertEquals("SHIPPED", UspsApiParser.parse(withCategory("Accepted"))!!.status)
         assertEquals("IN_TRANSIT", UspsApiParser.parse(withCategory("Moving Through Network"))!!.status)
+        // Vocabulary is shared with the DOM layer (UspsPageLogic), so both learn new wordings at once.
+        assertEquals("IN_TRANSIT", UspsApiParser.parse(withCategory("On the Way"))!!.status)
         assertEquals("OUT_FOR_DELIVERY", UspsApiParser.parse(withCategory("Out for Delivery"))!!.status)
         assertEquals("DELIVERED", UspsApiParser.parse(withCategory("Delivered to Agent"))!!.status)
         assertEquals("EXCEPTION", UspsApiParser.parse(withCategory("Alert"))!!.status)

@@ -102,17 +102,6 @@ object UspsApiParser {
         return runCatching { LocalTime(h.toInt(), min.toInt()) }.getOrNull()
     }
 
-    /** Keyword classification shared conceptually with the DOM extractor (spec §2). */
-    private fun classify(text: String): String {
-        val t = text.lowercase()
-        return when {
-            "out for delivery" in t -> "OUT_FOR_DELIVERY"
-            "delivered" in t -> "DELIVERED"
-            "alert" in t || "attempted" in t || "notice left" in t || "return" in t || "held" in t -> "EXCEPTION"
-            "label created" in t || "pre-shipment" in t || "awaiting item" in t -> "LABEL_CREATED"
-            "accepted" in t || "picked up" in t || "possession" in t -> "SHIPPED"
-            "in transit" in t || "departed" in t || "arrived" in t || "moving through" in t || "processed" in t -> "IN_TRANSIT"
-            else -> "UNKNOWN"
-        }
-    }
+    /** Keyword classification shared with the DOM layer — one vocabulary, tested once (UspsPageLogic). */
+    private fun classify(text: String): String = classifyUspsStatus(text)?.name ?: "UNKNOWN"
 }
