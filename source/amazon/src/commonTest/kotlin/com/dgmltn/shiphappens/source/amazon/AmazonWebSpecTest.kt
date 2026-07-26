@@ -74,6 +74,13 @@ class AmazonWebSpecTest {
         assertTrue(AmazonWebSpec.extractionJs.contains("trackerNoStatusNoEvents"))
     }
 
+    @Test fun extraction_js_treats_overnight_as_a_relative_day_word() {
+        // "Arriving overnight 7 AM – 11 AM" means delivery in the coming night, i.e. tomorrow
+        // morning. Without a relative-word branch, parseDay's calendar parse NaN'd and the card
+        // lost its ETA entirely (device log 2026-07-26).
+        assertTrue(AmazonWebSpec.extractionJs.contains("overnight"))
+    }
+
     @Test fun extraction_js_emits_raw_eta_window_text() {
         // The blob only grabs the phrase; parsing lives in EtaWindowParser, where tests can reach it.
         assertTrue(AmazonWebSpec.extractionJs.contains("etaWindowText"))

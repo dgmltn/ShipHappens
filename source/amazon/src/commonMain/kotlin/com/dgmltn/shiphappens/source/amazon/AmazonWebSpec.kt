@@ -51,7 +51,8 @@ function() {
     var now = new Date();
     var l = (label || '').toLowerCase();
     if (l.indexOf('today') >= 0) return now;
-    if (l.indexOf('tomorrow') >= 0) return new Date(now.getTime() + 864e5);
+    // "Arriving overnight 7 AM – 11 AM": delivery during the coming night, i.e. tomorrow morning.
+    if (l.indexOf('tomorrow') >= 0 || l.indexOf('overnight') >= 0) return new Date(now.getTime() + 864e5);
     if (l.indexOf('yesterday') >= 0) return new Date(now.getTime() - 864e5);
     // Past the relative words we need an explicit calendar date. Appending the year lets V8 parse
     // "Tuesday, July 15", but V8 also "parses" wordy labels — "tomorrow 2026", "Sunday 2026" — into
