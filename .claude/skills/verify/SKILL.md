@@ -20,19 +20,21 @@ adb -s <serial> exec-out screencap -p > shot.png
 
 ## Getting data on screen
 
-Fresh installs are empty. Enable the **Demo data** source: gear button (top right of list)
-→ toggle "Demo data" → back. It seeds 7 parcels covering every status step, ETAs relative
-to today (see `source/demo/.../DemoSource.kt`).
+Fresh installs are empty, and there is no demo/seed source anymore (removed 2026-07-16).
+Add parcels through the **"Add a package" card** at the top of the Active list: tap the
+name/tracking fields, type, tap ✓.
 
-- **Never-refreshed parcel:** add a manual package with a valid-looking UPS number the demo
-  source doesn't know (e.g. `1Z999AA10123456999`) — its refresh fails NOT_FOUND, so it stays
-  UNKNOWN/no-ETA. Expect a "Couldn't refresh — network error" toast.
+- **Never-refreshed parcel:** a valid-format but made-up number (e.g. `1Z999AA10123456784`)
+  adds instantly and stays UNKNOWN/no-ETA — the row reads "Waiting for first update". The
+  add-path refresh is best-effort and shows no failure toast.
+- **Populated parcel:** only a real tracking number gets live data — the app scrapes the
+  carrier's site (UPS/USPS/Amazon webview sources), which needs network and takes seconds.
 - `adb shell input text` drops spaces — use `%s` or single words for names.
 
 ## Gotchas
 
-- Demo refreshes complete in <1 frame; transient per-parcel loading states are not
-  observable live — cover them with the gated `FakeSource` pattern in `ListViewModelTest`
-  (`card_flags_refreshing_while_refresh_in_flight`).
+- Live scrapes take seconds and depend on carrier sites — don't assert on transient
+  per-parcel loading states from the emulator; cover them with the gated `FakeSource`
+  pattern in `ListViewModelTest` (`card_flags_refreshing_while_refresh_in_flight`).
 - Pull-to-refresh only triggers from the top of the list; a swipe-down mid-scroll just scrolls.
 - To catch fast UI, `adb shell screenrecord` then `ffmpeg -vf fps=30` frame extraction works.
