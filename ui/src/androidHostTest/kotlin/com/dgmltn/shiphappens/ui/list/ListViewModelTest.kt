@@ -137,7 +137,8 @@ class ListViewModelTest {
     @Test fun cards_show_ring_days_and_status() = runTest {
         val vm = vm()
         settings.setSourceConfig("fake", SourceConfig(enabled = true))
-        repo.addParcel("Keyboard", "1Z999AA10123456784", WellKnownCarriers.UPS)
+        val added = repo.addParcel("Keyboard", "1Z999AA10123456784", WellKnownCarriers.UPS) as AddResult.Added
+        repo.refresh(added.parcel.id)
         val s = awaitState { it.cards.size == 1 && it.cards.single().statusText == "In transit" }
         val card = s.cards.single()
         assertEquals("Keyboard", card.name)
@@ -154,7 +155,8 @@ class ListViewModelTest {
         val vm = vm()
         settings.setSourceConfig("fake", SourceConfig(enabled = true))
         source.snapshot = TrackingSnapshot(TrackingStatus.OUT_FOR_DELIVERY, etaDate = LocalDate(2026, 7, 10))
-        repo.addParcel("Lamp", "1Z88E0330398765432", WellKnownCarriers.UPS)
+        val added = repo.addParcel("Lamp", "1Z88E0330398765432", WellKnownCarriers.UPS) as AddResult.Added
+        repo.refresh(added.parcel.id)
         val s = awaitState { it.cards.size == 1 && it.cards.single().statusText == "Out for delivery" }
         val card = s.cards.single()
         assertTrue(card.urgent)
@@ -169,7 +171,8 @@ class ListViewModelTest {
             TrackingStatus.UNKNOWN,
             events = listOf(TrackingEvent(Instant.fromEpochMilliseconds(1_752_000_000_000), "On vehicle", status = TrackingStatus.OUT_FOR_DELIVERY)),
         )
-        repo.addParcel("Lamp", "1Z88E0330398765432", WellKnownCarriers.UPS)
+        val added = repo.addParcel("Lamp", "1Z88E0330398765432", WellKnownCarriers.UPS) as AddResult.Added
+        repo.refresh(added.parcel.id)
         // Detail's timeline marks OUT_FOR_DELIVERY current via the event fallback; the list must agree.
         val s = awaitState { it.cards.size == 1 && it.cards.single().statusText == "Out for delivery" }
         assertEquals("Out for delivery", s.cards.single().statusText)
@@ -323,6 +326,23 @@ class ListViewModelTest {
         vm.onAddManual()
         assertEquals("That package is already in your list",
             awaitRecorded { it.toast?.message == "That package is already in your list" }.toast?.message)
+    }
+
+    @Test fun manual_add_clears_card_as_soon_as_row_appears_not_after_first_refresh() = runTest {
+        val vm = vm()
+        settings.setSourceConfig("fake", SourceConfig(enabled = true))
+        source.gate = kotlinx.coroutines.CompletableDeferred()  // hold the first refresh in flight
+        vm.onManualTracking("1Z999AA10123456784")
+        vm.onManualName("Keyboard")
+        vm.onAddManual()
+        // The row exists but the first refresh hasn't finished: the card must already be reset.
+        val during = awaitState { it.cards.size == 1 && it.manualAdd.tracking.isEmpty() }
+        assertEquals("", during.manualAdd.name)
+        assertNull(during.manualAdd.effectiveCarrierName)
+        awaitRecorded { it.toast?.message == "Delivery added" }
+        source.gate!!.complete(Unit)
+        // The add still triggers the first refresh once unblocked.
+        awaitState { it.cards.singleOrNull()?.statusText == "In transit" }
     }
 
     @Test fun clipboard_pending_import_accept_flow() = runTest {

@@ -55,13 +55,17 @@ class ParcelRepositoryTest {
         assertIs<AddResult.NoCarrier>(r.addParcel("Mystery", "ZZZZZZZZZZZZ!!", null))
     }
 
-    @Test fun add_refreshes_immediately_when_source_available() = runTest {
+    @Test fun add_inserts_without_refreshing_then_refresh_populates() = runTest {
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
         val src = FakeSource("u", detects = WellKnownCarriers.UPS,
             trackResult = SourceResult.Success(TrackingSnapshot(TrackingStatus.IN_TRANSIT, etaDate = LocalDate(2026, 7, 15))))
         val r = repo(scope, src)
         settings.setSourceConfig("u", SourceConfig(enabled = true))
         val added = r.addParcel("Keyboard", "1Z999AA10123456784", null) as AddResult.Added
+        // Insert-only contract: the row exists immediately, untracked, so callers can respond
+        // to Added without waiting on the network.
+        assertEquals(TrackingStatus.UNKNOWN, r.observeParcel(added.parcel.id).first()!!.status)
+        r.refresh(added.parcel.id)
         val p = r.observeParcel(added.parcel.id).first()!!
         assertEquals(TrackingStatus.IN_TRANSIT, p.status)
         assertEquals(LocalDate(2026, 7, 15), p.etaDate)
@@ -74,12 +78,13 @@ class ParcelRepositoryTest {
         val r = repo(scope, src)
         settings.setSourceConfig("u", SourceConfig(enabled = true))
         val added = r.addParcel("Keyboard", "1Z999AA10123456784", null) as AddResult.Added
+        r.refresh(added.parcel.id)
         src.trackResult = SourceResult.Failure(FailureReason.AUTH, "bad key")
         val summary = r.refreshAll(force = true)
         assertEquals(1, summary.failed)
         assertEquals(FailureReason.AUTH, summary.firstFailureReason)
         val p = r.observeParcel(added.parcel.id).first()!!
-        assertEquals(TrackingStatus.IN_TRANSIT, p.status)  // from the add-time refresh
+        assertEquals(TrackingStatus.IN_TRANSIT, p.status)  // from the first, successful refresh
     }
 
     @Test fun refreshAll_honors_staleness_and_force() = runTest {
@@ -87,7 +92,8 @@ class ParcelRepositoryTest {
         val src = FakeSource("u", detects = WellKnownCarriers.UPS)
         val r = repo(scope, src)
         settings.setSourceConfig("u", SourceConfig(enabled = true))
-        r.addParcel("Keyboard", "1Z999AA10123456784", null)
+        val added = r.addParcel("Keyboard", "1Z999AA10123456784", null) as AddResult.Added
+        r.refresh(added.parcel.id)
         src.trackedNumbers.clear()
         r.refreshAll(force = false)                          // just refreshed -> not stale
         assertTrue(src.trackedNumbers.isEmpty())

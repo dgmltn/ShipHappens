@@ -50,6 +50,11 @@ class ParcelRepository(
 
     fun observeParcel(id: String): Flow<Parcel?> = dao.observeById(id).map { it?.toDomain() }
 
+    /**
+     * Insert only — deliberately does NOT fetch tracking data, so it returns as soon as the row
+     * exists. Callers that want the parcel populated kick off [refresh] themselves, after any
+     * UI response to [AddResult.Added] (clearing the add card must not wait on the network).
+     */
     suspend fun addParcel(name: String, trackingNumber: String, carrier: Carrier?): AddResult {
         val trimmed = trackingNumber.trim()
         val norm = normalizeTracking(trimmed)
@@ -64,7 +69,6 @@ class ParcelRepository(
             createdAt = clock.now(),
         )
         dao.upsertParcel(parcel.toEntity())
-        refresh(parcel.id)  // best effort; failure leaves status UNKNOWN
         return AddResult.Added(parcel)
     }
 

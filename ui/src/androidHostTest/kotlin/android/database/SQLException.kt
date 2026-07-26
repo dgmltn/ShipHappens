@@ -6,7 +6,7 @@
  * Room 3's EntityUpsertAdapter (@Upsert) relies on that message: on an INSERT conflict it
  * inspects `e.message` for "unique"/"1555"/"2067" to decide whether to fall back to UPDATE, and
  * rethrows when the message is null. Without this class, every conflicting upsert (e.g.
- * ParcelRepository.addParcel -> refresh -> upsertParcel) crashes with an opaque SQLException.
+ * ParcelRepository.refresh -> applySnapshot -> upsertParcel) crashes with an opaque SQLException.
  *
  * Classes compiled from this source set precede the mockable jar on the test runtime classpath,
  * so this definition wins and restores standard RuntimeException message/cause behavior.
