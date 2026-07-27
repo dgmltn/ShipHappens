@@ -71,6 +71,18 @@ class UspsPageLogicTest {
         assertNull(uspsEtaWindowText(null))
     }
 
+    // Verbatim from the 2026-07-27 live scrape of the same tracking number once it went
+    // "Out for Delivery": the banner phrases the window as "between X and Y" rather than
+    // "X - Y" or "by X", which the range regex didn't recognize, so the scrape produced no
+    // window and the repository merge kept showing the stale "by 9:00pm" from the 07-24 scrape.
+    @Test fun eta_window_between_and_range_is_extracted() {
+        val outForDeliveryBanner = "Expected Delivery on: Monday 27 July 2026 Expected Delivery Date " +
+            "Expected delivery on the date provided is the latest information on when the Postal Service " +
+            "expects to deliver your package. between 12:00pm and 2:00pm Expected Delivery Time " +
+            "The timeframe provided is the estimated timeframe when the carrier will attempt to deliver your package."
+        assertEquals("12:00pm and 2:00pm", uspsEtaWindowText(outForDeliveryBanner))
+    }
+
     @Test fun live_scrape_regression_full_raw_parse() {
         // The whole 2026-07-24 bug in one assertion set: IN_TRANSIT (not UNKNOWN — which the
         // repository merge would have discarded, leaving the stale LABEL_CREATED on the card),

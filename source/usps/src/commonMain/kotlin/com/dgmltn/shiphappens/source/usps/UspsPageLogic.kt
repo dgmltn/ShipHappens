@@ -57,9 +57,11 @@ internal fun parseUspsEtaDate(text: String?): LocalDate? {
 }
 
 // The two window shapes parseEtaWindow understands, extracted verbatim so the banner's tooltip
-// copy never reaches the parser: a range ("9:45am - 1:45pm") or a lone cutoff ("by 9:00pm").
+// copy never reaches the parser: a range ("9:45am - 1:45pm", "between 9:45am and 1:45pm") or a
+// lone cutoff ("by 9:00pm"). "Out for Delivery" banners phrase the range as "between X and Y"
+// rather than "X - Y" or "X to Y", so "and" joins the separator alternation alongside "to".
 private val WINDOW_RANGE = Regex(
-    """\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:-|–|—|to)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)""",
+    """\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:-|–|—|to|and)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)""",
     RegexOption.IGNORE_CASE,
 )
 private val WINDOW_CUTOFF = Regex("""\bby\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)""", RegexOption.IGNORE_CASE)

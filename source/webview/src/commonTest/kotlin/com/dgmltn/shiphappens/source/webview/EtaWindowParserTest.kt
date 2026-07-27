@@ -25,6 +25,13 @@ class EtaWindowParserTest {
         assertEquals(window(LocalTime(8, 0), LocalTime(12, 0)), parseEtaWindow("8 AM to 12 PM"))
     }
 
+    @Test fun parses_between_and_separator() {
+        assertEquals(
+            window(LocalTime(12, 0), LocalTime(14, 0)),
+            parseEtaWindow("between 12:00pm and 2:00pm"),
+        )
+    }
+
     @Test fun parses_em_dash_separator() {
         assertEquals(window(LocalTime(15, 0), LocalTime(17, 0)), parseEtaWindow("3:00 PM — 5:00 PM"))
     }

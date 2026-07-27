@@ -6,10 +6,11 @@ import kotlinx.datetime.LocalTime
 data class EtaWindow(val start: LocalTime?, val end: LocalTime?)
 
 // "3:00 PM - 5:00 PM", "3 - 5 PM" (start inherits the end's meridiem), "11:30 AM – 1:30 PM",
-// "8 AM to 12 PM". The end meridiem is mandatory: a bare "3 - 5" is ambiguous, and guessing it
-// would show the user a window the carrier never quoted.
+// "8 AM to 12 PM", "between 9:45 AM and 1:45 PM" (USPS's "Out for Delivery" phrasing). The end
+// meridiem is mandatory: a bare "3 - 5" is ambiguous, and guessing it would show the user a
+// window the carrier never quoted.
 private val RANGE = Regex(
-    """(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|–|—|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)""",
+    """(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|–|—|to|and)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)""",
     RegexOption.IGNORE_CASE,
 )
 
