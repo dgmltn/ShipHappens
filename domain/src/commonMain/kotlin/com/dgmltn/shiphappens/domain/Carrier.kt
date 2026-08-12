@@ -12,7 +12,9 @@ object WellKnownCarriers {
     val FEDEX = Carrier("fedex", "FedEx", "#5A1B9A")
     // Amazon orange (#FF9900) darkened to sit with the muted brand accents above.
     val AMAZON = Carrier("amazon", "Amazon", "#146EB4")
-    val all = listOf(UPS, USPS, FEDEX, AMAZON)
+    // Amazon's squid-ink navy; distinct from the orders source so carrier→webSpec lookups stay 1:1.
+    val AMAZON_LOGISTICS = Carrier("amzl", "Amazon Logistics", "#37475A")
+    val all = listOf(UPS, USPS, FEDEX, AMAZON, AMAZON_LOGISTICS)
     fun byCode(code: String): Carrier? = all.firstOrNull { it.code == code.trim().lowercase() }
 }
 

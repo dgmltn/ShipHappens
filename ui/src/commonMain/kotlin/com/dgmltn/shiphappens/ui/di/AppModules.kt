@@ -3,6 +3,7 @@ package com.dgmltn.shiphappens.ui.di
 import com.dgmltn.shiphappens.data.di.dataModule
 import com.dgmltn.shiphappens.data.di.platformDataModule
 import com.dgmltn.shiphappens.source.amazon.amazonSourceModule
+import com.dgmltn.shiphappens.source.amzl.amzlSourceModule
 import com.dgmltn.shiphappens.source.ups.upsSourceModule
 import com.dgmltn.shiphappens.source.usps.uspsSourceModule
 import com.dgmltn.shiphappens.source.webview.di.platformWebModule
@@ -33,6 +34,7 @@ fun appModules(): List<Module> = listOf(
     upsSourceModule,
     uspsSourceModule,
     amazonSourceModule,
+    amzlSourceModule,
     uiModule,
 )
 

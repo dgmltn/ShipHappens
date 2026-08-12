@@ -11,6 +11,8 @@ object BuiltInCarrierDetection {
     private val FEDEX = Regex("^\\d{12}$|^\\d{15}$|^\\d{20,22}$")
     // Amazon order ids: 3-7-7 digits normalized to 17 (hyphens stripped); US ids start 1 or 7.
     private val AMAZON = Regex("^[17]\\d{16}$")
+    // Amazon Logistics: TBA + 9-15 digits (e.g. TBA333593378975).
+    private val AMZL = Regex("^TBA\\d{9,15}$")
 
     fun detect(raw: String): Carrier? {
         val norm = normalizeTracking(raw.trim())
@@ -20,6 +22,7 @@ object BuiltInCarrierDetection {
             USPS_NUM.matches(norm) || USPS_INTL.matches(norm) -> WellKnownCarriers.USPS
             FEDEX.matches(norm) -> WellKnownCarriers.FEDEX
             AMAZON.matches(norm) -> WellKnownCarriers.AMAZON
+            AMZL.matches(norm) -> WellKnownCarriers.AMAZON_LOGISTICS
             else -> null
         }
     }
