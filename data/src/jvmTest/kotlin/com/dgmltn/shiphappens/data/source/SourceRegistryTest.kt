@@ -41,6 +41,24 @@ class SourceRegistryTest {
         scope.cancel()
     }
 
+    @Test fun pure_sourceFor_resolves_against_supplied_configs() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val src = FakeSource("u", detects = WellKnownCarriers.UPS)
+        val reg = SourceRegistry(listOf(src), settings(scope))
+        assertEquals("u", reg.sourceFor(parcel(), mapOf("u" to SourceConfig(enabled = true)))!!.descriptor.id)
+        scope.cancel()
+    }
+
+    @Test fun pure_sourceFor_ignores_disabled_and_stub_sources() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val live = FakeSource("live", detects = WellKnownCarriers.UPS)
+        val stub = FakeSource("stub", detects = WellKnownCarriers.UPS, implemented = false)
+        val reg = SourceRegistry(listOf(live, stub), settings(scope))
+        assertNull(reg.sourceFor(parcel(), emptyMap()))                                      // disabled
+        assertNull(reg.sourceFor(parcel(), mapOf("stub" to SourceConfig(enabled = true))))   // stub only
+        scope.cancel()
+    }
+
     @Test fun detectCarrier_uses_builtins_before_sources() = runTest {
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
         val s = settings(scope)

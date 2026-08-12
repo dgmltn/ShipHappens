@@ -108,7 +108,7 @@ class ListViewModelTest {
         clipboard = FakeClipboard()
         manager = ClipboardImportManager(clipboard, registry, db.parcelDao(), settings)
         val coordinator = RefreshCoordinator(repo, backgroundScope)
-        vm = ListViewModel(repo, manager, coordinator, clock)
+        vm = ListViewModel(repo, manager, coordinator, clock, registry, settings)
         // Records every emission and keeps WhileSubscribed alive for the whole test.
         backgroundScope.launch { vm.state.collect { check(recordedStates.tryEmit(it)) } }
         // Prime the pipeline: the first combined emission requires both Room flows' initial
@@ -188,6 +188,16 @@ class ListViewModelTest {
         assertNull(card.ring)
         assertEquals("Waiting for first update", card.statusText)
         assertFalse(card.delivered)
+    }
+
+    @Test fun card_flags_sourceless_until_its_source_is_enabled() = runTest {
+        val vm = vm()
+        repo.addParcel("Socks", "1Z999AA10123456784", WellKnownCarriers.UPS)
+        val before = awaitState { it.cards.size == 1 }
+        assertTrue(before.cards.single().sourceless)  // "fake" source not enabled → nothing will refresh this
+        settings.setSourceConfig("fake", SourceConfig(enabled = true))
+        val after = awaitState { it.cards.singleOrNull()?.sourceless == false }
+        assertFalse(after.cards.single().sourceless)  // enabling the source clears the badge live
     }
 
     @Test fun card_flags_refreshing_while_refresh_in_flight() = runTest {

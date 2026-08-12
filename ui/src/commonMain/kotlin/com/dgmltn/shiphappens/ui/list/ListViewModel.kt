@@ -5,9 +5,12 @@ import androidx.lifecycle.viewModelScope
 import com.dgmltn.shiphappens.data.*
 import com.dgmltn.shiphappens.data.clipboard.ClipboardImportManager
 import com.dgmltn.shiphappens.data.clipboard.PendingImport
+import com.dgmltn.shiphappens.data.settings.SettingsRepository
 import com.dgmltn.shiphappens.data.source.BuiltInCarrierDetection
+import com.dgmltn.shiphappens.data.source.SourceRegistry
 import com.dgmltn.shiphappens.domain.*
 import com.dgmltn.shiphappens.source.api.FailureReason
+import com.dgmltn.shiphappens.source.api.SourceConfig
 import com.dgmltn.shiphappens.design.accentHex
 import com.dgmltn.shiphappens.ui.util.TRACKING_STEP_LABELS
 import com.dgmltn.shiphappens.ui.util.designFormat
@@ -27,6 +30,8 @@ class ListViewModel(
     private val clipboard: ClipboardImportManager,
     private val coordinator: RefreshCoordinator,
     private val clock: AppClock,
+    private val registry: SourceRegistry,
+    settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
     private val tab = MutableStateFlow(ListTab.ACTIVE)
@@ -48,6 +53,7 @@ class ListViewModel(
         val tab: ListTab, val active: List<Parcel>, val archived: List<Parcel>,
         val pending: PendingImport?, val manual: ManualAddUi,
         val refreshingIds: Set<String> = emptySet(),
+        val sourceConfigs: Map<String, SourceConfig> = emptyMap(),
     )
 
     private val content = combine(
@@ -55,6 +61,8 @@ class ListViewModel(
         clipboard.pending, manual,
     ) { t, act, arc, pend, man -> Content(t, act, arc, pend, man) }
         .combine(repository.refreshingIds) { c, ids -> c.copy(refreshingIds = ids) }
+        // Live source-config view, so the sourceless badge clears the moment a source is enabled.
+        .combine(settingsRepository.settings) { c, s -> c.copy(sourceConfigs = s.sourceConfigs) }
 
     val state: StateFlow<ListUiState> =
         combine(content, pendingName, toast, refreshing, pendingDeleteIds) { c, pName, t, r, del ->
@@ -67,7 +75,12 @@ class ListViewModel(
                 headerSub = if (c.tab == ListTab.ACTIVE) "$arriving arriving soon"
                     else "${archived.size} package${if (archived.size == 1) "" else "s"} archived",
                 tab = c.tab,
-                cards = parcels.map { it.toCard(refreshing = it.id in c.refreshingIds) },
+                cards = parcels.map {
+                    it.toCard(
+                        refreshing = it.id in c.refreshingIds,
+                        sourceless = registry.sourceFor(it, c.sourceConfigs) == null,
+                    )
+                },
                 emptyText = if (parcels.isNotEmpty()) null
                     else if (c.tab == ListTab.ACTIVE) "No active deliveries right now."
                     else "Nothing archived yet. Swipe a package right to archive it.",
@@ -80,7 +93,7 @@ class ListViewModel(
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ListUiState())
 
-    private fun Parcel.toCard(refreshing: Boolean): ParcelCardUi {
+    private fun Parcel.toCard(refreshing: Boolean, sourceless: Boolean): ParcelCardUi {
         val delivered = status == TrackingStatus.DELIVERED
         val days = etaDate?.let { clock.today().daysUntil(it) }
         val urgent = !delivered && days != null && days <= 1
@@ -100,6 +113,7 @@ class ListViewModel(
             ),
             urgent = urgent,
             refreshing = refreshing,
+            sourceless = sourceless,
         )
     }
 

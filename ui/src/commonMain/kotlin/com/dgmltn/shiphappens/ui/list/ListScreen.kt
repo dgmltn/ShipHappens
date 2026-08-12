@@ -55,6 +55,7 @@ import com.dgmltn.shiphappens.design.colorFromHex
 import com.dgmltn.shiphappens.design.hankenFamily
 import com.dgmltn.shiphappens.design.monoFamily
 import com.dgmltn.shiphappens.ui.components.DaysRing
+import com.dgmltn.shiphappens.ui.components.ProhibitionIcon
 import com.dgmltn.shiphappens.ui.components.ToastOverlay
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -276,6 +277,12 @@ private fun ParcelRow(
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold
                     )
+                    if (card.sourceless) {
+                        ProhibitionIcon(
+                            tint = ShipColors.muted,
+                            contentDescription = "Updates off — source disabled in Settings",
+                        )
+                    }
                     Box(Modifier.size(3.dp).clip(CircleShape).background(ShipColors.hairlineStrong))
                     Text(
                         card.statusText,
@@ -581,6 +588,11 @@ private fun Preview_ListContent_RefreshingAndUnrefreshed() {
                     ParcelCardUi(
                         "8", "Wool socks", "UPS", "#5A3A22", "Waiting for first update",
                         delivered = false, ring = null, urgent = false, refreshing = true
+                    ),
+                    // Source disabled: prohibition badge after the carrier name.
+                    ParcelCardUi(
+                        "9", "Fable test package", "Amazon Logistics", "#37475A", "Label created",
+                        delivered = false, ring = null, urgent = false, sourceless = true
                     ),
                 ),
             ),

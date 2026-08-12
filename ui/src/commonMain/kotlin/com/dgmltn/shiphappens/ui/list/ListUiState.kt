@@ -14,6 +14,8 @@ data class ParcelCardUi(
     val ring: RingUi?,
     val urgent: Boolean,
     val refreshing: Boolean = false,
+    /** True when no enabled source will refresh this parcel (its source is toggled off). */
+    val sourceless: Boolean = false,
 )
 
 data class PendingImportUi(
