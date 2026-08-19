@@ -4,6 +4,7 @@ import com.dgmltn.shiphappens.domain.TrackingStatus
 import com.dgmltn.shiphappens.source.webview.DomCard
 import com.dgmltn.shiphappens.source.webview.DomRaw
 import com.dgmltn.shiphappens.source.webview.DomRawEvent
+import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -63,8 +64,10 @@ class AmazonPageLogicTest {
         // "Arriving today" is a delivery-date promise, not a transit state: the card is still picked
         // over the delivered one and its ETA is carried, but status stays UNKNOWN (the tracker hop
         // supplies the real state) — it must NOT be reported as IN_TRANSIT.
-        val arriving = DomCard(head = "Arriving today", href = "https://www.amazon.com/progress-tracker/p2", etaDate = "2026-07-19")
-        val result = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(deliveredCard, arriving)))
+        val arriving = DomCard(head = "Arriving today", href = "https://www.amazon.com/progress-tracker/p2")
+        val result = resolveAmazonCards(
+            DomRaw(kind = "cards", cards = listOf(deliveredCard, arriving), todayIso = "2026-07-19"),
+        )
         assertEquals(arriving.href, result.url)
         assertEquals(TrackingStatus.UNKNOWN.name, result.tracking?.status)
         assertEquals("2026-07-19", result.tracking?.etaDate)
@@ -89,8 +92,8 @@ class AmazonPageLogicTest {
     @Test fun arriving_only_card_keeps_its_eta_with_unknown_status() {
         // No tracker link and only a delivery-date headline: report the ETA with an honest UNKNOWN
         // status rather than inventing IN_TRANSIT or dropping the countdown.
-        val arriving = DomCard(head = "Arriving tomorrow", href = null, etaDate = "2026-07-21")
-        val result = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(arriving)))
+        val arriving = DomCard(head = "Arriving tomorrow", href = null)
+        val result = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(arriving), todayIso = "2026-07-20"))
         assertEquals("ok", result.page)
         assertEquals(TrackingStatus.UNKNOWN.name, result.tracking?.status)
         assertEquals("2026-07-21", result.tracking?.etaDate)
@@ -148,5 +151,104 @@ class AmazonPageLogicTest {
 
     @Test fun unknown_raw_kind_is_refused() {
         assertNull(parseAmazonRaw(DomRaw(kind = "somethingElse")))
+    }
+
+    // --- Revised-promise phrasing (device capture, order 112-9490776-9361838, 2026-08-18) ---
+    //
+    // A delayed shipment drops the "Arriving ..." wording entirely and reads "Now expected
+    // tomorrow by 8 AM". The JS only ever looked for "arriving", so the page's own stated day was
+    // discarded and the parcel showed no arrival date at all — while still carrying the "by 8 AM"
+    // window, which the detail screen hides when there is no date to hang it on.
+
+    private val today = LocalDate(2026, 8, 18)
+    private val tomorrow = LocalDate(2026, 8, 19)
+
+    @Test fun now_expected_tomorrow_resolves_to_tomorrows_date() {
+        assertEquals(tomorrow, amazonEtaFromStatus("Now expected tomorrow by 8 AM", today))
+    }
+
+    @Test fun now_expected_marks_the_shipment_delayed() {
+        assertEquals(TrackingStatus.EXCEPTION, classifyAmazonStatus("Now expected tomorrow by 8 AM"))
+    }
+
+    @Test fun arriving_phrasing_still_resolves() {
+        assertEquals(today, amazonEtaFromStatus("Arriving today", today))
+        assertEquals(tomorrow, amazonEtaFromStatus("Arriving tomorrow", today))
+        assertEquals(tomorrow, amazonEtaFromStatus("Arriving overnight 7 AM – 11 AM", today))
+    }
+
+    @Test fun explicit_day_takes_its_year_from_the_page_date() {
+        assertEquals(LocalDate(2026, 8, 22), amazonEtaFromStatus("Arriving Sat, Aug 22", today))
+        assertEquals(LocalDate(2026, 9, 3), amazonEtaFromStatus("Now expected September 3", today))
+    }
+
+    @Test fun a_december_promise_read_in_january_belongs_to_last_year() {
+        // Amazon omits the year; taking January's year would put the date 11 months in the future.
+        assertEquals(LocalDate(2026, 12, 28), amazonEtaFromStatus("Arriving December 28", LocalDate(2027, 1, 5)))
+    }
+
+    @Test fun text_with_no_delivery_phrase_has_no_eta() {
+        // The gate matters: a delivered headline names a date that is history, not a promise.
+        assertNull(amazonEtaFromStatus("Delivered June 25 Your package was left near the front door", today))
+        assertNull(amazonEtaFromStatus("Package delayed in transit", today))
+        assertNull(amazonEtaFromStatus("by 8 AM", today))
+    }
+
+    @Test fun a_promise_element_is_parsed_without_needing_a_phrase() {
+        // The tracker's own promise element is nothing but the day, so it needs no lead-in word.
+        assertEquals(tomorrow, parseAmazonDay("Tomorrow", today))
+        assertEquals(LocalDate(2026, 8, 22), parseAmazonDay("Saturday, August 22", today))
+    }
+
+    @Test fun a_page_that_never_reported_its_date_yields_no_eta() {
+        // todayIso absent (older payload, or a page read before the field existed): relative words
+        // are unresolvable, and inventing a date would be worse than having none.
+        assertNull(amazonEtaFromStatus("Now expected tomorrow by 8 AM", today = null))
+        assertNull(parseAmazonDay("Saturday, August 22", today = null))
+    }
+
+    @Test fun delayed_tracker_page_reports_tomorrow_the_window_and_the_delay() {
+        // Verbatim from the 2026-08-18 capture.
+        val result = resolveAmazonTracker(
+            DomRaw(
+                kind = "tracker",
+                statusText = "Now expected tomorrow by 8 AM",
+                etaWindowText = "by 8 AM",
+                todayIso = "2026-08-18",
+                events = listOf(
+                    DomRawEvent("2026-08-18T07:00:00.000Z", "Delivery appointment scheduled", "US"),
+                    DomRawEvent("2026-08-18T07:00:00.000Z", "Package delayed in transit", ""),
+                    DomRawEvent("2026-08-18T07:00:00.000Z", "Package delayed in transit", ""),
+                ),
+            ),
+        )
+        assertEquals("2026-08-19", result.tracking?.etaDate)
+        assertEquals("by 8 AM", result.tracking?.etaWindowText)
+        assertEquals(TrackingStatus.EXCEPTION.name, result.tracking?.status)
+    }
+
+    @Test fun tracker_prefers_the_promise_element_over_the_status_line() {
+        val result = resolveAmazonTracker(
+            DomRaw(
+                kind = "tracker",
+                statusText = "Now expected tomorrow by 8 AM",
+                etaText = "Saturday, August 22",
+                todayIso = "2026-08-18",
+            ),
+        )
+        assertEquals("2026-08-22", result.tracking?.etaDate)
+    }
+
+    @Test fun delayed_order_card_carries_the_revised_eta_into_the_hop() {
+        // The order page hops to the tracker, but the coarse fallback must already hold the date:
+        // an impoverished tracker page would otherwise blank a countdown the order page knew.
+        val delayed = DomCard(
+            head = "Now expected tomorrow by 8 AM",
+            href = "https://www.amazon.com/gp/your-account/ship-track?itemId=x&orderId=y",
+        )
+        val result = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(delayed), todayIso = "2026-08-18"))
+        assertEquals("goto", result.page)
+        assertEquals("2026-08-19", result.tracking?.etaDate)
+        assertEquals(TrackingStatus.EXCEPTION.name, result.tracking?.status)
     }
 }

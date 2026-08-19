@@ -38,12 +38,17 @@ data class DomRaw(
      *  that can produce ISO themselves. */
     val etaText: String? = null,
     val etaWindowText: String? = null,
+    /** The device's local date when the page was read, ISO. Pages that phrase a delivery day
+     *  relatively ("tomorrow") or without a year ("Saturday, August 22") can only be resolved
+     *  against it, and resolving in Kotlin keeps that arithmetic under test. */
+    val todayIso: String? = null,
     val events: List<DomRawEvent> = emptyList(),
 )
 
-/** One shipment card from a list page: its status headline and detail-page link, unclassified. */
+/** One shipment card from a list page: its status headline and detail-page link, unclassified.
+ *  The headline also carries the delivery day; parsing it is the provider's job (see [DomRaw.todayIso]). */
 @Serializable
-data class DomCard(val head: String = "", val href: String? = null, val etaDate: String? = null)
+data class DomCard(val head: String = "", val href: String? = null)
 
 /** One event row, timestamp already normalized to ISO-8601 by the page's own date context. */
 @Serializable

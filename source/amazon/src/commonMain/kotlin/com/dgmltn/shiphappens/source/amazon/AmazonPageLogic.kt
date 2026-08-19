@@ -6,6 +6,11 @@ import com.dgmltn.shiphappens.source.webview.DomExtraction
 import com.dgmltn.shiphappens.source.webview.DomRaw
 import com.dgmltn.shiphappens.source.webview.ScrapedEvent
 import com.dgmltn.shiphappens.source.webview.ScrapedTracking
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.Month
+import kotlinx.datetime.minus
+import kotlinx.datetime.plus
 
 /**
  * Everything the Amazon scrape *decides*, kept out of AMAZON_EXTRACTION_JS so it can be tested
@@ -18,6 +23,10 @@ private val EXCEPTION_PHRASES = listOf(
     "undeliverable",
     "running late",
     "delayed",
+    // Amazon's revised-promise wording ("Now expected tomorrow by 8 AM"), which it uses only when
+    // the original promise slipped. Captured 2026-08-18 on a shipment whose only other delay
+    // signal was an event row — a tracker page that hadn't logged one yet would have looked fine.
+    "now expected",
     "delivery attempted",
     "returned to sender",
     "return to sender",
@@ -57,6 +66,76 @@ internal fun classifyAmazonStatus(raw: String?): TrackingStatus? {
     }
 }
 
+
+// --- Delivery-day parsing -----------------------------------------------------------------
+//
+// Amazon writes the day relatively ("tomorrow") or without a year ("Saturday, August 22"), so
+// resolving it needs the date the page was read on — DomRaw.todayIso, supplied by the JS. Doing
+// it here rather than in the blob is the point: the JS version recognized only the word
+// "arriving", so the delay wording "Now expected tomorrow by 8 AM" silently produced no ETA at
+// all (2026-08-18 capture), and an earlier version of the same function turned "tomorrow" into
+// 2026-01-01. Neither was catchable without a device.
+
+private const val MONTHS =
+    "January|February|March|April|May|June|July|August|September|October|November|December|" +
+        "Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec"
+private val MONTH_DAY = Regex("""\b($MONTHS)\.?\s+(\d{1,2})\b""", RegexOption.IGNORE_CASE)
+private val DAY_MONTH = Regex("""\b(\d{1,2})\s+($MONTHS)\b""", RegexOption.IGNORE_CASE)
+
+/**
+ * Phrases that introduce a delivery promise, most specific first: "Now expected" supersedes an
+ * "Arriving" promise in the same string, because it IS the revision of one.
+ */
+private val ETA_PHRASES = listOf("estimated delivery", "now expected", "expected", "arriving")
+
+private fun monthOf(name: String): Month? =
+    Month.entries.firstOrNull { it.name.startsWith(name.trimEnd('.').uppercase()) }
+
+/**
+ * Resolves a day phrase against [today]. Takes the string verbatim, so it is only safe on text
+ * already known to BE a promise (the tracker's promise element) — anything else must come through
+ * [amazonEtaFromStatus], which requires a promise phrase first. Null [today] means the page never
+ * reported its date, and a guessed year is worse than no ETA.
+ */
+internal fun parseAmazonDay(text: String?, today: LocalDate?): LocalDate? {
+    if (text.isNullOrBlank() || today == null) return null
+    val t = text.lowercase()
+    // "Arriving overnight 7 AM – 11 AM": delivery during the coming night, i.e. tomorrow morning.
+    when {
+        "today" in t -> return today
+        "tomorrow" in t || "overnight" in t -> return today.plus(1, DateTimeUnit.DAY)
+        "yesterday" in t -> return today.minus(1, DateTimeUnit.DAY)
+    }
+    val (monthName, day) = MONTH_DAY.find(text)?.destructured?.let { (m, d) -> m to d }
+        ?: DAY_MONTH.find(text)?.destructured?.let { (d, m) -> m to d }
+        ?: return null
+    val month = monthOf(monthName) ?: return null
+    val dayOfMonth = day.toIntOrNull() ?: return null
+    val candidate = runCatching { LocalDate(today.year, month, dayOfMonth) }.getOrNull() ?: return null
+    // The year is ours, not the page's: a December promise read in January would otherwise land 11
+    // months out. Anything implausibly far ahead belongs to last year.
+    return if (candidate > today.plus(45, DateTimeUnit.DAY)) {
+        runCatching { LocalDate(today.year - 1, month, dayOfMonth) }.getOrNull()
+    } else {
+        candidate
+    }
+}
+
+/**
+ * Pulls the delivery day out of a status headline, which only counts when a promise phrase
+ * introduces it. The gate is what keeps "Delivered June 25" — a date that is history — from being
+ * read as an upcoming arrival.
+ */
+internal fun amazonEtaFromStatus(text: String?, today: LocalDate?): LocalDate? {
+    val t = text ?: return null
+    val after = ETA_PHRASES.firstNotNullOfOrNull { phrase ->
+        t.indexOf(phrase, ignoreCase = true).takeIf { it >= 0 }?.let { t.substring(it + phrase.length) }
+    } ?: return null
+    return parseAmazonDay(after, today)
+}
+
+private fun DomRaw.today(): LocalDate? = todayIso?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+
 /**
  * Picks the card the parcel should track: the first shipment still in flight, else the last one
  * (design spec §Decisions).
@@ -77,13 +156,14 @@ internal fun pickShipmentCard(cards: List<DomCard>): DomCard? {
 /** Order-details page: choose a shipment and either hop to its tracker or report its coarse state. */
 internal fun resolveAmazonCards(raw: DomRaw): DomExtraction {
     val pick = pickShipmentCard(raw.cards) ?: return DomExtraction(page = "empty")
+    val eta = amazonEtaFromStatus(pick.head, raw.today())
     // The headline's "Arriving <day>" carries the ETA but not a transit state (see IN_TRANSIT_PHRASES),
     // so a card can have a delivery date with no classifiable status. Keep the ETA regardless — a
     // shipment with no tracker link still yields a countdown — and leave status UNKNOWN until a real
     // signal (the tracker hop, or delivered/shipped/exception phrasing) supplies one.
     val status = classifyAmazonStatus(pick.head)
-    val coarse = if (status != null || pick.etaDate != null) {
-        ScrapedTracking(status = (status ?: TrackingStatus.UNKNOWN).name, etaDate = pick.etaDate)
+    val coarse = if (status != null || eta != null) {
+        ScrapedTracking(status = (status ?: TrackingStatus.UNKNOWN).name, etaDate = eta?.toString())
     } else null
     return when {
         pick.href != null -> DomExtraction(page = "goto", url = pick.href, tracking = coarse)
@@ -111,7 +191,9 @@ internal fun resolveAmazonTracker(raw: DomRaw): DomExtraction {
         page = "ok",
         tracking = ScrapedTracking(
             status = status.name,
-            etaDate = raw.etaDate,
+            etaDate = (parseAmazonDay(raw.etaText, raw.today())
+                ?: amazonEtaFromStatus(raw.statusText, raw.today()))?.toString()
+                ?: raw.etaDate,
             etaWindowText = raw.etaWindowText,
             location = events.lastOrNull { it.location != null }?.location,
             events = events,

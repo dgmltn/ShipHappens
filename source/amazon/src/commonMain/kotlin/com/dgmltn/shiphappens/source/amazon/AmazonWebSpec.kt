@@ -45,8 +45,10 @@ function() {
     return {page: 'empty', why: why, url: href, textHead: text.replace(/\s+/g, ' ').slice(0, 300),
             probe: probe(), detail: detail || null};
   }
-  // Amazon's day labels ("Today", "Yesterday", "Tuesday, July 15") omit the year; V8 would guess
+  // Event date-headers ("Today", "Yesterday", "Tuesday, July 15") omit the year; V8 would guess
   // 2001, so append the current year, with a rollover guard for December events read in January.
+  // Only event rows use this — the delivery PROMISE is resolved in AmazonPageLogic against
+  // todayIso, because the phrase vocabulary it needs is exactly what keeps breaking untested here.
   function parseDay(label) {
     var now = new Date();
     var l = (label || '').toLowerCase();
@@ -56,8 +58,8 @@ function() {
     if (l.indexOf('yesterday') >= 0) return new Date(now.getTime() - 864e5);
     // Past the relative words we need an explicit calendar date. Appending the year lets V8 parse
     // "Tuesday, July 15", but V8 also "parses" wordy labels — "tomorrow 2026", "Sunday 2026" — into
-    // Jan 1, defeating the isNaN guard below (this shipped: an "Arriving tomorrow" card produced
-    // etaDate 2026-01-01). Require a real month/day token first so junk returns null, not Jan 1.
+    // Jan 1, defeating the isNaN guard below (this shipped as an ETA bug in 2026-07). Require a
+    // real month/day token first so junk returns null, not Jan 1.
     if (!/\d/.test(l) && !/jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/.test(l)) return null;
     var d = new Date(('' + label).replace(/^[a-z]+,\s*/i, '') + ' ' + now.getFullYear());
     if (isNaN(d.getTime())) return null;
@@ -66,11 +68,6 @@ function() {
   }
   function isoDate(d) {
     return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
-  }
-  // "Arriving today" / "Arriving Tue, Jul 22" carries the ETA inside the status text on both the
-  // order-details header and the tracker page; strip everything up to "arriving" and parse the day.
-  function etaFromArriving(t) {
-    return (t && /arriving/i.test(t)) ? parseDay(('' + t).replace(/.*arriving/i, '')) : null;
   }
   // Grabs the delivery-window phrase verbatim ("3:00 PM - 5:00 PM", "by 10 PM") for Kotlin's
   // parseEtaWindow to normalize. No conversion here: the repo has no JS engine in commonTest, so
@@ -109,15 +106,15 @@ function() {
     events.reverse();  // page lists newest first; canonical order is ascending
     if (!statusText && !events.length) return empty('trackerNoStatusNoEvents', 'nodes=' + nodes.length);
     var promiseText = clean(document.querySelector('[class*="promise"], #expected-delivery-date'));
-    var etaDay = parseDay(promiseText) || etaFromArriving(statusText);
     // Status line first (where Amazon quotes the window), promise element as the fallback. Never
     // document.body — an event row's timestamp is not the promise.
     var etaWindow = windowText(statusText) || windowText(promiseText);
     return {page: 'raw', raw: {
       kind: 'tracker',
       statusText: statusText,
-      etaDate: etaDay ? isoDate(etaDay) : null,
+      etaText: promiseText,
       etaWindowText: etaWindow,
+      todayIso: isoDate(new Date()),
       events: events
     }};
   }
@@ -140,13 +137,12 @@ function() {
     // Last resort: the card's own leading text is the status headline ("Delivered today"), bounded
     // to one line so trailing action buttons don't join the status.
     if (!head) head = (('' + (cards[k].innerText || '')).split('\n')[0] || '').trim();
-    // The headline also carries the ETA ("Arriving today"); parse it here where the page's own
-    // date context is available.
-    var cardEta = etaFromArriving(head);
     var link = cards[k].querySelector('a[href*="progress-tracker"], a[href*="ship-track"]');
-    out.push({head: head, href: (link && link.href) ? link.href : null, etaDate: cardEta ? isoDate(cardEta) : null});
+    out.push({head: head, href: (link && link.href) ? link.href : null});
   }
-  return {page: 'raw', raw: {kind: 'cards', cards: out}};
+  // The headline also carries the ETA ("Arriving today", "Now expected tomorrow"); todayIso is
+  // what lets AmazonPageLogic resolve those words to a real date.
+  return {page: 'raw', raw: {kind: 'cards', cards: out, todayIso: isoDate(new Date())}};
 }
 """.trimIndent()
 
