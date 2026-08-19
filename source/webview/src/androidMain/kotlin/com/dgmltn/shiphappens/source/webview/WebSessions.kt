@@ -25,10 +25,7 @@ import kotlinx.serialization.json.Json
  */
 object WebSessions {
 
-    /** Delay after onPageFinished before running the DOM extraction runner (lets XHRs land first). */
-    const val SETTLE_MS = 3_000L
-
-    // The settle delay MUST be scheduled on a main-Looper Handler, not view.postDelayed: the
+    // The settle delay ([WebProviderSpec.settle]) MUST be scheduled on a main-Looper Handler, not view.postDelayed: the
     // headless scraper's WebView is never attached to a window, and View.postDelayed on an
     // unattached view parks the runnable in a RunQueue that only drains on window-attach (which
     // never happens headless) — so the extraction runner would never fire and every headless
@@ -80,9 +77,14 @@ object WebSessions {
         // Bridge object: same JS call shape (shipBridge.postMessage) on every WebView version.
         webView.addJavascriptInterface(Bridge(spec.sourceId, tracer, onPayload), BridgeScripts.BRIDGE_NAME)
 
+        // A provider with no apiUrlPatterns gets NO capture script at all — not an empty-pattern
+        // wrapper. The wrapped fetch/XHR is what fedex.com's bot defense keys on (QA 2026-08-19:
+        // hooks present → every tracking lookup lands on the "system-error" page; hooks absent →
+        // the page renders normally), and a DOM-only provider gains nothing from the hooks.
+        val injectCapture = spec.apiUrlPatterns.isNotEmpty()
         val captureJs = BridgeScripts.captureScript(spec.apiUrlPatterns)
         val documentStartSupported = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
-        if (documentStartSupported) {
+        if (injectCapture && documentStartSupported) {
             WebViewCompat.addDocumentStartJavaScript(webView, captureJs, spec.allowedOriginRules().toSet())
         }
         tracer.sessionConfigured(spec.sourceId, spec.apiUrlPatterns, documentStartSupported)
@@ -92,7 +94,7 @@ object WebSessions {
                 // Fallback when document-start injection isn't available: inject ASAP at page
                 // start. Racy against very early page requests, but the DOM extractor still
                 // provides coverage when the capture layer misses.
-                if (!documentStartSupported) view.evaluateJavascript(captureJs, null)
+                if (injectCapture && !documentStartSupported) view.evaluateJavascript(captureJs, null)
             }
 
             override fun onPageFinished(view: WebView, url: String) {
@@ -107,7 +109,7 @@ object WebSessions {
                     // The view may be destroyed (headless teardown) before this fires; there is no
                     // public "is destroyed" check, so runCatching absorbs the post-destroy call.
                     runCatching { view.evaluateJavascript(BridgeScripts.extractionRunner(spec), null) }
-                }, SETTLE_MS)
+                }, spec.settle.inWholeMilliseconds)
             }
 
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {

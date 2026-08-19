@@ -38,6 +38,9 @@ data class DomRaw(
      *  that can produce ISO themselves. */
     val etaText: String? = null,
     val etaWindowText: String? = null,
+    /** Verbatim current-location banner ("Currently in Sacramento, CA") for tracker pages that
+     *  show a location without any event rows; the provider strips the phrasing in Kotlin. */
+    val locationText: String? = null,
     /** The device's local date when the page was read, ISO. Pages that phrase a delivery day
      *  relatively ("tomorrow") or without a year ("Saturday, August 22") can only be resolved
      *  against it, and resolving in Kotlin keeps that arithmetic under test. */

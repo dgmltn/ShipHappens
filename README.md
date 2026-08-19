@@ -22,12 +22,14 @@ data/          Room 3 database, ParcelRepository, SettingsRepository (DataStore)
 design/        Design system: ShipTheme, ShipColors, font resources (Hanken + mono), and the
                canonical HTML visual spec (Parcels.dc.html).
 source/
-  api/         The plugin contract: TrackingSource, SourceConfig, SourceResult, SeedingSource.
+  api/         The plugin contract: TrackingSource, SourceConfig, SourceResult.
                Every source module depends only on this.
-  demo/        Seeds the design's 7 sample parcels; used by the Settings "Demo data" toggle.
-  ups/         UPS carrier source (stub proving the plugin contract).
-  usps/        USPS carrier source (stub).
-  fedex/       FedEx carrier source (stub).
+  webview/     Shared WebView scraping machinery: WebProviderSpec, PayloadRouter, ScrapeTracer.
+  ups/         UPS carrier source (ups.com in a WebView).
+  usps/        USPS carrier source (tools.usps.com in a WebView).
+  fedex/       FedEx carrier source (fedex.com/fedextrack in a WebView).
+  amazon/      Amazon orders source (amazon.com order pages, login required).
+  amzl/        Amazon Logistics source (track.amazon.com, anonymous TBA tracking).
 ui/            Compose Multiplatform screens (list, detail, settings), Navigation 3, ViewModels,
                and appModules() — the single place all Koin modules are assembled.
 app-android/   Android application shell: MainActivity, Koin bootstrap with androidContext.
@@ -77,13 +79,14 @@ gitignored and recreated by `xcodegen generate`, while `app-ios/ShipHappens/Info
 
 ```bash
 ./gradlew :domain:jvmTest :data:jvmTest :source:api:jvmTest :source:ups:jvmTest \
-          :source:usps:jvmTest :source:webview:jvmTest \
+          :source:usps:jvmTest :source:fedex:jvmTest :source:amazon:jvmTest \
+          :source:amzl:jvmTest :source:webview:jvmTest \
           :ui:testAndroidHostTest --console=plain
 ```
 
 Note `:ui`'s task is `testAndroidHostTest`, not `testDebugUnitTest` — the UI module's unit tests
-run on the Android-host test source set. Current suite: 217 tests across 7 modules (domain 14,
-data 66, api 2, ups 9, usps 28, webview 50, ui 48), all passing.
+run on the Android-host test source set. Current suite: 305 tests across 10 modules (domain 14,
+data 66, api 2, ups 9, usps 28, fedex 27, amazon 44, amzl 17, webview 50, ui 48), all passing.
 
 ## Daily update
 
@@ -103,25 +106,25 @@ toggle off rather than creating a setting that silently does nothing.
 The plugin boundary is `TrackingSource` in `source/api`. Adding a new carrier or aggregator never
 touches `domain` or `data`:
 
-1. **Implement `TrackingSource`** in a new `source/<name>` module (copy `source/ups` as a
-   template: same `build.gradle.kts` shape — `api(projects.source.api)` plus Koin). Provide a
-   `SourceDescriptor` (id, display name, `SourceKind.CARRIER` or `.UNIVERSAL`, config fields),
-   `detectCarrier(trackingNumber)` for cheap local format recognition, `track(...)`, and
-   `testConnection(...)`. Implement `SeedingSource` too if the source should offer demo/seed data.
-   **Important:** `source/ups` sets `implemented = false` in its descriptor because it is a stub —
-   a real source must leave `implemented` at its default (`true`), or `SourceRegistry` will skip it
-   when resolving which source refreshes a parcel.
+1. **Implement `TrackingSource`** in a new `source/<name>` module (copy `source/usps` as a
+   template: same `build.gradle.kts` shape — `api(projects.source.api)` +
+   `api(projects.source.webview)` plus Koin). For a website-scraped carrier that means one
+   `WebProviderSpec` (URLs, capture patterns, a DOM-reader JS blob), a `<Name>PageLogic.kt` that
+   makes every scrape decision in testable Kotlin, an API parser for captured XHR JSON, and a
+   thin `WebViewBasedSource` subclass supplying `detectCarrier(trackingNumber)` for cheap local
+   format recognition.
 2. **Expose a Koin module** — one line, same pattern as every existing source:
    ```kotlin
-   val myNewSourceModule: Module = module { single { MyNewSource() } bind TrackingSource::class }
+   val myNewSourceModule: Module = module { single { MyNewSource(get()) } bind TrackingSource::class }
    ```
 3. **Register it** in `appModules()` in
    `ui/src/commonMain/kotlin/com/dgmltn/shiphappens/ui/di/AppModules.kt` — add the module to the list
    returned there. `SourceRegistry` (in `data`) picks up every bound `TrackingSource`
    automatically; nothing in `data` needs to change.
 
-Add `:source:<name>` to `settings.gradle.kts` and give the module the same
-`kotlinMultiplatform` + `android.kotlin.multiplatform.library` shape as its siblings.
+Add `:source:<name>` to `settings.gradle.kts`, add the module to `ui/build.gradle.kts`
+dependencies, and give it the same `kotlinMultiplatform` +
+`android.kotlin.multiplatform.library` shape as its siblings.
 
 ## Settings & API keys
 

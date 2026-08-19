@@ -1,6 +1,8 @@
 package com.dgmltn.shiphappens.source.webview
 
 import com.dgmltn.shiphappens.domain.Carrier
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Everything provider-specific about scraping one carrier's website. Adding a new provider
@@ -26,6 +28,13 @@ class WebProviderSpec(
     val challengeMarkers: List<String>,
     val extractionJs: String,
     val parseApi: (url: String?, body: String) -> ScrapedTracking?,
+    /**
+     * Quiescence delay between onPageFinished and the extraction run. The default suits pages
+     * that render server-side or hydrate quickly; a heavy SPA that client-routes after load
+     * (fedex.com takes ~10s to land on its tracking view) needs more, or the extractor reads an
+     * app shell and reports an empty page.
+     */
+    val settle: Duration = 3.seconds,
     /**
      * Turns a `page:'raw'` extraction's verbatim page text into an outcome, so status vocabulary
      * and card-selection rules live in unit-testable Kotlin instead of [extractionJs] (see [DomRaw]).
