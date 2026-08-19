@@ -4,6 +4,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room3.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.dgmltn.shiphappens.data.clipboard.ClipboardReader
+import com.dgmltn.shiphappens.data.daily.*
 import com.dgmltn.shiphappens.data.db.ShipHappensDb
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.Dispatchers
@@ -41,4 +42,6 @@ actual fun platformDataModule(): Module = module {
             .setDriver(BundledSQLiteDriver()).setQueryCoroutineContext(Dispatchers.Default).build()
     }
     single<ClipboardReader> { IosClipboardReader() }
+    single<StatusNotifier> { IosStatusNotifier() }
+    single<DailyRefreshScheduler> { BgTaskDailyRefreshScheduler() }
 }

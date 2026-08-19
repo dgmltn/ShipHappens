@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.datetime.LocalDate
 import kotlin.time.Duration.Companion.minutes
 import kotlin.uuid.Uuid
 
@@ -21,7 +22,17 @@ sealed interface AddResult {
     data object NoCarrier : AddResult
 }
 
-data class RefreshSummary(val attempted: Int, val failed: Int, val firstFailureReason: FailureReason? = null)
+data class RefreshSummary(
+    val attempted: Int,
+    val failed: Int,
+    val firstFailureReason: FailureReason? = null,
+    /** Every successful refresh's diff, notable or not. */
+    val changes: List<ParcelChange> = emptyList(),
+    /** Sources that failed with AUTH — their session needs re-establishing. */
+    val authFailedSourceIds: Set<String> = emptySet(),
+    /** Sources that refreshed at least one parcel successfully — clears a stale sign-in nag. */
+    val succeededSourceIds: Set<String> = emptySet(),
+)
 
 class ParcelRepository(
     private val dao: ParcelDao,
@@ -84,8 +95,12 @@ class ParcelRepository(
      * fields never clobber existing values, events replace wholesale when non-empty, and the
      * parcel is pinned to [sourceId]. Returns false when the parcel no longer exists.
      */
-    suspend fun applySnapshot(id: String, snapshot: TrackingSnapshot, sourceId: String): Boolean {
-        val row = dao.getById(id) ?: return false
+    suspend fun applySnapshot(id: String, snapshot: TrackingSnapshot, sourceId: String): Boolean =
+        applyAndDiff(id, snapshot, sourceId) != null
+
+    /** [applySnapshot] plus the before/after diff. Null ONLY when the row doesn't exist. */
+    private suspend fun applyAndDiff(id: String, snapshot: TrackingSnapshot, sourceId: String): ParcelChange? {
+        val row = dao.getById(id) ?: return null
         // etaWindowStart/etaWindowEnd are two halves of one value, so they're merged as a unit:
         // if the snapshot carries either bound, take both from the snapshot (a start-less
         // snapshot clears a stored start rather than leaving it paired with a new end); only
@@ -102,8 +117,18 @@ class ParcelRepository(
         )
         dao.upsertParcel(updated)
         if (snapshot.events.isNotEmpty()) dao.replaceEvents(id, snapshot.events.map { it.toEntity(id) })
-        return true
+        return ParcelChange(
+            parcelId = id,
+            parcelName = updated.name,
+            statusBefore = row.parcel.status.toTrackingStatus(),
+            statusAfter = updated.status.toTrackingStatus(),
+            etaBefore = row.parcel.etaDate?.let(LocalDate::parse),
+            etaAfter = updated.etaDate?.let(LocalDate::parse),
+        )
     }
+
+    private fun String.toTrackingStatus(): TrackingStatus =
+        runCatching { TrackingStatus.valueOf(this) }.getOrDefault(TrackingStatus.UNKNOWN)
 
     /**
      * Outcome of a single-row refresh attempt. [NoSource] (no enabled source resolves for this
@@ -111,13 +136,13 @@ class ParcelRepository(
      * surface a "couldn't refresh" toast; the parcel simply stays at whatever status it has.
      */
     private sealed interface RefreshOutcome {
-        data object Success : RefreshOutcome
+        data class Success(val change: ParcelChange?, val sourceId: String) : RefreshOutcome
         data object NoSource : RefreshOutcome
-        data class Failed(val reason: FailureReason) : RefreshOutcome
+        data class Failed(val reason: FailureReason, val sourceId: String?) : RefreshOutcome
     }
 
     private suspend fun refreshRow(id: String): RefreshOutcome {
-        val row = dao.getById(id) ?: return RefreshOutcome.Failed(FailureReason.UNKNOWN)
+        val row = dao.getById(id) ?: return RefreshOutcome.Failed(FailureReason.UNKNOWN, null)
         val parcel = row.toDomain()
         val source = registry.sourceFor(parcel) ?: return RefreshOutcome.NoSource
         _refreshingIds.update { it + id }
@@ -127,11 +152,9 @@ class ParcelRepository(
             val result = runCatching { source.track(parcel.trackingNumber, parcel.carrier) }
                 .getOrElse { SourceResult.Failure(FailureReason.UNKNOWN, it.message) }
             return when (result) {
-                is SourceResult.Failure -> RefreshOutcome.Failed(result.reason)
-                is SourceResult.Success -> {
-                    applySnapshot(id, result.value, source.descriptor.id)
-                    RefreshOutcome.Success
-                }
+                is SourceResult.Failure -> RefreshOutcome.Failed(result.reason, source.descriptor.id)
+                is SourceResult.Success ->
+                    RefreshOutcome.Success(applyAndDiff(id, result.value, source.descriptor.id), source.descriptor.id)
             }
         } finally {
             _refreshingIds.update { it - id }
@@ -149,13 +172,25 @@ class ParcelRepository(
         }
         var failed = 0
         var firstReason: FailureReason? = null
+        val changes = mutableListOf<ParcelChange>()
+        val authFailed = mutableSetOf<String>()
+        val succeeded = mutableSetOf<String>()
         for (e in candidates) {
-            val outcome = refreshRow(e.id)
-            if (outcome is RefreshOutcome.Failed) {
-                failed++
-                if (firstReason == null) firstReason = outcome.reason
+            when (val outcome = refreshRow(e.id)) {
+                is RefreshOutcome.Success -> {
+                    outcome.change?.let(changes::add)
+                    succeeded += outcome.sourceId
+                }
+                is RefreshOutcome.Failed -> {
+                    failed++
+                    if (firstReason == null) firstReason = outcome.reason
+                    if (outcome.reason == FailureReason.AUTH && outcome.sourceId != null) {
+                        authFailed += outcome.sourceId
+                    }
+                }
+                RefreshOutcome.NoSource -> Unit
             }
         }
-        return RefreshSummary(candidates.size, failed, firstReason)
+        return RefreshSummary(candidates.size, failed, firstReason, changes, authFailed, succeeded)
     }
 }

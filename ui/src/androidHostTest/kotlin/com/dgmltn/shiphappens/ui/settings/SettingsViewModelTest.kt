@@ -7,6 +7,7 @@ import com.dgmltn.shiphappens.data.*
 import com.dgmltn.shiphappens.data.db.ShipHappensDb
 import com.dgmltn.shiphappens.data.settings.RefreshFrequency
 import com.dgmltn.shiphappens.data.settings.SettingsRepository
+import com.dgmltn.shiphappens.data.daily.DailyRefreshScheduler
 import com.dgmltn.shiphappens.data.source.SourceRegistry
 import com.dgmltn.shiphappens.source.amazon.AmazonWebSource
 import com.dgmltn.shiphappens.source.ups.UpsWebSource
@@ -15,6 +16,7 @@ import com.dgmltn.shiphappens.source.webview.NoOpCookieJar
 import com.dgmltn.shiphappens.source.webview.NoWebScraper
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
@@ -23,6 +25,7 @@ import kotlinx.coroutines.test.*
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import okio.Path.Companion.toPath
 import kotlin.time.Instant
 import kotlin.test.*
@@ -45,6 +48,15 @@ class SettingsViewModelTest {
     private lateinit var settings: SettingsRepository
     private lateinit var repo: ParcelRepository
     private lateinit var vm: SettingsViewModel
+    private val scheduler = RecordingScheduler()
+
+    /** Captures what the ViewModel books, so the tests assert scheduling without WorkManager. */
+    private class RecordingScheduler : DailyRefreshScheduler {
+        val scheduled = mutableListOf<LocalTime>()
+        var cancelCount = 0
+        override fun schedule(at: LocalTime) { scheduled += at }
+        override fun cancel() { cancelCount++ }
+    }
 
     /** Every state the ViewModel ever emitted, in order; replay lets awaiters see past states. */
     private val recordedStates = MutableSharedFlow<SettingsUiState>(replay = Int.MAX_VALUE)
@@ -79,7 +91,7 @@ class SettingsViewModelTest {
             settings,
         )
         repo = ParcelRepository(db.parcelDao(), registry, settings, FixedClock())
-        vm = SettingsViewModel(registry, settings, repo, NoOpCookieJar)
+        vm = SettingsViewModel(registry, settings, repo, NoOpCookieJar, scheduler)
         // Records every emission and keeps WhileSubscribed alive for the whole test.
         backgroundScope.launch { vm.state.collect { check(recordedStates.tryEmit(it)) } }
         // Prime the pipeline: the first combined emission requires settings.settings' initial load.
@@ -139,5 +151,57 @@ class SettingsViewModelTest {
         // resuming onto Dispatchers.Main after tearDown's resetMain(), crashing a later test
         // (same hazard WebDetailViewModelTest documents for onPayload).
         withContext(Dispatchers.Default) { withTimeout(10_000) { assertNotNull(job).join() } }
+    }
+
+    /** Joins a ViewModel write before the test returns — see the onSignOut test for why. */
+    private suspend fun Job.awaitDone() =
+        withContext(Dispatchers.Default) { withTimeout(10_000) { join() } }
+
+    @Test fun enabling_daily_update_with_permission_persists_and_schedules() = runTest {
+        val vm = vm()
+        vm.onDailyUpdateEnabled(enabled = true, permissionGranted = true).awaitDone()
+
+        val s = awaitState { it.dailyUpdateEnabled }
+        assertTrue(s.dailyUpdateEnabled)
+        assertFalse(s.dailyUpdateBlocked)
+        assertEquals(listOf(LocalTime(8, 0)), scheduler.scheduled)
+    }
+
+    @Test fun enabling_without_permission_changes_nothing_and_flags_blocked() = runTest {
+        val vm = vm()
+        vm.onDailyUpdateEnabled(enabled = true, permissionGranted = false).awaitDone()
+
+        val s = awaitState { it.dailyUpdateBlocked }
+        assertFalse(s.dailyUpdateEnabled)
+        assertTrue(scheduler.scheduled.isEmpty())
+        assertFalse(settings.settings.first().dailyUpdateEnabled)
+    }
+
+    @Test fun disabling_cancels() = runTest {
+        val vm = vm()
+        vm.onDailyUpdateEnabled(enabled = true, permissionGranted = true).awaitDone()
+        awaitState { it.dailyUpdateEnabled }
+        vm.onDailyUpdateEnabled(enabled = false, permissionGranted = true).awaitDone()
+
+        awaitState { !it.dailyUpdateEnabled }
+        assertEquals(1, scheduler.cancelCount)
+    }
+
+    @Test fun changing_the_time_while_enabled_reschedules() = runTest {
+        val vm = vm()
+        vm.onDailyUpdateEnabled(enabled = true, permissionGranted = true).awaitDone()
+        awaitState { it.dailyUpdateEnabled }
+        vm.onDailyUpdateTime(LocalTime(6, 30)).awaitDone()
+
+        awaitState { it.dailyUpdateTime == LocalTime(6, 30) }
+        assertEquals(listOf(LocalTime(8, 0), LocalTime(6, 30)), scheduler.scheduled)
+    }
+
+    @Test fun changing_the_time_while_disabled_does_not_schedule() = runTest {
+        val vm = vm()
+        vm.onDailyUpdateTime(LocalTime(6, 30)).awaitDone()
+
+        awaitState { it.dailyUpdateTime == LocalTime(6, 30) }
+        assertTrue(scheduler.scheduled.isEmpty())
     }
 }

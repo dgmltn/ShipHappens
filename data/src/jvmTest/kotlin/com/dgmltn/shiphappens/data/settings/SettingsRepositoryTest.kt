@@ -10,6 +10,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.LocalTime
 import kotlinx.coroutines.test.*
 import okio.Path.Companion.toPath
 import kotlin.test.*
@@ -65,6 +66,47 @@ class SettingsRepositoryTest {
         val s = r.settings.first()
         assertEquals(RefreshFrequency.MANUAL, s.refreshFrequency)
         assertFalse(s.autoClipboardImport)
+        scope.cancel()
+    }
+
+    @Test fun daily_update_defaults_to_off_at_eight() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val r = repo(scope)
+        val s = r.settings.first()
+        assertFalse(s.dailyUpdateEnabled)
+        assertEquals(LocalTime(8, 0), s.dailyUpdateTime)
+        assertEquals(emptySet(), s.signInNaggedSourceIds)
+        scope.cancel()
+    }
+
+    @Test fun daily_update_fields_round_trip() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val r = repo(scope)
+        r.setDailyUpdateEnabled(true)
+        r.setDailyUpdateTime(LocalTime(6, 45))
+        r.setSignInNaggedSourceIds(setOf("ups", "amazon"))
+        val s = r.settings.first()
+        assertTrue(s.dailyUpdateEnabled)
+        assertEquals(LocalTime(6, 45), s.dailyUpdateTime)
+        assertEquals(setOf("ups", "amazon"), s.signInNaggedSourceIds)
+        scope.cancel()
+    }
+
+    @Test fun corrupt_time_falls_back_to_eight() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val r = repo(scope)
+        r.setDailyUpdateTime(LocalTime(6, 45))
+        r.writeRawDailyUpdateTimeForTest("not-a-time")
+        assertEquals(LocalTime(8, 0), r.settings.first().dailyUpdateTime)
+        scope.cancel()
+    }
+
+    @Test fun empty_nag_string_is_an_empty_set_not_a_blank_id() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val r = repo(scope)
+        r.setSignInNaggedSourceIds(setOf("ups"))
+        r.setSignInNaggedSourceIds(emptySet())
+        assertEquals(emptySet(), r.settings.first().signInNaggedSourceIds)
         scope.cancel()
     }
 }

@@ -4,6 +4,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room3.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.dgmltn.shiphappens.data.clipboard.ClipboardReader
+import com.dgmltn.shiphappens.data.daily.*
 import com.dgmltn.shiphappens.data.db.ShipHappensDb
 import kotlinx.coroutines.Dispatchers
 import okio.Path.Companion.toPath
@@ -20,4 +21,6 @@ actual fun platformDataModule(): Module = module {
             .setDriver(BundledSQLiteDriver()).setQueryCoroutineContext(Dispatchers.IO).build()
     }
     single<ClipboardReader> { object : ClipboardReader { override suspend fun readText(): String? = null } }
+    single<StatusNotifier> { NoOpStatusNotifier }
+    single<DailyRefreshScheduler> { NoOpDailyRefreshScheduler }
 }

@@ -14,6 +14,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -22,6 +25,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dgmltn.shiphappens.data.settings.RefreshFrequency
+import com.dgmltn.shiphappens.domain.design12h
+import kotlinx.datetime.LocalTime
 import com.dgmltn.shiphappens.ui.components.ToastOverlay
 import com.dgmltn.shiphappens.design.*
 import androidx.compose.ui.tooling.preview.Preview
@@ -30,6 +35,7 @@ import org.koin.compose.viewmodel.koinViewModel
 @Composable
 fun SettingsScreen(onBack: () -> Unit, onOpenLogin: (String) -> Unit = {}, vm: SettingsViewModel = koinViewModel()) {
     val s by vm.state.collectAsState()
+    val permission = rememberNotificationPermissionController()
     SettingsContent(
         state = s,
         onBack = onBack,
@@ -38,6 +44,17 @@ fun SettingsScreen(onBack: () -> Unit, onOpenLogin: (String) -> Unit = {}, vm: S
         onFrequency = vm::onFrequency,
         onSignIn = onOpenLogin,
         onSignOut = { vm.onSignOut(it) },
+        onDailyUpdate = { enabled ->
+            if (enabled) {
+                permission.request { granted -> vm.onDailyUpdateEnabled(true, granted) }
+            } else {
+                vm.onDailyUpdateEnabled(false, permissionGranted = true)
+            }
+        },
+        onDailyUpdateTime = { vm.onDailyUpdateTime(it) },
+        // Notifications can be turned off in system settings long after the toggle was flipped
+        // on; surfacing it here keeps the card honest about whether it can actually deliver.
+        permissionRevoked = s.dailyUpdateEnabled && !permission.isGranted,
     )
 }
 
@@ -50,6 +67,9 @@ fun SettingsContent(
     onFrequency: (RefreshFrequency) -> Unit = {},
     onSignIn: (String) -> Unit = {},
     onSignOut: (String) -> Unit = {},
+    onDailyUpdate: (Boolean) -> Unit = {},
+    onDailyUpdateTime: (LocalTime) -> Unit = {},
+    permissionRevoked: Boolean = false,
 ) {
     androidx.compose.foundation.layout.Box(Modifier.fillMaxSize().background(ShipColors.bg)) {
         Column(Modifier.fillMaxSize()) {
@@ -71,6 +91,13 @@ fun SettingsContent(
                 Spacer(Modifier.height(10.dp))
                 SectionLabel("Sync")
                 SyncCard(state.autoImport, state.frequency, onAutoImport, onFrequency)
+                DailyUpdateCard(
+                    enabled = state.dailyUpdateEnabled,
+                    time = state.dailyUpdateTime,
+                    blocked = state.dailyUpdateBlocked || permissionRevoked,
+                    onEnabled = onDailyUpdate,
+                    onTime = onDailyUpdateTime,
+                )
                 Text(
                     "Signing in to a carrier is stored on this device only and used to fetch live tracking status from that carrier's website.",
                     color = ShipColors.faint, fontSize = 12.sp, lineHeight = 18.sp,
@@ -167,6 +194,69 @@ private fun SyncCard(
     }
 }
 
+@Composable
+private fun DailyUpdateCard(
+    enabled: Boolean,
+    time: LocalTime,
+    blocked: Boolean,
+    onEnabled: (Boolean) -> Unit,
+    onTime: (LocalTime) -> Unit,
+) {
+    var picking by remember { mutableStateOf(false) }
+    SettingsCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Daily update", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = ShipColors.ink)
+                Text(
+                    "Check undelivered packages every morning and notify you when something changes",
+                    fontSize = 12.sp, color = ShipColors.muted,
+                )
+            }
+            Switch(checked = enabled, onCheckedChange = onEnabled,
+                colors = SwitchDefaults.colors(checkedTrackColor = ShipColors.ink, uncheckedTrackColor = ShipColors.toggleOff))
+        }
+        if (enabled) {
+            Spacer(Modifier.height(12.dp))
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(11.dp)).clickable { picking = true }
+                    .border(1.dp, ShipColors.hairline, RoundedCornerShape(11.dp))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Check at", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ShipColors.ink,
+                    modifier = Modifier.weight(1f))
+                Text(time.design12h(), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ShipColors.ink)
+            }
+        }
+        if (blocked) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Notifications are turned off for Ship Happens. Turn them on in system settings to get daily updates.",
+                fontSize = 12.sp, lineHeight = 17.sp, color = ShipColors.faint,
+            )
+        }
+    }
+    if (picking) {
+        DailyTimePickerDialog(time, onDismiss = { picking = false }, onConfirm = { onTime(it); picking = false })
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun DailyTimePickerDialog(initial: LocalTime, onDismiss: () -> Unit, onConfirm: (LocalTime) -> Unit) {
+    val pickerState = androidx.compose.material3.rememberTimePickerState(
+        initialHour = initial.hour, initialMinute = initial.minute, is24Hour = false,
+    )
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = { onConfirm(LocalTime(pickerState.hour, pickerState.minute)) }) { Text("Set") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        text = { androidx.compose.material3.TimePicker(state = pickerState) },
+    )
+}
+
 @Preview
 @Composable
 private fun Preview_SettingsContent_SourcesDisabled() {
@@ -206,6 +296,8 @@ private fun Preview_SettingsContent_SourcesEnabled() {
                 ),
                 autoImport = true,
                 frequency = RefreshFrequency.ONE_HOUR,
+                dailyUpdateEnabled = true,
+                dailyUpdateTime = LocalTime(8, 0),
             ),
         )
     }

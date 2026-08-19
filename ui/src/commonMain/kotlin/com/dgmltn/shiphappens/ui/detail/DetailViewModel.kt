@@ -8,10 +8,10 @@ import com.dgmltn.shiphappens.data.source.SourceRegistry
 import com.dgmltn.shiphappens.domain.*
 import com.dgmltn.shiphappens.design.accentHex
 import com.dgmltn.shiphappens.source.webview.WebCapableSource
-import com.dgmltn.shiphappens.ui.util.TRACKING_STEP_LABELS
-import com.dgmltn.shiphappens.ui.util.design12h
-import com.dgmltn.shiphappens.ui.util.designFormat
-import com.dgmltn.shiphappens.ui.util.formatEtaWindow
+import com.dgmltn.shiphappens.domain.TRACKING_STEP_LABELS
+import com.dgmltn.shiphappens.domain.design12h
+import com.dgmltn.shiphappens.domain.designFormat
+import com.dgmltn.shiphappens.domain.formatEtaWindow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine

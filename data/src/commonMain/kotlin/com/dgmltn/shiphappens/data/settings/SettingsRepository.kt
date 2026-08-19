@@ -9,6 +9,7 @@ import com.dgmltn.shiphappens.source.api.SourceConfig
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.datetime.LocalTime
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
@@ -21,11 +22,20 @@ data class AppSettings(
     val sourceConfigs: Map<String, SourceConfig> = emptyMap(),
     val autoClipboardImport: Boolean = true,
     val refreshFrequency: RefreshFrequency = RefreshFrequency.FIFTEEN_MIN,
+    val dailyUpdateEnabled: Boolean = false,
+    val dailyUpdateTime: LocalTime = DEFAULT_DAILY_UPDATE_TIME,
+    /** Sources already nagged about an expired session; cleared when they next succeed. */
+    val signInNaggedSourceIds: Set<String> = emptySet(),
 )
+
+val DEFAULT_DAILY_UPDATE_TIME = LocalTime(8, 0)
 
 private val KEY_SOURCE_CONFIGS = stringPreferencesKey("source_configs")
 private val KEY_AUTO_CLIPBOARD = booleanPreferencesKey("auto_clipboard_import")
 private val KEY_FREQUENCY = stringPreferencesKey("refresh_frequency")
+private val KEY_DAILY_ENABLED = booleanPreferencesKey("daily_update_enabled")
+private val KEY_DAILY_TIME = stringPreferencesKey("daily_update_time")
+private val KEY_SIGNIN_NAGGED = stringPreferencesKey("sign_in_nagged_source_ids")
 private val configsSerializer = MapSerializer(String.serializer(), SourceConfig.serializer())
 
 class SettingsRepository(private val dataStore: DataStore<Preferences>) {
@@ -40,6 +50,13 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
             refreshFrequency = prefs[KEY_FREQUENCY]
                 ?.let { runCatching { RefreshFrequency.valueOf(it) }.getOrNull() }
                 ?: RefreshFrequency.FIFTEEN_MIN,
+            dailyUpdateEnabled = prefs[KEY_DAILY_ENABLED] ?: false,
+            dailyUpdateTime = prefs[KEY_DAILY_TIME]
+                ?.let { runCatching { LocalTime.parse(it) }.getOrNull() }
+                ?: DEFAULT_DAILY_UPDATE_TIME,
+            signInNaggedSourceIds = prefs[KEY_SIGNIN_NAGGED]
+                ?.split(',')?.filter { it.isNotBlank() }?.toSet()
+                ?: emptySet(),
         )
     }
 
@@ -71,5 +88,23 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setRefreshFrequency(freq: RefreshFrequency) {
         dataStore.edit { it[KEY_FREQUENCY] = freq.name }
+    }
+
+    suspend fun setDailyUpdateEnabled(enabled: Boolean) {
+        dataStore.edit { it[KEY_DAILY_ENABLED] = enabled }
+    }
+
+    suspend fun setDailyUpdateTime(time: LocalTime) {
+        // LocalTime.toString() is ISO ("06:45"), which LocalTime.parse round-trips.
+        dataStore.edit { it[KEY_DAILY_TIME] = time.toString() }
+    }
+
+    suspend fun setSignInNaggedSourceIds(ids: Set<String>) {
+        dataStore.edit { it[KEY_SIGNIN_NAGGED] = ids.joinToString(",") }
+    }
+
+    /** Test hook for the corrupt-value fallback path; not used by production code. */
+    internal suspend fun writeRawDailyUpdateTimeForTest(raw: String) {
+        dataStore.edit { it[KEY_DAILY_TIME] = raw }
     }
 }

@@ -18,8 +18,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.*
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import com.dgmltn.shiphappens.ui.util.design12h
-import com.dgmltn.shiphappens.ui.util.designFormat
+import com.dgmltn.shiphappens.domain.design12h
+import com.dgmltn.shiphappens.domain.designFormat
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone

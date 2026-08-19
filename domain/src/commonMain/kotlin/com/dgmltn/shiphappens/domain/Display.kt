@@ -1,4 +1,4 @@
-package com.dgmltn.shiphappens.ui.util
+package com.dgmltn.shiphappens.domain
 
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
@@ -7,6 +7,13 @@ import kotlinx.datetime.number
 
 private val WD = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 private val MO = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+/**
+ * Display labels for the 5-step timeline, indexed by `TrackingStatus.stepIndex` /
+ * `Parcel.effectiveStepIndex`. Shared by the list row status, the detail timeline, and
+ * notification copy so every surface names the current step identically.
+ */
+val TRACKING_STEP_LABELS = listOf("Label created", "Shipped", "In transit", "Out for delivery", "Delivered")
 
 // kotlinx-datetime 0.8.0: monthNumber/dayOfMonth are deprecated in favor of month.number/day.
 fun LocalDate.designFormat(): String = "${WD[dayOfWeek.isoDayNumber - 1]}, ${MO[month.number - 1]} $day"

@@ -1,6 +1,7 @@
 package com.dgmltn.shiphappens.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.navigation3.runtime.NavBackStack
 import androidx.navigation3.runtime.NavKey
@@ -23,10 +24,20 @@ import com.dgmltn.shiphappens.design.ShipTheme
 // death. `entry<T>` is a reified member of EntryProviderScope<T>, not a top-level function, so it
 // is used unqualified inside the `entryProvider { }` builder block (no separate import exists).
 @Composable
-fun App() {
+fun App(deepLink: DeepLink? = null, onDeepLinkHandled: () -> Unit = {}) {
     ShipTheme {
         StatusBarIconsEffect()
         val backStack = remember { NavBackStack<NavKey>(ListRoute) }
+        LaunchedEffect(deepLink) {
+            when (deepLink) {
+                // Pushed onto whatever is showing: a tapped notification should reveal the
+                // parcel without discarding where the user already was.
+                is DeepLink.Parcel -> backStack.add(DetailRoute(deepLink.parcelId))
+                is DeepLink.SignIn -> backStack.add(WebLoginRoute(deepLink.sourceId))
+                null -> return@LaunchedEffect
+            }
+            onDeepLinkHandled()
+        }
         NavDisplay(
             backStack = backStack,
             onBack = { backStack.removeLastOrNull() },

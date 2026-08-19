@@ -2,6 +2,7 @@ package com.dgmltn.shiphappens.data.di
 
 import com.dgmltn.shiphappens.data.*
 import com.dgmltn.shiphappens.data.clipboard.ClipboardImportManager
+import com.dgmltn.shiphappens.data.daily.DailyRefreshRunner
 import com.dgmltn.shiphappens.data.db.ShipHappensDb
 import com.dgmltn.shiphappens.data.settings.SettingsRepository
 import com.dgmltn.shiphappens.data.source.SourceRegistry
@@ -22,7 +23,8 @@ val dataModule = module {
     single { ParcelRepository(get(), get(), get(), get()) }
     single { RefreshCoordinator(get(), get()) }
     single { ClipboardImportManager(get(), get(), get(), get()) }
+    single { DailyRefreshRunner(get(), get(), get(), get()) }
 }
 
-/** Provides DataStore<Preferences>, ShipHappensDb, ClipboardReader per platform. */
+/** Provides DataStore<Preferences>, ShipHappensDb, ClipboardReader, StatusNotifier, DailyRefreshScheduler per platform. */
 expect fun platformDataModule(): Module

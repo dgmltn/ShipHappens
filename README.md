@@ -16,7 +16,9 @@ reference.
 ```
 domain/        Domain types: Parcel, Carrier, TrackingStatus/Event/Snapshot. No dependencies.
 data/          Room 3 database, ParcelRepository, SettingsRepository (DataStore), clipboard
-               import manager, carrier detection, SourceRegistry, Koin DI wiring.
+               import manager, carrier detection, SourceRegistry, DailyRefreshRunner (the 8am
+               background pass, with WorkManager/BGTaskScheduler and notifier actuals per
+               platform), Koin DI wiring.
 design/        Design system: ShipTheme, ShipColors, font resources (Hanken + mono), and the
                canonical HTML visual spec (Parcels.dc.html).
 source/
@@ -74,14 +76,27 @@ gitignored and recreated by `xcodegen generate`, while `app-ios/ShipHappens/Info
 ## Running tests
 
 ```bash
-./gradlew :domain:jvmTest :data:jvmTest :source:api:jvmTest \
-          :source:demo:jvmTest :source:ups:jvmTest \
+./gradlew :domain:jvmTest :data:jvmTest :source:api:jvmTest :source:ups:jvmTest \
+          :source:usps:jvmTest :source:webview:jvmTest \
           :ui:testAndroidHostTest --console=plain
 ```
 
 Note `:ui`'s task is `testAndroidHostTest`, not `testDebugUnitTest` — the UI module's unit tests
-run on the Android-host test source set. Current suite: 60 tests across 6 modules (model 5, data
-29, api 2, demo 4, ups 3, ui 17), all passing.
+run on the Android-host test source set. Current suite: 217 tests across 7 modules (domain 14,
+data 66, api 2, ups 9, usps 28, webview 50, ui 48), all passing.
+
+## Daily update
+
+With "Daily update" enabled in Settings, the app refreshes every undelivered parcel once a day at
+the chosen local time (8:00 AM by default) and posts one notification per parcel whose status or
+delivery date changed. The decision logic — candidate selection, change detection, notification
+copy, sign-in-nag dedup — lives in `data/commonMain` (`DailyRefreshRunner`, `NotificationText`);
+Android schedules it with self-rescheduling WorkManager one-time work, iOS with `BGAppRefreshTask`,
+which iOS runs opportunistically, so the time is a hint there rather than a promise. iOS also has
+no WebView scraper yet, so its pass finds no usable source and stays quiet until one lands.
+
+Notifications need runtime permission, requested when the toggle is switched on. Denial leaves the
+toggle off rather than creating a setting that silently does nothing.
 
 ## How to add a tracking source
 

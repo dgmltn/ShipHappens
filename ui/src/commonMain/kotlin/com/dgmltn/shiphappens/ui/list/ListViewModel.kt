@@ -12,8 +12,8 @@ import com.dgmltn.shiphappens.domain.*
 import com.dgmltn.shiphappens.source.api.FailureReason
 import com.dgmltn.shiphappens.source.api.SourceConfig
 import com.dgmltn.shiphappens.design.accentHex
-import com.dgmltn.shiphappens.ui.util.TRACKING_STEP_LABELS
-import com.dgmltn.shiphappens.ui.util.designFormat
+import com.dgmltn.shiphappens.domain.TRACKING_STEP_LABELS
+import com.dgmltn.shiphappens.domain.designFormat
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*

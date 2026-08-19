@@ -4,6 +4,10 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room3.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.dgmltn.shiphappens.data.clipboard.ClipboardReader
+import com.dgmltn.shiphappens.data.daily.DailyRefreshScheduler
+import com.dgmltn.shiphappens.data.daily.NoOpDailyRefreshScheduler
+import com.dgmltn.shiphappens.data.daily.NoOpStatusNotifier
+import com.dgmltn.shiphappens.data.daily.StatusNotifier
 import com.dgmltn.shiphappens.data.db.ShipHappensDb
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
@@ -28,7 +32,8 @@ import org.koin.test.check.checkModules
  * module (mirroring `PlatformDataModule.jvm.kt`: in-memory Room, a temp-file DataStore, a no-op
  * `ClipboardReader`) in place of `platformDataModule()`, then checks that the REST of the graph —
  * `dataModule`, all five source modules, and `uiModule` (including the parameterized
- * `DetailViewModel` factory) — resolves end to end.
+ * `DetailViewModel` factory) — resolves end to end. It mirrors the JVM platform module's full
+ * binding set, so a new platform-provided dependency must be added here too.
  */
 class AppModulesTest {
 
@@ -42,6 +47,8 @@ class AppModulesTest {
                 .setDriver(BundledSQLiteDriver()).setQueryCoroutineContext(Dispatchers.IO).build()
         }
         single<ClipboardReader> { object : ClipboardReader { override suspend fun readText(): String? = null } }
+        single<StatusNotifier> { NoOpStatusNotifier }
+        single<DailyRefreshScheduler> { NoOpDailyRefreshScheduler }
     }
 
     private fun testWebModule(): Module = module {

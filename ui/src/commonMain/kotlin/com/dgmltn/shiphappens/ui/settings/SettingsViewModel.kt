@@ -3,6 +3,8 @@ package com.dgmltn.shiphappens.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dgmltn.shiphappens.data.ParcelRepository
+import com.dgmltn.shiphappens.data.daily.DailyRefreshScheduler
+import com.dgmltn.shiphappens.data.settings.DEFAULT_DAILY_UPDATE_TIME
 import com.dgmltn.shiphappens.data.settings.RefreshFrequency
 import com.dgmltn.shiphappens.data.settings.SettingsRepository
 import com.dgmltn.shiphappens.data.source.SourceRegistry
@@ -15,6 +17,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.datetime.LocalTime
 
 data class SourceCardUi(
     val id: String, val name: String, val accentHex: String, val enabled: Boolean,
@@ -26,6 +29,10 @@ data class SettingsUiState(
     val carriers: List<SourceCardUi> = emptyList(),
     val autoImport: Boolean = true,
     val frequency: RefreshFrequency = RefreshFrequency.FIFTEEN_MIN,
+    val dailyUpdateEnabled: Boolean = false,
+    val dailyUpdateTime: LocalTime = DEFAULT_DAILY_UPDATE_TIME,
+    /** True after the user tried to enable daily updates and the system permission was denied. */
+    val dailyUpdateBlocked: Boolean = false,
     val toast: String? = null,
 )
 
@@ -34,12 +41,14 @@ class SettingsViewModel(
     private val settings: SettingsRepository,
     private val repository: ParcelRepository,
     private val cookieJar: WebCookieJar,
+    private val scheduler: DailyRefreshScheduler,
 ) : ViewModel() {
 
     private val toast = MutableStateFlow<String?>(null)
     private var toastJob: Job? = null
+    private val blocked = MutableStateFlow(false)
 
-    val state: StateFlow<SettingsUiState> = combine(settings.settings, toast) { s, t ->
+    val state: StateFlow<SettingsUiState> = combine(settings.settings, toast, blocked) { s, t, b ->
         val cards = registry.all().map { src ->
             val d = src.descriptor
             val cfg = s.sourceConfigs[d.id] ?: SourceConfig()
@@ -61,6 +70,9 @@ class SettingsViewModel(
             carriers = cards,
             autoImport = s.autoClipboardImport,
             frequency = s.refreshFrequency,
+            dailyUpdateEnabled = s.dailyUpdateEnabled,
+            dailyUpdateTime = s.dailyUpdateTime,
+            dailyUpdateBlocked = b,
             toast = t,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
@@ -86,6 +98,27 @@ class SettingsViewModel(
             settings.updateSourceConfig(sourceId) { it.copy(values = it.values - "loggedIn") }
             flash("Signed out of ${spec.carrier.displayName}")
         }
+    }
+
+    /**
+     * [permissionGranted] is supplied by the screen, which owns the system prompt — a denied
+     * prompt must leave the stored setting alone rather than persisting an on toggle that
+     * silently drops every notification. Returns the write Job for the same reason [onSignOut]
+     * does, so tests can await it before tearDown resets the main dispatcher.
+     */
+    fun onDailyUpdateEnabled(enabled: Boolean, permissionGranted: Boolean): Job = viewModelScope.launch {
+        if (enabled && !permissionGranted) {
+            blocked.value = true
+            return@launch
+        }
+        blocked.value = false
+        settings.setDailyUpdateEnabled(enabled)
+        if (enabled) scheduler.schedule(settings.settings.first().dailyUpdateTime) else scheduler.cancel()
+    }
+
+    fun onDailyUpdateTime(time: LocalTime): Job = viewModelScope.launch {
+        settings.setDailyUpdateTime(time)
+        if (settings.settings.first().dailyUpdateEnabled) scheduler.schedule(time)
     }
 
     fun onAutoImport(enabled: Boolean) { viewModelScope.launch { settings.setAutoClipboardImport(enabled) } }
