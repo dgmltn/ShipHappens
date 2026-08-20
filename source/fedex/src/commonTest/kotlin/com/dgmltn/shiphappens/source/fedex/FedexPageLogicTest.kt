@@ -3,6 +3,7 @@ package com.dgmltn.shiphappens.source.fedex
 import com.dgmltn.shiphappens.domain.TrackingStatus
 import com.dgmltn.shiphappens.source.webview.DomRaw
 import com.dgmltn.shiphappens.source.webview.DomRawEvent
+import com.dgmltn.shiphappens.source.webview.findEtaWindowText
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -90,17 +91,17 @@ class FedexPageLogicTest {
     // -- delivery-window phrase extraction (fed to the shared EtaWindowParser downstream) --
 
     @Test fun extracts_cutoff_and_range_phrases() {
-        assertEquals("by 8:00 PM", fedexEtaWindowText("Estimated delivery Tuesday 8/19/2026 by 8:00 PM"))
-        assertEquals("10:35 AM - 2:35 PM", fedexEtaWindowText("Estimated delivery window 10:35 AM - 2:35 PM"))
+        assertEquals("by 8:00 PM", findEtaWindowText("Estimated delivery Tuesday 8/19/2026 by 8:00 PM"))
+        assertEquals("10:35 AM - 2:35 PM", findEtaWindowText("Estimated delivery window 10:35 AM - 2:35 PM"))
         assertEquals(
             "between 10:35 AM and 2:35 PM",
-            fedexEtaWindowText("Arriving between 10:35 AM and 2:35 PM"),
+            findEtaWindowText("Arriving between 10:35 AM and 2:35 PM"),
         )
     }
 
     @Test fun end_of_day_is_not_a_window() {
-        assertNull(fedexEtaWindowText("Estimated delivery Tuesday 8/19/2026 by end of day"))
-        assertNull(fedexEtaWindowText(null))
+        assertNull(findEtaWindowText("Estimated delivery Tuesday 8/19/2026 by end of day"))
+        assertNull(findEtaWindowText(null))
     }
 
     // -- raw tracker-page routing --
@@ -134,6 +135,22 @@ class FedexPageLogicTest {
         assertEquals("IN_TRANSIT", result?.tracking?.status)
         assertEquals("MEMPHIS, TN", result?.tracking?.location)
         assertEquals(2, result?.tracking?.events?.size)
+    }
+
+    @Test fun weekday_only_promise_resolves_against_page_date() {
+        // Second live capture 2026-08-19, minutes after the run-together one: the hero rendered
+        // "Thursday Between 10:10 AM - 2:10 PM" — weekday only, no numeric date at all.
+        val result = parseFedexRaw(
+            DomRaw(
+                kind = "tracker",
+                statusText = "On the way",
+                etaText = "Thursday Between 10:10 AM - 2:10 PM",
+                locationText = "Currently in Sacramento, CA",
+                todayIso = "2026-08-19",
+            ),
+        )
+        assertEquals("2026-08-20", result?.tracking?.etaDate)
+        assertEquals("Between 10:10 AM - 2:10 PM", result?.tracking?.etaWindowText)
     }
 
     @Test fun live_capture_shape_parses_fully() {

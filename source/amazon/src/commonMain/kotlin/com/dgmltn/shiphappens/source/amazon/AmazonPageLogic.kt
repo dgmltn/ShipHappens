@@ -6,11 +6,9 @@ import com.dgmltn.shiphappens.source.webview.DomExtraction
 import com.dgmltn.shiphappens.source.webview.DomRaw
 import com.dgmltn.shiphappens.source.webview.ScrapedEvent
 import com.dgmltn.shiphappens.source.webview.ScrapedTracking
-import kotlinx.datetime.DateTimeUnit
+import com.dgmltn.shiphappens.source.webview.parseDayWithoutYear
+import com.dgmltn.shiphappens.source.webview.parseRelativeDay
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.Month
-import kotlinx.datetime.minus
-import kotlinx.datetime.plus
 
 /**
  * Everything the Amazon scrape *decides*, kept out of AMAZON_EXTRACTION_JS so it can be tested
@@ -76,50 +74,22 @@ internal fun classifyAmazonStatus(raw: String?): TrackingStatus? {
 // all (2026-08-18 capture), and an earlier version of the same function turned "tomorrow" into
 // 2026-01-01. Neither was catchable without a device.
 
-private const val MONTHS =
-    "January|February|March|April|May|June|July|August|September|October|November|December|" +
-        "Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec"
-private val MONTH_DAY = Regex("""\b($MONTHS)\.?\s+(\d{1,2})\b""", RegexOption.IGNORE_CASE)
-private val DAY_MONTH = Regex("""\b(\d{1,2})\s+($MONTHS)\b""", RegexOption.IGNORE_CASE)
-
 /**
  * Phrases that introduce a delivery promise, most specific first: "Now expected" supersedes an
  * "Arriving" promise in the same string, because it IS the revision of one.
  */
 private val ETA_PHRASES = listOf("estimated delivery", "now expected", "expected", "arriving")
 
-private fun monthOf(name: String): Month? =
-    Month.entries.firstOrNull { it.name.startsWith(name.trimEnd('.').uppercase()) }
-
 /**
- * Resolves a day phrase against [today]. Takes the string verbatim, so it is only safe on text
- * already known to BE a promise (the tracker's promise element) — anything else must come through
- * [amazonEtaFromStatus], which requires a promise phrase first. Null [today] means the page never
- * reported its date, and a guessed year is worse than no ETA.
+ * Resolves a day phrase against [today] — relative wording first ("tomorrow", "overnight"),
+ * then a year-less month+day with the year inferred (shared PageDates mechanics). Takes the
+ * string verbatim, so it is only safe on text already known to BE a promise (the tracker's
+ * promise element) — anything else must come through [amazonEtaFromStatus], which requires a
+ * promise phrase first. Null [today] means the page never reported its date, and a guessed
+ * year is worse than no ETA.
  */
-internal fun parseAmazonDay(text: String?, today: LocalDate?): LocalDate? {
-    if (text.isNullOrBlank() || today == null) return null
-    val t = text.lowercase()
-    // "Arriving overnight 7 AM – 11 AM": delivery during the coming night, i.e. tomorrow morning.
-    when {
-        "today" in t -> return today
-        "tomorrow" in t || "overnight" in t -> return today.plus(1, DateTimeUnit.DAY)
-        "yesterday" in t -> return today.minus(1, DateTimeUnit.DAY)
-    }
-    val (monthName, day) = MONTH_DAY.find(text)?.destructured?.let { (m, d) -> m to d }
-        ?: DAY_MONTH.find(text)?.destructured?.let { (d, m) -> m to d }
-        ?: return null
-    val month = monthOf(monthName) ?: return null
-    val dayOfMonth = day.toIntOrNull() ?: return null
-    val candidate = runCatching { LocalDate(today.year, month, dayOfMonth) }.getOrNull() ?: return null
-    // The year is ours, not the page's: a December promise read in January would otherwise land 11
-    // months out. Anything implausibly far ahead belongs to last year.
-    return if (candidate > today.plus(45, DateTimeUnit.DAY)) {
-        runCatching { LocalDate(today.year - 1, month, dayOfMonth) }.getOrNull()
-    } else {
-        candidate
-    }
-}
+internal fun parseAmazonDay(text: String?, today: LocalDate?): LocalDate? =
+    parseRelativeDay(text, today) ?: parseDayWithoutYear(text, today)
 
 /**
  * Pulls the delivery day out of a status headline, which only counts when a promise phrase

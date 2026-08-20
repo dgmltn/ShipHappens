@@ -48,6 +48,12 @@ throwaway element-dump probe in the extraction JS found the real ones:
 Notes baked into code + tests:
 - The hero flattens with **no space** between weekday and date ("Thursday8/20/2026") —
   `parseFedexEtaDate` uses a lookbehind, not `\b`, before the numeric date.
+- The hero also renders **weekday-only** near delivery — "Thursday Between 10:10 AM - 2:10 PM",
+  captured live later the same day — resolved via `parseWeekdayName` against `todayIso`
+  (added in the 2026-08-19 deterministic-layer consolidation).
+- A **cold profile's first scrape can transiently land on `/no-results-found`** ("can't be
+  found right now") even for a valid number; it routes NOT_FOUND, is correctly not cached,
+  and the next refresh recovers. Seen once during consolidation smoke QA.
 - The summary page shows no scan-event rows; `DomRaw` gained `locationText` so the
   "Currently in …" banner survives without fake events (`fedexLocation` strips the phrasing).
 - A page with only a delivery promise (no classifiable headline) still reports

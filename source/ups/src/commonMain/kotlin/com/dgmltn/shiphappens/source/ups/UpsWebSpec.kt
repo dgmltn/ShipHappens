@@ -3,9 +3,10 @@ package com.dgmltn.shiphappens.source.ups
 import com.dgmltn.shiphappens.domain.WellKnownCarriers
 import com.dgmltn.shiphappens.source.webview.WebProviderSpec
 
-// DOM fallback extractor. Selector constants are validated against the live page during
-// manual QA (Task 11) — the structure (page states + canonical tracking JSON) is what the
-// rest of the pipeline depends on, and that is locked by PayloadRouter/canonical-model tests.
+// DOM *reader* fallback (API capture is UPS's primary layer). Selector constants are validated
+// against the live page during manual QA — unchanged by the 2026-08-19 raw-reader conversion,
+// which only moved the status bucketing out of this blob into UpsPageLogic where unit tests
+// reach it. The blob finds the status element and returns its text; it decides nothing.
 private val UPS_EXTRACTION_JS = """
 function() {
   var text = (document.body && document.body.innerText) || '';
@@ -13,14 +14,7 @@ function() {
   if (/log in|sign in to view/i.test(text) && !/track/i.test(document.title)) return {page: 'loginWall'};
   var statusEl = document.querySelector('#stApp_txtPackageStatus, [id*="PackageStatus"], .ups-tracking_status');
   if (!statusEl) return {page: 'empty'};
-  var raw = statusEl.textContent.trim().toLowerCase();
-  var status =
-    raw.indexOf('out for delivery') >= 0 ? 'OUT_FOR_DELIVERY' :
-    raw.indexOf('delivered') >= 0 ? 'DELIVERED' :
-    raw.indexOf('exception') >= 0 || raw.indexOf('action') >= 0 ? 'EXCEPTION' :
-    raw.indexOf('label') >= 0 || raw.indexOf('order processed') >= 0 ? 'LABEL_CREATED' :
-    raw.indexOf('on the way') >= 0 || raw.indexOf('in transit') >= 0 ? 'IN_TRANSIT' : 'UNKNOWN';
-  return {page: 'ok', tracking: {status: status, events: []}};
+  return {page: 'raw', raw: {kind: 'tracker', statusText: statusEl.textContent.replace(/\s+/g, ' ').trim()}};
 }
 """.trimIndent()
 
@@ -44,4 +38,5 @@ val UpsWebSpec = WebProviderSpec(
     challengeMarkers = listOf("verify you are a human", "unusual activity", "Pardon Our Interruption", "Access Denied"),
     extractionJs = UPS_EXTRACTION_JS,
     parseApi = { _, body -> UpsApiParser.parse(body) },
+    parseRaw = ::parseUpsRaw,
 )

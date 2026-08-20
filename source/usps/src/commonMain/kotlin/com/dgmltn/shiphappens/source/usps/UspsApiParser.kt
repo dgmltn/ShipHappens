@@ -2,10 +2,11 @@ package com.dgmltn.shiphappens.source.usps
 
 import com.dgmltn.shiphappens.source.webview.ScrapedEvent
 import com.dgmltn.shiphappens.source.webview.ScrapedTracking
+import com.dgmltn.shiphappens.source.webview.parseMonthNameDate
+import com.dgmltn.shiphappens.source.webview.parseNumericMdyDate
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
-import kotlinx.datetime.Month
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.serialization.Serializable
@@ -78,15 +79,9 @@ object UspsApiParser {
     /** "2026-07-16", "07/16/2026", or "Wednesday, July 16, 2026". */
     private fun parseDate(raw: String?): LocalDate? {
         val s = raw?.trim() ?: return null
-        runCatching { LocalDate.parse(s) }.getOrNull()?.let { return it }
-        Regex("""(\d{2})/(\d{2})/(\d{4})""").find(s)?.let { m ->
-            val (mm, dd, yyyy) = m.destructured
-            return runCatching { LocalDate(yyyy.toInt(), mm.toInt(), dd.toInt()) }.getOrNull()
-        }
-        val m = Regex("""([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})""").find(s) ?: return null
-        val (monthName, dd, yyyy) = m.destructured
-        val month = Month.entries.firstOrNull { it.name.equals(monthName, ignoreCase = true) } ?: return null
-        return runCatching { LocalDate(yyyy.toInt(), month, dd.toInt()) }.getOrNull()
+        return runCatching { LocalDate.parse(s) }.getOrNull()
+            ?: parseNumericMdyDate(s)
+            ?: parseMonthNameDate(s)
     }
 
     /** "20:00:00" (24h) or "8:00pm". */

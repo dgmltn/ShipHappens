@@ -17,6 +17,25 @@ private val RANGE = Regex(
 // "by 10 PM" — a lone cutoff, which is an open-ended window.
 private val CUTOFF = Regex("""\bby\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)""", RegexOption.IGNORE_CASE)
 
+// The two window shapes [parseEtaWindow] understands, for extraction from a noisy banner: a
+// range ("10:35 AM - 2:35 PM", "between 9:45am and 1:45pm") or a lone cutoff ("by 8:00 PM").
+// "by end of day" carries no time and is no window.
+private val WINDOW_RANGE = Regex(
+    """(?:between\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:-|–|—|to|and)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)""",
+    RegexOption.IGNORE_CASE,
+)
+private val WINDOW_CUTOFF = Regex("""\bby\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)""", RegexOption.IGNORE_CASE)
+
+/**
+ * The delivery-window phrase as quoted on the page (fed to [parseEtaWindow] downstream), or
+ * null when the text carries none — extracted verbatim so surrounding tooltip/date copy never
+ * reaches the parser.
+ */
+fun findEtaWindowText(text: String?): String? {
+    if (text.isNullOrBlank()) return null
+    return WINDOW_RANGE.find(text)?.value ?: WINDOW_CUTOFF.find(text)?.value
+}
+
 /**
  * Parses a free-text delivery window as scraped from a carrier page.
  *

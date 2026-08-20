@@ -9,6 +9,34 @@ class EtaWindowParserTest {
 
     private fun window(start: LocalTime, end: LocalTime) = EtaWindow(start, end)
 
+    // -- findEtaWindowText: pulling the window phrase out of a noisy banner --
+
+    @Test fun finds_a_range_phrase_verbatim() {
+        assertEquals(
+            "10:35 AM - 2:35 PM",
+            findEtaWindowText("Estimated delivery window 10:35 AM - 2:35 PM tooltip junk"),
+        )
+        assertEquals(
+            "Between 10:10 AM - 2:10 PM",
+            findEtaWindowText("Thursday8/20/2026 Between 10:10 AM - 2:10 PM"),
+        )
+        assertEquals(
+            "between 9:45am and 1:45pm",
+            findEtaWindowText("expected between 9:45am and 1:45pm on Monday"),
+        )
+    }
+
+    @Test fun finds_a_lone_cutoff_phrase() {
+        assertEquals("by 8:00 PM", findEtaWindowText("Tuesday 8/19/2026 by 8:00 PM"))
+        assertEquals("by 9:00pm", findEtaWindowText("Expected Delivery by Monday, July 28, 2026 by 9:00pm"))
+    }
+
+    @Test fun no_timed_phrase_means_null() {
+        assertNull(findEtaWindowText("Tuesday 8/19/2026 by end of day"))
+        assertNull(findEtaWindowText("Arriving Thursday"))
+        assertNull(findEtaWindowText(null))
+    }
+
     @Test fun parses_full_range_with_both_meridiems() {
         assertEquals(window(LocalTime(15, 0), LocalTime(17, 0)), parseEtaWindow("3:00 PM - 5:00 PM"))
     }

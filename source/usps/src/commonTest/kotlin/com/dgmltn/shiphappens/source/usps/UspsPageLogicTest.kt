@@ -3,6 +3,7 @@ package com.dgmltn.shiphappens.source.usps
 import com.dgmltn.shiphappens.domain.TrackingStatus
 import com.dgmltn.shiphappens.source.webview.DomRaw
 import com.dgmltn.shiphappens.source.webview.DomRawEvent
+import com.dgmltn.shiphappens.source.webview.findEtaWindowText
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -66,9 +67,9 @@ class UspsPageLogicTest {
     }
 
     @Test fun eta_window_cutoff_is_extracted_verbatim() {
-        assertEquals("by 9:00pm", uspsEtaWindowText(etaBanner))
-        assertNull(uspsEtaWindowText("Expected Delivery by: Tuesday 28 July 2026"))
-        assertNull(uspsEtaWindowText(null))
+        assertEquals("by 9:00pm", findEtaWindowText(etaBanner))
+        assertNull(findEtaWindowText("Expected Delivery by: Tuesday 28 July 2026"))
+        assertNull(findEtaWindowText(null))
     }
 
     // Verbatim from the 2026-07-27 live scrape of the same tracking number once it went
@@ -80,7 +81,9 @@ class UspsPageLogicTest {
             "Expected delivery on the date provided is the latest information on when the Postal Service " +
             "expects to deliver your package. between 12:00pm and 2:00pm Expected Delivery Time " +
             "The timeframe provided is the estimated timeframe when the carrier will attempt to deliver your package."
-        assertEquals("12:00pm and 2:00pm", uspsEtaWindowText(outForDeliveryBanner))
+        // The shared extractor quotes the "between" prefix too (FedEx precedent); parseEtaWindow
+        // reads both forms identically and etaWindowText is never persisted.
+        assertEquals("between 12:00pm and 2:00pm", findEtaWindowText(outForDeliveryBanner))
     }
 
     @Test fun live_scrape_regression_full_raw_parse() {
