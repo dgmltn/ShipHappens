@@ -78,8 +78,13 @@ The extraction regex covers both; re-verified live — bogus number routes `NotF
 - [x] Detail: "Arrives tomorrow", "Thu, Aug 20 · 10:10 AM – 2:10 PM", location chip
   "Sacramento, CA", timeline at In transit.
 - [x] Not-found: bogus 12-digit number → `NotFound` route.
-- [ ] Delivered/out-for-delivery wordings unexercised live — re-check opportunistically as
-  the live package progresses (vocabulary unit-tested in `FedexPageLogicTest`).
+- [x] Delivered state exercised live 2026-08-20 after the package arrived — and it found a bug:
+  the delivered page drops `.phase3-progress-bar__active-label` entirely (statusText scraped
+  null → UNKNOWN → the card kept the stale "Out for delivery"). The delivery-date eyebrow
+  `[data-test-id="delivery-date-header"]` flips "ESTIMATED DELIVERY DATE" → "DELIVERED" and is
+  now the status fallback; the date element reads "Thursday8/20/2026 at 1:48 pm" (delivery
+  time, not a window). Fixed + re-verified live; captures pinned in `FedexPageLogicTest`.
+- [ ] Out-for-delivery wording still unexercised live (vocabulary unit-tested).
 - [ ] Login/`isLoggedInJs` markers best-effort — no FedEx account session was exercised.
 
 ## Debugging: ScrapeTracer

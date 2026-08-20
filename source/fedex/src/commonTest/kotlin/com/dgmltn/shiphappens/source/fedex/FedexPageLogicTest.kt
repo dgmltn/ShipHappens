@@ -170,6 +170,31 @@ class FedexPageLogicTest {
         assertEquals("Sacramento, CA", result?.tracking?.location)
     }
 
+    @Test fun delivered_page_capture_classifies_delivered() {
+        // Verbatim from the 2026-08-20 delivered-state capture: the progress bar is gone, so the
+        // extraction falls back to the delivery-date eyebrow, which now reads "DELIVERED"; the
+        // date element shows the actual delivery time. Bug pinned: the pre-fix selector chain
+        // scraped statusText null here, so the card kept the stale "Out for delivery".
+        val result = parseFedexRaw(
+            DomRaw(
+                kind = "tracker",
+                statusText = "DELIVERED",
+                etaText = "Thursday8/20/2026 at 1:48 pm",
+                todayIso = "2026-08-20",
+            ),
+        )
+        assertEquals("DELIVERED", result?.tracking?.status)
+        assertEquals("2026-08-20", result?.tracking?.etaDate)
+        assertNull(result?.tracking?.etaWindowText)  // "at 1:48 pm" is a delivery time, not a window
+    }
+
+    @Test fun estimated_delivery_date_eyebrow_is_not_a_status() {
+        // The same eyebrow reads "ESTIMATED DELIVERY DATE" on moving pages; if it ever reaches
+        // the classifier (progress bar missing on a transit page), it must classify to nothing
+        // rather than misreport — the events/ETA fallbacks take over.
+        assertNull(classifyFedexStatus("ESTIMATED DELIVERY DATE"))
+    }
+
     @Test fun eta_without_status_headline_still_reports() {
         // A page variant that renders the promise but no classifiable headline must not be
         // mistaken for an empty shell — the ETA alone is worth surfacing (status UNKNOWN).

@@ -8,10 +8,13 @@ import kotlin.time.Duration.Companion.seconds
 // hooks makes fedex.com's bot defense fail every tracking lookup onto its "system-error" page
 // (live QA 2026-08-19), so this spec declares no apiUrlPatterns and WebSessions skips the hooks
 // entirely. The reader finds elements and returns their text; FedexPageLogic classifies in
-// Kotlin. Selectors were captured live on 2026-08-19 from a moving FedEx Ground package:
-//   .phase3-progress-bar__active-label        "On the way"
-//   [data-test-id="delivery-date-text"]       "Thursday8/20/2026 Between 10:10 AM - 2:10 PM"
-//   .phase3-view__current-location            "Currently in Sacramento, CA"
+// Kotlin. Selectors were captured live on 2026-08-19/20 from a FedEx Ground package across its
+// in-transit and delivered states:
+//   .phase3-progress-bar__active-label        "On the way"            (absent once delivered)
+//   [data-test-id="delivery-date-header"]     "ESTIMATED DELIVERY DATE" / "DELIVERED"
+//   [data-test-id="delivery-date-text"]       "Thursday8/20/2026 Between 10:10 AM - 2:10 PM" /
+//                                             "Thursday8/20/2026 at 1:48 pm" (delivered)
+//   .phase3-view__current-location            "Currently in Sacramento, CA" (absent once delivered)
 // Every bail-out carries why/probe/textHead diagnostics for the ScrapeTracer.
 private val FEDEX_EXTRACTION_JS = """
 function() {
@@ -22,8 +25,13 @@ function() {
   // number you entered can't be found right now"; the system-error page says "We can't find that
   // tracking number. Please check with the shipper".
   if (/tracking number.{0,80}can.t be found|can.t find (that|this) tracking number|no record of this tracking|please check (the number )?with the shipper/i.test(text)) return {page: 'notFound'};
+  // Priority chain: the progress-bar label is the headline while moving, but a delivered page
+  // drops the progress bar entirely and flips the delivery-date eyebrow to "DELIVERED" (live
+  // capture 2026-08-20) — that eyebrow is the fallback. On moving pages it reads "ESTIMATED
+  // DELIVERY DATE", which classifies to nothing, so the fallback can't misreport transit.
   var statusText = clean(document.querySelector('.phase3-progress-bar__active-label'))
-    || clean(document.querySelector('[class*="progress-bar__active-label"]'));
+    || clean(document.querySelector('[class*="progress-bar__active-label"]'))
+    || clean(document.querySelector('[data-test-id="delivery-date-header"]'));
   var etaText = clean(document.querySelector('[data-test-id="delivery-date-text"]'))
     || clean(document.querySelector('.phase3-view__delivery-date-embed, [class*="delivery-date-embed"]'));
   var locationText = clean(document.querySelector('.phase3-view__current-location, [class*="current-location"]'));
