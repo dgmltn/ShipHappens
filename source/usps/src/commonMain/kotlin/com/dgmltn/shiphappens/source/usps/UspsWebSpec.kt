@@ -14,7 +14,6 @@ import com.dgmltn.shiphappens.source.webview.WebProviderSpec
 private val USPS_EXTRACTION_JS = """
 function() {
   var text = (document.body && document.body.innerText) || '';
-  if (/status not available|could not locate the tracking information/i.test(text)) return {page: 'notFound'};
   // Priority chain, NOT a comma list: querySelector('a, b') returns the first match in
   // DOCUMENT order, and on the live page ancestor wrappers (current-tracking-status-wrapper)
   // precede the precise node — their concatenated text misclassified a delivered package as
@@ -44,7 +43,6 @@ function() {
   }
   events.reverse();  // page lists newest first; canonical order is ascending
   var statusText = clean(statusEl);
-  if (!statusText && !events.length) return {page: 'empty'};
   // The WHOLE banner, tooltip junk and all — Kotlin regexes dig the date and window out of the
   // flattened text. The old '.expected_delivery .date' selector read only the bare day number
   // ("28": USPS splits the date across .day/.date/.month_year spans), which Date.parse can't
@@ -52,6 +50,7 @@ function() {
   var etaText = clean(document.querySelector('.expected_delivery, [class*="expected-delivery"], .eta_info'));
   return {page: 'raw', raw: {
     kind: 'tracker',
+    pageText: text.replace(/\s+/g, ' ').slice(0, 400),
     statusText: statusText,
     etaText: etaText,
     events: events

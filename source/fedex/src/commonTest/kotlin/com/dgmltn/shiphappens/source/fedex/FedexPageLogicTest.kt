@@ -4,6 +4,10 @@ import com.dgmltn.shiphappens.domain.TrackingStatus
 import com.dgmltn.shiphappens.source.webview.DomRaw
 import com.dgmltn.shiphappens.source.webview.DomRawEvent
 import com.dgmltn.shiphappens.source.webview.findEtaWindowText
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -202,6 +206,95 @@ class FedexPageLogicTest {
         assertEquals("ok", result?.page)
         assertEquals("UNKNOWN", result?.tracking?.status)
         assertEquals("2026-08-20", result?.tracking?.etaDate)
+    }
+
+    // -- page-state wording decided in Kotlin (moved out of the JS blob 2026-08-20) --
+
+    @Test fun not_found_wordings_route_not_found_from_page_text() {
+        // All three live wordings: /no-results-found, the system-error page, and the shipper hint.
+        listOf(
+            "FedEx ® Tracking The tracking number you entered can't be found right now. Please check the number with the shipper or try again later.",
+            "FedEx ® Tracking We can’t find that tracking number. Please check with the shipper to make sure it’s the correct one.",
+            "no record of this tracking number",
+        ).forEach { wording ->
+            val result = parseFedexRaw(DomRaw(kind = "tracker", pageText = wording))
+            assertEquals("notFound", result?.page, "wording: $wording")
+        }
+    }
+
+    @Test fun ordinary_page_text_does_not_trip_not_found() {
+        val result = parseFedexRaw(
+            DomRaw(kind = "tracker", statusText = "On the way", pageText = "Fedex Home # 875900001234 On the way"),
+        )
+        assertEquals("ok", result?.page)
+    }
+
+    // -- travel-history rows: date-group header + bare time arrive verbatim in whenText --
+
+    @Test fun events_build_timestamps_from_when_text_and_sort_ascending() {
+        val tz = TimeZone.currentSystemDefault()
+        // Rows in document order = newest first, exactly as the details view renders them.
+        val result = parseFedexRaw(
+            DomRaw(
+                kind = "tracker",
+                statusText = "DELIVERED",
+                events = listOf(
+                    DomRawEvent(whenText = "Thursday, 08/20/2026 1:48 PM", description = "Delivered", location = "Carlsbad, CA"),
+                    DomRawEvent(whenText = "Wednesday, 08/19/2026 3:06 AM", description = "Departed FedEx location", location = "SACRAMENTO, CA"),
+                ),
+            ),
+        )
+        val events = result?.tracking?.events.orEmpty()
+        assertEquals(listOf("Departed FedEx location", "Delivered"), events.map { it.description })
+        assertEquals(
+            LocalDateTime(LocalDate(2026, 8, 19), LocalTime(3, 6)).toInstant(tz).toString(),
+            events.first().timestamp,
+        )
+        assertEquals(listOf("IN_TRANSIT", "DELIVERED"), events.map { it.status })
+        assertEquals("Carlsbad, CA", result?.tracking?.location)  // newest event's location
+    }
+
+    @Test fun live_travel_history_rows_parse_and_classify() {
+        // Verbatim from the 2026-08-21 Pixel capture of the delivered package's travel history:
+        // two-digit years, per-day date cells, fixed time/description/location triples.
+        val tz = TimeZone.currentSystemDefault()
+        val result = parseFedexRaw(
+            DomRaw(
+                kind = "tracker",
+                events = listOf(
+                    DomRawEvent(whenText = "Tuesday, 8/18/26 4:16 PM", description = "Picked up", location = "SOUTH SAN FRANCISCO, CA"),
+                    DomRawEvent(
+                        whenText = "Tuesday, 8/18/26 3:32 PM",
+                        description = "In FedEx possession Package received after final location pickup has occurred.",
+                        location = "FOSTER CITY, CA",
+                    ),
+                    DomRawEvent(whenText = "Tuesday, 8/18/26 9:48 AM", description = "Shipment information sent to FedEx"),
+                ),
+            ),
+        )
+        val events = result?.tracking?.events.orEmpty()
+        assertEquals(3, events.size)
+        assertEquals("Shipment information sent to FedEx", events.first().description)   // ascending
+        assertEquals(listOf("LABEL_CREATED", "SHIPPED", "SHIPPED"), events.map { it.status })
+        assertEquals(
+            LocalDateTime(LocalDate(2026, 8, 18), LocalTime(9, 48)).toInstant(tz).toString(),
+            events.first().timestamp,
+        )
+        assertEquals("SOUTH SAN FRANCISCO, CA", result?.tracking?.location)  // newest with a location
+    }
+
+    @Test fun rows_without_a_parseable_when_text_are_dropped_not_fatal() {
+        val result = parseFedexRaw(
+            DomRaw(
+                kind = "tracker",
+                statusText = "On the way",
+                events = listOf(
+                    DomRawEvent(whenText = "Pending", description = "Mystery row"),
+                    DomRawEvent(whenText = "Wednesday, 08/19/2026 3:06 AM", description = "Departed FedEx location"),
+                ),
+            ),
+        )
+        assertEquals(listOf("Departed FedEx location"), result?.tracking?.events.orEmpty().map { it.description })
     }
 
     @Test fun blank_page_is_empty_and_foreign_kind_is_null() {

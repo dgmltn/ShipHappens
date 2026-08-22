@@ -111,6 +111,7 @@ function() {
     var etaWindow = windowText(statusText) || windowText(promiseText);
     return {page: 'raw', raw: {
       kind: 'tracker',
+      pageText: text.replace(/\s+/g, ' ').slice(0, 400),
       statusText: statusText,
       etaText: promiseText,
       etaWindowText: etaWindow,
@@ -120,14 +121,17 @@ function() {
   }
 
   // --- Order-details page: pick the target shipment, hop to its tracker ---
-  if (/problem finding this order|couldn't find that order|can't find that order|not a valid order/i.test(text)) return {page: 'notFound'};
   // Live QA (2026-07-19) showed this page is built from data-component attributes, not the classes
   // below: '[data-component="shipments"] .a-box' matched inner boxes whose status text and tracker
   // link both live elsewhere, so every card classified UNKNOWN and the scrape bailed as empty. Real
   // card is 'shipmentCard'; the class selectors stay as fallbacks for older/A-B layouts.
   var cards = document.querySelectorAll('[data-component="shipmentCard"]');
   if (!cards.length) cards = document.querySelectorAll('.shipment, [class*="shipment-info-container"], [data-component="shipments"] .a-box');
-  if (!cards.length) return empty('noShipmentCards');
+  // Raw (not 'empty') so the order-not-found wording in pageText reaches Kotlin; the
+  // decoder ignores why/probe, the tracer logs them verbatim.
+  if (!cards.length) return {page: 'raw',
+    raw: {kind: 'cards', cards: [], pageText: text.replace(/\s+/g, ' ').slice(0, 400), todayIso: isoDate(new Date())},
+    why: 'noShipmentCards', url: href, probe: probe()};
   // Read every card verbatim and let Kotlin choose. An order mixes shipment cards with RMA cards
   // ("Replacement complete — We've received your return"), and telling them apart is exactly the
   // judgement that belongs in tested code, so no filtering happens here.
@@ -142,7 +146,8 @@ function() {
   }
   // The headline also carries the ETA ("Arriving today", "Now expected tomorrow"); todayIso is
   // what lets AmazonPageLogic resolve those words to a real date.
-  return {page: 'raw', raw: {kind: 'cards', cards: out, todayIso: isoDate(new Date())}};
+  return {page: 'raw', raw: {kind: 'cards', cards: out,
+    pageText: text.replace(/\s+/g, ' ').slice(0, 400), todayIso: isoDate(new Date())}};
 }
 """.trimIndent()
 

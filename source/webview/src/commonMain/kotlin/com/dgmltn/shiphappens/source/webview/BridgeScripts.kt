@@ -56,6 +56,13 @@ object BridgeScripts {
      * Run after page quiescence: checks challenge markers against visible text, then runs the
      * provider's extractor and posts its result as a {kind:'dom', body} payload. Always posts
      * exactly one payload (page:'empty' on any error) so callers can treat 'dom' as end-of-scrape.
+     *
+     * The extractor receives a `finish(result)` callback. Returning a value finishes
+     * synchronously — every plain `function(){...}` extractor keeps working untouched. Returning
+     * undefined defers the post to a later `finish(...)` call, for choreography that must wait on
+     * the page (click a control, let the SPA re-render, then read — see FedexWebSpec). A backstop
+     * timer finishes `{page:'empty', why:'asyncTimeout'}` if the deferred call never comes, well
+     * inside the scraper's own 30s timeout, and the `finished` guard keeps it to one post.
      */
     fun extractionRunner(spec: WebProviderSpec): String {
         val markerArray = spec.challengeMarkers.joinToString(",") { jsString(it.lowercase()) }
@@ -64,20 +71,33 @@ object BridgeScripts {
   function post(body) {
     try { $BRIDGE_NAME.postMessage(JSON.stringify({kind: 'dom', body: JSON.stringify(body)})); } catch (e) {}
   }
+  var finished = false;
+  var backstop;
+  function finish(r) {
+    if (finished) return;
+    finished = true;
+    if (backstop) clearTimeout(backstop);
+    post(r || {page: 'empty'});
+  }
   try {
     var text = ((document.body && document.body.innerText) || '').toLowerCase();
     var markers = [$markerArray];
     for (var i = 0; i < markers.length; i++) {
-      if (text.indexOf(markers[i]) !== -1) { post({page: 'challenge'}); return; }
+      if (text.indexOf(markers[i]) !== -1) { finish({page: 'challenge'}); return; }
     }
+    backstop = setTimeout(function() { finish({page: 'empty', why: 'asyncTimeout'}); }, $ASYNC_BACKSTOP_MS);
     var extractor = (${spec.extractionJs});
-    post(extractor() || {page: 'empty'});
+    var r = extractor(finish);
+    if (r !== undefined) finish(r);
   } catch (e) {
     // A thrown extractor and a genuinely empty page both route to Unparsed; without 'why' the
     // trace log can't tell them apart, and a selector hunt would start from the wrong premise.
-    post({page: 'empty', why: 'extractorThrew', error: '' + (e && e.message ? e.message : e)});
+    finish({page: 'empty', why: 'extractorThrew', error: '' + (e && e.message ? e.message : e)});
   }
 })();
 """.trimIndent()
     }
+
+    /** How long an async extractor may defer before the runner reports empty. */
+    private const val ASYNC_BACKSTOP_MS = 8_000
 }

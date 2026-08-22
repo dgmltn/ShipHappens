@@ -10,11 +10,11 @@ import com.dgmltn.shiphappens.source.webview.WebProviderSpec
 private val UPS_EXTRACTION_JS = """
 function() {
   var text = (document.body && document.body.innerText) || '';
-  if (/tracking number.{0,40}(invalid|not found|couldn.t locate)/i.test(text)) return {page: 'notFound'};
   if (/log in|sign in to view/i.test(text) && !/track/i.test(document.title)) return {page: 'loginWall'};
   var statusEl = document.querySelector('#stApp_txtPackageStatus, [id*="PackageStatus"], .ups-tracking_status');
-  if (!statusEl) return {page: 'empty'};
-  return {page: 'raw', raw: {kind: 'tracker', statusText: statusEl.textContent.replace(/\s+/g, ' ').trim()}};
+  return {page: 'raw', raw: {kind: 'tracker',
+    statusText: statusEl ? statusEl.textContent.replace(/\s+/g, ' ').trim() : null,
+    pageText: text.replace(/\s+/g, ' ').slice(0, 400)}};
 }
 """.trimIndent()
 

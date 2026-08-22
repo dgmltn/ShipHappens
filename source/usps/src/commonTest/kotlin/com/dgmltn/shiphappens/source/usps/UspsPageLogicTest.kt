@@ -114,6 +114,16 @@ class UspsPageLogicTest {
         assertEquals(TrackingStatus.UNKNOWN.name, result.tracking?.status)
     }
 
+    @Test fun not_found_wording_routes_not_found_from_page_text() {
+        // The wordings the JS blob used to decide on (moved to Kotlin 2026-08-20).
+        assertEquals("notFound", parseUspsRaw(DomRaw(kind = "tracker", pageText = "Status Not Available"))?.page)
+        assertEquals(
+            "notFound",
+            parseUspsRaw(DomRaw(kind = "tracker", pageText = "We could not locate the tracking information for your request"))?.page,
+        )
+        assertEquals("ok", parseUspsRaw(liveRaw.copy(pageText = "USPS Tracking results"))?.page)
+    }
+
     @Test fun nothing_readable_is_empty() {
         assertEquals("empty", parseUspsRaw(DomRaw(kind = "tracker"))?.page)
     }

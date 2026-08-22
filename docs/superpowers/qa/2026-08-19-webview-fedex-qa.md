@@ -84,6 +84,16 @@ The extraction regex covers both; re-verified live — bogus number routes `NotF
   `[data-test-id="delivery-date-header"]` flips "ESTIMATED DELIVERY DATE" → "DELIVERED" and is
   now the status fallback; the date element reads "Thursday8/20/2026 at 1:48 pm" (delivery
   time, not a window). Fixed + re-verified live; captures pinned in `FedexPageLogicTest`.
+- [x] Travel history scraped live 2026-08-21 (event-trail increment): the extractor reads the
+  summary, clicks "View more details" (same-URL client-side route, found by text — the goto-hop
+  can't reach it), waits 2s, and reads `tr.travel-history-table__row` → per-day date cell
+  ("Tuesday, 8/18/26" — two-digit year) + `.travel-history__scan-event` triples (time /
+  description / location). Validated headless on a fresh add (full 11-event trail, Foster City →
+  South San Francisco → Sacramento → Carlsbad) and direct-read on a restored session that lands
+  straight on the details view. Wordings pinned: "In FedEx possession" → SHIPPED, "Left FedEx
+  origin facility", "Address corrected" (unclassified, kept).
+- [x] notFound decisions moved from the JS blob to `parseFedexRaw` (pageText) — live-validated
+  2026-08-21 when a bot-flagged emulator's system-error page routed NotFound through Kotlin.
 - [ ] Out-for-delivery wording still unexercised live (vocabulary unit-tested).
 - [ ] Login/`isLoggedInJs` markers best-effort — no FedEx account session was exercised.
 

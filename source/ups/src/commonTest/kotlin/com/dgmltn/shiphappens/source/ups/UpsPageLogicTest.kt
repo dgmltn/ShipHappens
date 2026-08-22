@@ -47,6 +47,13 @@ class UpsPageLogicTest {
         assertEquals("UNKNOWN", parseUpsRaw(DomRaw(kind = "tracker", statusText = "Novel wording"))?.tracking?.status)
     }
 
+    @Test fun not_found_wording_routes_not_found_from_page_text() {
+        // The wordings the JS blob used to decide on (moved to Kotlin 2026-08-20).
+        assertEquals("notFound", parseUpsRaw(DomRaw(kind = "tracker", pageText = "The tracking number you entered is invalid"))?.page)
+        assertEquals("notFound", parseUpsRaw(DomRaw(kind = "tracker", pageText = "Sorry, this tracking number was not found in our records"))?.page)
+        assertEquals("ok", parseUpsRaw(DomRaw(kind = "tracker", statusText = "On the Way", pageText = "UPS tracking detail"))?.page)
+    }
+
     @Test fun blank_page_is_empty_and_foreign_kind_is_null() {
         assertEquals("empty", parseUpsRaw(DomRaw(kind = "tracker"))?.page)
         assertNull(parseUpsRaw(DomRaw(kind = "cards", statusText = "On the Way")))

@@ -123,8 +123,16 @@ internal fun pickShipmentCard(cards: List<DomCard>): DomCard? {
     return pool.firstOrNull { classifyAmazonStatus(it.head) != TrackingStatus.DELIVERED } ?: pool.last()
 }
 
+// Verbatim from the JS blob's original decision (moved to Kotlin 2026-08-20); order-page copy,
+// which is why the check lives in the cards branch just as it did in the blob.
+private val AMAZON_NOT_FOUND = Regex(
+    """problem finding this order|couldn.t find that order|can.t find that order|not a valid order""",
+    RegexOption.IGNORE_CASE,
+)
+
 /** Order-details page: choose a shipment and either hop to its tracker or report its coarse state. */
 internal fun resolveAmazonCards(raw: DomRaw): DomExtraction {
+    if (raw.pageText?.let { AMAZON_NOT_FOUND.containsMatchIn(it) } == true) return DomExtraction(page = "notFound")
     val pick = pickShipmentCard(raw.cards) ?: return DomExtraction(page = "empty")
     val eta = amazonEtaFromStatus(pick.head, raw.today())
     // The headline's "Arriving <day>" carries the ETA but not a transit state (see IN_TRANSIT_PHRASES),

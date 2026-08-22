@@ -14,12 +14,12 @@ function() {
   var text = (document.body && document.body.innerText) || '';
   var href = location.href;
   function clean(el) { return el ? el.textContent.replace(/\s+/g, ' ').trim() : null; }
-  if (/couldn.t find|can.t find|unable to find|invalid tracking|no longer available/i.test(text)) return {page: 'notFound'};
   var statusEl = document.querySelector('#primaryStatus')
     || document.querySelector('[class*="pt-status"], [class*="trackingStatus"], [class*="status-main"]')
     || document.querySelector('main h1, h1');
   var statusText = clean(statusEl);
-  if (statusText) return {page: 'raw', raw: {kind: 'tracker', statusText: statusText}};
+  var pageText = text.replace(/\s+/g, ' ').slice(0, 400);
+  if (statusText) return {page: 'raw', raw: {kind: 'tracker', statusText: statusText, pageText: pageText}};
   function probe() {
     var sel = ['#primaryStatus', '[class*="status"]', 'main h1', 'h1', '[data-testid]'];
     var out = {};
@@ -28,8 +28,10 @@ function() {
     }
     return out;
   }
-  return {page: 'empty', why: 'noStatusHeadline', url: href,
-          textHead: text.replace(/\s+/g, ' ').slice(0, 300), probe: probe()};
+  // Raw (not 'empty') so Kotlin can still classify not-found wording from pageText; the
+  // decoder ignores why/probe, the tracer logs them verbatim.
+  return {page: 'raw', raw: {kind: 'tracker', pageText: pageText},
+          why: 'noStatusHeadline', url: href, probe: probe()};
 }
 """.trimIndent()
 

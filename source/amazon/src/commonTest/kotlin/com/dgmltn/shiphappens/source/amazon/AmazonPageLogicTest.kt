@@ -251,4 +251,17 @@ class AmazonPageLogicTest {
         assertEquals("2026-08-19", result.tracking?.etaDate)
         assertEquals(TrackingStatus.EXCEPTION.name, result.tracking?.status)
     }
+
+    @Test fun order_page_not_found_wording_routes_not_found_from_page_text() {
+        // The wordings the JS blob used to decide on (moved to Kotlin 2026-08-20); scoped to the
+        // cards page, matching the blob's original branch placement.
+        assertEquals(
+            "notFound",
+            parseAmazonRaw(DomRaw(kind = "cards", pageText = "We're having a problem finding this order"))?.page,
+        )
+        assertEquals(
+            "notFound",
+            parseAmazonRaw(DomRaw(kind = "cards", pageText = "We can't find that order"))?.page,
+        )
+    }
 }

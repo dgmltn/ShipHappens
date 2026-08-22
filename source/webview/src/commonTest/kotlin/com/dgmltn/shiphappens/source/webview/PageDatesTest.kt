@@ -38,6 +38,11 @@ class PageDatesTest {
         assertEquals(LocalDate(2026, 7, 16), parseNumericMdyDate("07/16/2026"))
     }
 
+    @Test fun parses_two_digit_years_as_2000s() {
+        // fedex.com's travel-history date cells render "Tuesday, 8/18/26" (live capture 2026-08-21).
+        assertEquals(LocalDate(2026, 8, 18), parseNumericMdyDate("Tuesday, 8/18/26 9:48 AM"))
+    }
+
     @Test fun numeric_rejects_invalid_and_absent_dates() {
         assertNull(parseNumericMdyDate("Estimated delivery Pending"))
         assertNull(parseNumericMdyDate(null))
@@ -91,6 +96,20 @@ class PageDatesTest {
     @Test fun a_promise_for_todays_weekday_is_today() {
         val wednesday = LocalDate(2026, 8, 19)
         assertEquals(wednesday, parseWeekdayName("Wednesday by 8:00 PM", wednesday))
+    }
+
+    // -- time of day, both clock styles --
+
+    @Test fun parses_meridiem_and_24h_times() {
+        assertEquals(kotlinx.datetime.LocalTime(3, 6), parseTimeOfDay("Wednesday, 08/19/2026 3:06 AM"))
+        assertEquals(kotlinx.datetime.LocalTime(13, 48), parseTimeOfDay("Thursday8/20/2026 at 1:48 pm"))
+        assertEquals(kotlinx.datetime.LocalTime(14, 33), parseTimeOfDay("14:33:00"))
+        assertEquals(kotlinx.datetime.LocalTime(0, 7), parseTimeOfDay("12:07 A.M."))
+    }
+
+    @Test fun a_bare_date_is_not_a_time() {
+        assertNull(parseTimeOfDay("Wednesday, 08/19/2026"))
+        assertNull(parseTimeOfDay(null))
     }
 
     @Test fun weekday_needs_today_and_a_weekday_word() {

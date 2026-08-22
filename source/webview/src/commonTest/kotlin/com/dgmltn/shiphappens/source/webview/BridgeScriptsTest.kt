@@ -27,4 +27,16 @@ class BridgeScriptsTest {
         assertContains(js, "challenge")
         assertFalse(js.contains("\${"))                          // no unresolved Kotlin templates
     }
+
+    @Test fun extraction_runner_supports_async_extractors() {
+        // The extractor receives a finish callback: returning a value finishes synchronously
+        // (every pre-existing extractor), returning undefined defers to a later finish(...) call
+        // (click-and-continue choreography). One post no matter what, and a backstop timer so a
+        // stuck async extractor reports instead of hanging the scrape to its 30s timeout.
+        val js = BridgeScripts.extractionRunner(testSpec())
+        assertContains(js, "extractor(finish)")
+        assertContains(js, "if (finished) return")   // post-once guard
+        assertContains(js, "asyncTimeout")           // backstop outcome is diagnosable in traces
+        assertContains(js, "!== undefined")          // sync return path preserved
+    }
 }

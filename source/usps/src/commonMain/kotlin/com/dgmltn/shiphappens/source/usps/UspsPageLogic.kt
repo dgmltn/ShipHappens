@@ -43,9 +43,14 @@ internal fun classifyUspsStatus(raw: String?): TrackingStatus? = classifyStatusW
 // month-name-adjacent number, so the shared month-name parsing is safe against the junk.
 internal fun parseUspsEtaDate(text: String?): LocalDate? = parseMonthNameDate(text)
 
+// Verbatim from the JS blob's original decision (moved to Kotlin 2026-08-20).
+private val USPS_NOT_FOUND =
+    Regex("""status not available|could not locate the tracking information""", RegexOption.IGNORE_CASE)
+
 /** Tracker page: classify the banner headline and each event row; newest event supplies fallbacks. */
 internal fun parseUspsRaw(raw: DomRaw): DomExtraction? {
     if (raw.kind != "tracker") return null
+    if (raw.pageText?.let { USPS_NOT_FOUND.containsMatchIn(it) } == true) return DomExtraction(page = "notFound")
     val events = raw.events.map {
         ScrapedEvent(
             timestamp = it.timestamp,

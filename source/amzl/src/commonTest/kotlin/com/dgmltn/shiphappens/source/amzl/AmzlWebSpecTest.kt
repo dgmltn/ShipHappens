@@ -50,6 +50,9 @@ class AmzlWebSpecTest {
 
     @Test fun raw_without_status_text_routes_to_unparsed() {
         assertNull(parseAmzlRaw(DomRaw(kind = "tracker")))
+        // The wordings the JS blob used to decide on (moved to Kotlin 2026-08-20).
+        assertEquals("notFound", parseAmzlRaw(DomRaw(kind = "tracker", pageText = "We couldn't find this tracking number"))?.page)
+        assertEquals("notFound", parseAmzlRaw(DomRaw(kind = "tracker", pageText = "This tracking information is no longer available"))?.page)
         assertNull(parseAmzlRaw(DomRaw(kind = "cards")))
     }
 }

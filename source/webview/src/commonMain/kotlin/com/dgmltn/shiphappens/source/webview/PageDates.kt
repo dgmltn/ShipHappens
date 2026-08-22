@@ -3,6 +3,7 @@ package com.dgmltn.shiphappens.source.webview
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import kotlinx.datetime.Month
 import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.minus
@@ -25,8 +26,9 @@ private val MONTH_DAY = Regex("""\b($MONTH_NAMES)\.?\s+(\d{1,2})\b""", RegexOpti
 private val DAY_MONTH = Regex("""\b(\d{1,2})\s+($MONTH_NAMES)\b""", RegexOption.IGNORE_CASE)
 
 // Lookbehind, not \b: fedex.com's hero flattens to "Thursday8/20/2026" (QA 2026-08-19), and
-// there is no word boundary between "y" and "8".
-private val NUMERIC_MDY = Regex("""(?<![\d/])(\d{1,2})/(\d{1,2})/(\d{4})\b""")
+// there is no word boundary between "y" and "8". The year is 4 digits or 2 ("8/18/26" in
+// fedex.com's travel-history date cells, live capture 2026-08-21) — two-digit years read as 2000s.
+private val NUMERIC_MDY = Regex("""(?<![\d/])(\d{1,2})/(\d{1,2})/(\d{4}|\d{2})\b""")
 
 private fun monthOf(name: String): Month? =
     Month.entries.firstOrNull { it.name.startsWith(name.trimEnd('.').uppercase()) }
@@ -44,11 +46,12 @@ fun parseMonthNameDate(text: String?): LocalDate? {
     return null
 }
 
-/** "8/19/2026", "07/16/2026", "Thursday8/20/2026" — numeric month/day/year. */
+/** "8/19/2026", "07/16/2026", "Thursday8/20/2026", "8/18/26" — numeric month/day/year. */
 fun parseNumericMdyDate(text: String?): LocalDate? {
     val m = NUMERIC_MDY.find(text ?: return null) ?: return null
-    val (mm, dd, yyyy) = m.destructured
-    return runCatching { LocalDate(yyyy.toInt(), mm.toInt(), dd.toInt()) }.getOrNull()
+    val (mm, dd, yy) = m.destructured
+    val year = yy.toInt().let { if (it < 100) it + 2000 else it }
+    return runCatching { LocalDate(year, mm.toInt(), dd.toInt()) }.getOrNull()
 }
 
 /**
@@ -80,6 +83,23 @@ private val WEEKDAY = Regex("""\b($WEEKDAY_NAMES)\b""", RegexOption.IGNORE_CASE)
  * counting [today] itself. Only safe on text known to be a promise: on arbitrary text a past
  * weekday ("Delivered Thursday") would resolve forward.
  */
+private val TIME_12H = Regex("""(\d{1,2}):(\d{2})\s*([ap])\.?m\.?""", RegexOption.IGNORE_CASE)
+private val TIME_24H = Regex("""\b(\d{1,2}):(\d{2})(?::\d{2})?\b""")
+
+/** "3:06 AM", "1:48 pm", "12:07 A.M.", or 24-hour "14:33[:00]" — the first clock phrase found.
+ *  A bare date ("08/19/2026") has no colon pair and parses to nothing. */
+fun parseTimeOfDay(text: String?): LocalTime? {
+    val s = text ?: return null
+    TIME_12H.find(s)?.let { m ->
+        val (h, min, ap) = m.destructured
+        val hour24 = (h.toInt() % 12) + if (ap.lowercase() == "p") 12 else 0
+        return runCatching { LocalTime(hour24, min.toInt()) }.getOrNull()
+    }
+    val m = TIME_24H.find(s) ?: return null
+    val (h, min) = m.destructured
+    return runCatching { LocalTime(h.toInt(), min.toInt()) }.getOrNull()
+}
+
 fun parseWeekdayName(text: String?, today: LocalDate?): LocalDate? {
     if (text.isNullOrBlank() || today == null) return null
     val name = WEEKDAY.find(text)?.groupValues?.get(1) ?: return null

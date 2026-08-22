@@ -85,8 +85,8 @@ gitignored and recreated by `xcodegen generate`, while `app-ios/ShipHappens/Info
 ```
 
 Note `:ui`'s task is `testAndroidHostTest`, not `testDebugUnitTest` — the UI module's unit tests
-run on the Android-host test source set. Current suite: 337 tests across 10 modules (domain 14,
-data 66, api 2, ups 15, usps 28, fedex 28, amazon 44, amzl 17, webview 75, ui 48), all passing.
+run on the Android-host test source set. Current suite: 351 tests across 10 modules (domain 14,
+data 66, api 2, ups 16, usps 29, fedex 35, amazon 45, amzl 17, webview 79, ui 48), all passing.
 
 ## Daily update
 

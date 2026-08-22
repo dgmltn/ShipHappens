@@ -41,6 +41,10 @@ data class DomRaw(
     /** Verbatim current-location banner ("Currently in Sacramento, CA") for tracker pages that
      *  show a location without any event rows; the provider strips the phrasing in Kotlin. */
     val locationText: String? = null,
+    /** Head of the page's flattened body text, so page-state wording (not-found and friends) is
+     *  classified in the provider's tested Kotlin instead of a regex inside the JS blob — the
+     *  fedex /no-results-found wording miss (QA 2026-08-19) was exactly a blob-only decision. */
+    val pageText: String? = null,
     /** The device's local date when the page was read, ISO. Pages that phrase a delivery day
      *  relatively ("tomorrow") or without a year ("Saturday, August 22") can only be resolved
      *  against it, and resolving in Kotlin keeps that arithmetic under test. */
@@ -53,9 +57,16 @@ data class DomRaw(
 @Serializable
 data class DomCard(val head: String = "", val href: String? = null)
 
-/** One event row, timestamp already normalized to ISO-8601 by the page's own date context. */
+/** One event row. [timestamp] is ISO-8601 when the page's own date context lets the JS normalize
+ *  it (USPS); pages that render date-group headers plus bare times (FedEx's travel history) send
+ *  the verbatim strings in [whenText] instead, and the provider's Kotlin builds the timestamp. */
 @Serializable
-data class DomRawEvent(val timestamp: String, val description: String, val location: String? = null)
+data class DomRawEvent(
+    val timestamp: String = "",
+    val description: String,
+    val location: String? = null,
+    val whenText: String? = null,
+)
 
 sealed interface RouteResult {
     data class Tracking(val tracking: ScrapedTracking) : RouteResult

@@ -27,6 +27,11 @@ private val UPS_KEYWORDS = StatusKeywords(
 
 internal fun classifyUpsStatus(raw: String?): TrackingStatus? = classifyStatusWording(raw, UPS_KEYWORDS)
 
+// Verbatim from the JS blob's original decision (moved to Kotlin 2026-08-20 so wording drift is
+// a unit-test fix, not a device hunt).
+private val UPS_NOT_FOUND =
+    Regex("""tracking number.{0,40}(invalid|not found|couldn.t locate)""", RegexOption.IGNORE_CASE)
+
 /**
  * Tracker page: classify the status headline. The DOM layer is UPS's coarse fallback (API
  * capture is primary), so a present-but-novel headline still reports (status UNKNOWN) exactly
@@ -34,6 +39,7 @@ internal fun classifyUpsStatus(raw: String?): TrackingStatus? = classifyStatusWo
  */
 internal fun parseUpsRaw(raw: DomRaw): DomExtraction? {
     if (raw.kind != "tracker") return null
+    if (raw.pageText?.let { UPS_NOT_FOUND.containsMatchIn(it) } == true) return DomExtraction(page = "notFound")
     if (raw.statusText.isNullOrBlank()) return DomExtraction(page = "empty")
     val status = classifyUpsStatus(raw.statusText) ?: TrackingStatus.UNKNOWN
     return DomExtraction(page = "ok", tracking = ScrapedTracking(status = status.name))
