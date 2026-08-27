@@ -11,6 +11,11 @@ swipe, settings cards, clipboard-import card, toasts) — lives in
 [`resources/design/Parcels.dc.html`](resources/design/Parcels.dc.html). Open it in a browser for the canonical UI
 reference.
 
+<p>
+  <img src="resources/screenshots/device-2026-08-26-183842.png" width="280" alt="Ship Happens list screen showing active and delivered parcels">
+  <img src="resources/screenshots/device-2026-08-26-183854.png" width="280" alt="Ship Happens detail screen showing estimated delivery, map, and tracking history">
+</p>
+
 ## Module map
 
 ```
