@@ -7,7 +7,9 @@ import com.dgmltn.shiphappens.source.webview.DomRawEvent
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Strings here are verbatim device captures (ScrapeTracer, 2026-07-19) — the point of moving this
@@ -225,6 +227,90 @@ class AmazonPageLogicTest {
         assertEquals("2026-08-19", result.tracking?.etaDate)
         assertEquals("by 8 AM", result.tracking?.etaWindowText)
         assertEquals(TrackingStatus.EXCEPTION.name, result.tracking?.status)
+    }
+
+    // --- Delay as a modifier (2026-08-28) ---
+    //
+    // Amazon has no reason-sentence field (no UPS `simplifiedText` equivalent), so the wording
+    // that trips the delay match IS the note.
+
+    @Test fun delay_wording_no_longer_hides_the_stage_the_shipment_is_at() {
+        // The event row Amazon logs for a late shipment names its own stage; collapsing it to
+        // EXCEPTION (stepIndex -1) stopped the timeline advancing past it.
+        assertEquals(TrackingStatus.IN_TRANSIT, classifyAmazonStatus("Package delayed in transit"))
+    }
+
+    @Test fun delay_wording_that_names_no_stage_still_classifies_exception() {
+        // Unchanged behavior for the headline wordings: nothing better to be.
+        assertEquals(TrackingStatus.EXCEPTION, classifyAmazonStatus("Now expected tomorrow by 8 AM"))
+        assertEquals(TrackingStatus.EXCEPTION, classifyAmazonStatus("Running late"))
+        assertEquals(TrackingStatus.EXCEPTION, classifyAmazonStatus("Delayed"))
+    }
+
+    @Test fun a_real_exception_still_beats_delay_wording() {
+        assertEquals(TrackingStatus.EXCEPTION, classifyAmazonStatus("Delivery attempted, running late"))
+        assertEquals(TrackingStatus.EXCEPTION, classifyAmazonStatus("Undeliverable — delayed"))
+    }
+
+    @Test fun delivered_and_out_for_delivery_still_outrank_delay_wording() {
+        assertEquals(TrackingStatus.DELIVERED, classifyAmazonStatus("Delivered, was running late"))
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, classifyAmazonStatus("Out for delivery, delayed"))
+    }
+
+    @Test fun delay_is_detected_independently_of_the_stage() {
+        assertTrue(isAmazonDelayed("Now expected tomorrow by 8 AM"))
+        assertTrue(isAmazonDelayed("Package delayed in transit"))
+        assertTrue(isAmazonDelayed("Running late"))
+        assertFalse(isAmazonDelayed("Arriving tomorrow"))
+        assertFalse(isAmazonDelayed("Out for delivery"))
+        assertFalse(isAmazonDelayed(""))
+        assertFalse(isAmazonDelayed(null))
+    }
+
+    @Test fun a_delayed_tracker_page_carries_the_wording_as_its_note() {
+        val result = resolveAmazonTracker(
+            DomRaw(kind = "tracker", statusText = "Now expected tomorrow by 8 AM", todayIso = "2026-08-18"),
+        )
+        assertEquals("Now expected tomorrow by 8 AM", result.tracking?.delayNote)
+    }
+
+    @Test fun a_tracker_whose_only_delay_signal_is_an_event_still_reports_it() {
+        // The 2026-08-18 capture's warning: a tracker that hadn't logged the revised promise in
+        // its status line still had "Package delayed in transit" in the rows.
+        val result = resolveAmazonTracker(
+            DomRaw(
+                kind = "tracker",
+                statusText = "Arriving tomorrow",
+                todayIso = "2026-08-18",
+                events = listOf(
+                    DomRawEvent("2026-08-18T05:00:00.000Z", "Package left the facility", "US"),
+                    DomRawEvent("2026-08-18T07:00:00.000Z", "Package delayed in transit", ""),
+                ),
+            ),
+        )
+        assertEquals("Package delayed in transit", result.tracking?.delayNote)
+    }
+
+    @Test fun an_undelayed_tracker_page_has_no_note() {
+        val result = resolveAmazonTracker(
+            DomRaw(kind = "tracker", statusText = "Arriving tomorrow", todayIso = "2026-08-18"),
+        )
+        assertNull(result.tracking?.delayNote)
+    }
+
+    @Test fun a_delayed_order_card_carries_its_note_into_the_hop() {
+        val delayed = DomCard(
+            head = "Now expected tomorrow by 8 AM",
+            href = "https://www.amazon.com/gp/your-account/ship-track?itemId=x&orderId=y",
+        )
+        val result = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(delayed), todayIso = "2026-08-18"))
+        assertEquals("Now expected tomorrow by 8 AM", result.tracking?.delayNote)
+    }
+
+    @Test fun an_undelayed_order_card_has_no_note() {
+        val card = DomCard(head = "Arriving tomorrow", href = "https://www.amazon.com/gp/your-account/ship-track?x")
+        val result = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(card), todayIso = "2026-08-18"))
+        assertNull(result.tracking?.delayNote)
     }
 
     @Test fun tracker_prefers_the_promise_element_over_the_status_line() {

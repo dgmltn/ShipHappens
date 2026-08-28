@@ -98,16 +98,21 @@ object AmzlApiParser {
         val eta = (summary?.metadata?.promisedDeliveryDate?.date ?: summary?.metadata?.expectedDeliveryDate?.date)
             ?.let { parseDateTime(it)?.first }
 
-        val status = sequenceOf(
+        val statusTokens = listOfNotNull(
             summary?.status,
             summary?.metadata?.trackingStatus?.stringValue,
             history?.summary?.status,
-        ).mapNotNull { s -> classify(s).takeIf { it != UNKNOWN } }.firstOrNull() ?: UNKNOWN
+        )
+        val status = statusTokens.asSequence()
+            .mapNotNull { s -> classify(s).takeIf { it != UNKNOWN } }.firstOrNull() ?: UNKNOWN
 
         return ScrapedTracking(
             status = status,
             etaDate = eta?.toString(),
             location = events.lastOrNull()?.location,
+            // The API carries codes, not prose ("DeliveryDelayed"), so the note reuses the same
+            // CamelCase-splitting rendering the event descriptions get.
+            delayNote = statusTokens.firstOrNull { isDelayed(it) }?.let { describe(it) },
             events = events,
         )
     }
@@ -120,6 +125,9 @@ object AmzlApiParser {
      * underscores. Exception keywords are checked before "delivered" so "Undeliverable" and
      * "DeliveryAttempted" can't leak into DELIVERED.
      */
+    /** Whether a status token reports a delay. Orthogonal to [classify] — see StatusVocabulary. */
+    private fun isDelayed(raw: String?): Boolean = "delay" in (raw ?: "").lowercase().replace("_", "")
+
     private fun classify(raw: String?): String {
         val t = (raw ?: "").lowercase().replace("_", "")
         return when {
@@ -128,9 +136,13 @@ object AmzlApiParser {
             t == "pickupdone" || t == "pickedup" || t == "shipped" || t == "packagereceived" -> "SHIPPED"
             "outfordelivery" in t || t == "ofd" -> "OUT_FOR_DELIVERY"
             "attempt" in t || "undeliverable" in t || "lost" in t || "damaged" in t ||
-                "return" in t || "reject" in t || "delay" in t -> "EXCEPTION"
+                "return" in t || "reject" in t -> "EXCEPTION"
             "delivered" in t -> "DELIVERED"
             "intransit" in t || "arrived" in t || "departed" in t -> "IN_TRANSIT"
+            // Last resort, below every stage — a delay is a modifier, not a stage (2026-08-28,
+            // matching UPS and Amazon). "InTransitDelayed" keeps the stage it names; a bare
+            // delay token has nothing better to be.
+            "delay" in t -> "EXCEPTION"
             else -> UNKNOWN
         }
     }

@@ -19,12 +19,6 @@ import kotlinx.datetime.LocalDate
 // window, so "delivered" has to win before any return phrasing is considered.
 private val EXCEPTION_PHRASES = listOf(
     "undeliverable",
-    "running late",
-    "delayed",
-    // Amazon's revised-promise wording ("Now expected tomorrow by 8 AM"), which it uses only when
-    // the original promise slipped. Captured 2026-08-18 on a shipment whose only other delay
-    // signal was an event row — a tracker page that hadn't logged one yet would have looked fine.
-    "now expected",
     "delivery attempted",
     "returned to sender",
     "return to sender",
@@ -40,6 +34,18 @@ private val SHIPPED_PHRASES = listOf("shipped", "dispatched", "picked up")
 // made a not-yet-shipped "Arriving tomorrow" order report IN_TRANSIT. Real movement is signaled by
 // the tracker page's events/status line, which classify below.
 private val IN_TRANSIT_PHRASES = listOf("in transit", "on the way", "on its way", "at carrier")
+
+/**
+ * Delay wordings, including Amazon's revised-promise phrasing ("Now expected tomorrow by 8 AM"),
+ * which it uses only when the original promise slipped. Captured 2026-08-18 on a shipment whose
+ * only other delay signal was an event row — hence [delayNoteFor]'s event fallback.
+ *
+ * These are NOT exception phrases: a delay is a modifier on the stage, not a stage (2026-08-28,
+ * matching UPS). Matched below every stage in [classifyAmazonStatus], so "Package delayed in
+ * transit" reports the IN_TRANSIT it names — as EXCEPTION its stepIndex was -1 and the timeline
+ * could not advance past it — while the stage-less headlines still land on EXCEPTION as before.
+ */
+private val DELAY_PHRASES = listOf("delayed", "running late", "now expected")
 
 /**
  * Maps an Amazon status headline to a status, or null when the text isn't a shipping status at all.
@@ -60,10 +66,32 @@ internal fun classifyAmazonStatus(raw: String?): TrackingStatus? {
         any(LABEL_CREATED_PHRASES) -> TrackingStatus.LABEL_CREATED
         any(SHIPPED_PHRASES) -> TrackingStatus.SHIPPED
         any(IN_TRANSIT_PHRASES) -> TrackingStatus.IN_TRANSIT
+        // Last resort, below every stage — see DELAY_PHRASES.
+        any(DELAY_PHRASES) -> TrackingStatus.EXCEPTION
         else -> null
     }
 }
 
+
+/**
+ * Whether a wording reports a delay, asked independently of [classifyAmazonStatus] because the
+ * two are orthogonal. Amazon has no reason-sentence field (no UPS `simplifiedText` equivalent),
+ * so the matched wording itself is what surfaces as the note — see [delayNoteFor].
+ */
+internal fun isAmazonDelayed(raw: String?): Boolean {
+    val t = raw?.lowercase()?.replace(Regex("\\s+"), " ")?.trim().orEmpty()
+    if (t.isEmpty()) return false
+    return DELAY_PHRASES.any { it in t }
+}
+
+/**
+ * The delay note for a page: its headline when that is what reports the delay, else the newest
+ * event row that does. The fallback is the 2026-08-18 capture's lesson — a tracker whose status
+ * line had not yet been rewritten still had "Package delayed in transit" in its rows.
+ */
+private fun delayNoteFor(headline: String?, eventDescriptions: List<String> = emptyList()): String? =
+    headline?.takeIf { isAmazonDelayed(it) }
+        ?: eventDescriptions.lastOrNull { isAmazonDelayed(it) }
 
 // --- Delivery-day parsing -----------------------------------------------------------------
 //
@@ -141,7 +169,11 @@ internal fun resolveAmazonCards(raw: DomRaw): DomExtraction {
     // signal (the tracker hop, or delivered/shipped/exception phrasing) supplies one.
     val status = classifyAmazonStatus(pick.head)
     val coarse = if (status != null || eta != null) {
-        ScrapedTracking(status = (status ?: TrackingStatus.UNKNOWN).name, etaDate = eta?.toString())
+        ScrapedTracking(
+            status = (status ?: TrackingStatus.UNKNOWN).name,
+            etaDate = eta?.toString(),
+            delayNote = delayNoteFor(pick.head),
+        )
     } else null
     return when {
         pick.href != null -> DomExtraction(page = "goto", url = pick.href, tracking = coarse)
@@ -174,6 +206,7 @@ internal fun resolveAmazonTracker(raw: DomRaw): DomExtraction {
                 ?: raw.etaDate,
             etaWindowText = raw.etaWindowText,
             location = events.lastOrNull { it.location != null }?.location,
+            delayNote = delayNoteFor(raw.statusText, events.map { it.description }),
             events = events,
         ),
     )

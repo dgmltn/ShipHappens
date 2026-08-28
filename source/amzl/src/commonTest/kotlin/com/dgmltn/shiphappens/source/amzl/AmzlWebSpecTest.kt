@@ -48,6 +48,18 @@ class AmzlWebSpecTest {
         assertEquals("UNKNOWN", statusOf("Some brand-new wording"))
     }
 
+    @Test fun delay_wording_keeps_the_stage_and_reports_the_delay() {
+        fun trackingOf(text: String) = parseAmzlRaw(DomRaw(kind = "tracker", statusText = text))?.tracking
+        // A delay is a modifier, not a stage (2026-08-28, matching UPS/Amazon).
+        assertEquals("IN_TRANSIT", trackingOf("Arriving Wednesday, delayed")?.status)
+        assertEquals("Arriving Wednesday, delayed", trackingOf("Arriving Wednesday, delayed")?.delayNote)
+        // Stage-less delay wording has nothing better to be, so it stays EXCEPTION.
+        assertEquals("EXCEPTION", trackingOf("Delayed")?.status)
+        // A real problem still outranks a delay.
+        assertEquals("EXCEPTION", trackingOf("Delivery attempted, delayed")?.status)
+        assertNull(trackingOf("Out for delivery")?.delayNote)
+    }
+
     @Test fun raw_without_status_text_routes_to_unparsed() {
         assertNull(parseAmzlRaw(DomRaw(kind = "tracker")))
         // The wordings the JS blob used to decide on (moved to Kotlin 2026-08-20).

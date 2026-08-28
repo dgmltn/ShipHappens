@@ -55,6 +55,24 @@ class AmzlApiParserTest {
         assertEquals("UNKNOWN", AmzlApiParser.parse(envelope("SomeNewWording"))!!.status)
     }
 
+    @Test fun delay_tokens_keep_the_stage_and_report_the_delay() {
+        // "InTransitDelayed" names its stage; only bare delay tokens fall through to EXCEPTION.
+        assertEquals("IN_TRANSIT", AmzlApiParser.parse(envelope("InTransitDelayed"))!!.status)
+        assertEquals("EXCEPTION", AmzlApiParser.parse(envelope("Delayed"))!!.status)
+        assertEquals("EXCEPTION", AmzlApiParser.parse(envelope("DeliveryDelayed"))!!.status)
+    }
+
+    @Test fun a_delay_token_becomes_a_readable_note() {
+        // The API carries codes, not prose, so the note reuses the CamelCase-splitting describe().
+        assertEquals("Delivery delayed", AmzlApiParser.parse(envelope("DeliveryDelayed"))!!.delayNote)
+        assertEquals("In transit delayed", AmzlApiParser.parse(envelope("InTransitDelayed"))!!.delayNote)
+    }
+
+    @Test fun an_undelayed_package_has_no_delay_note() {
+        assertNull(AmzlApiParser.parse(envelope("OutForDelivery"))!!.delayNote)
+        assertNull(AmzlApiParser.parse(FIXTURE)!!.delayNote)
+    }
+
     @Test fun tracking_status_is_the_fallback_when_summary_status_is_missing() {
         assertEquals("LABEL_CREATED", AmzlApiParser.parse(envelope(null, "READY_FOR_RECEIVE"))!!.status)
         assertEquals("OUT_FOR_DELIVERY", AmzlApiParser.parse(envelope(null, "OUT_FOR_DELIVERY"))!!.status)
