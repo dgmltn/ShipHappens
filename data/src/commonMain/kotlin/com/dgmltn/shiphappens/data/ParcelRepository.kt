@@ -112,11 +112,15 @@ class ParcelRepository(
             etaWindowStart = if (newWindow) snapshot.etaWindowStart?.toString() else row.parcel.etaWindowStart,
             etaWindowEnd = if (newWindow) snapshot.etaWindowEnd?.toString() else row.parcel.etaWindowEnd,
             latestLocation = snapshot.latestLocation ?: row.parcel.latestLocation,
-            // NOT `?: existing` like the fields above: a delay ends, and a stale "Delayed" chip
-            // on a back-on-schedule package is worse than none. Any snapshot that actually
-            // classified something therefore replaces the note outright, including with null;
-            // only an UNKNOWN scrape (which learned nothing) preserves it.
-            delayNote = if (snapshot.status == TrackingStatus.UNKNOWN) row.parcel.delayNote else snapshot.delayNote,
+            // Three-way, and none of the simpler rules work. A snapshot that carries a note
+            // always wins — delay wording asserts no stage, so a newly-delayed parcel typically
+            // arrives as UNKNOWN + note, and deferring to the old value there would drop every
+            // new delay on the floor. Absent a note, a snapshot that DID classify a stage clears
+            // the stored one, because a delay ends and a stale "Delayed" chip on a back-on-
+            // schedule package is worse than none. Only a scrape that learned nothing at all
+            // (UNKNOWN, no note) leaves the stored note alone.
+            delayNote = snapshot.delayNote
+                ?: row.parcel.delayNote.takeIf { snapshot.status == TrackingStatus.UNKNOWN },
             sourceId = sourceId,
             lastRefreshedAt = clock.now().toEpochMilliseconds(),
         )

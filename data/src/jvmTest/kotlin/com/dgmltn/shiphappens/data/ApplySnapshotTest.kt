@@ -85,6 +85,23 @@ class ApplySnapshotTest {
         assertNull(assertNotNull(db.parcelDao().getById("p1")).parcel.delayNote)
     }
 
+    @Test fun a_delay_on_an_unclassified_snapshot_is_still_recorded() = runTest {
+        val r = repo(backgroundScope)
+        db.parcelDao().upsertParcel(parcel.copy(status = TrackingStatus.LABEL_CREATED).toEntity())
+        // Since delay wording asserts no stage (2026-08-28), this is the ordinary shape of a
+        // newly-delayed parcel: UNKNOWN status carrying a note. The note must be written even
+        // though the status is preserved — otherwise a not-yet-shipped-but-late order, the exact
+        // case the rule exists for, would never show its delay.
+        assertTrue(r.applySnapshot(
+            "p1",
+            TrackingSnapshot(status = TrackingStatus.UNKNOWN, delayNote = "Now expected tomorrow by 8 AM"),
+            sourceId = "amazon",
+        ))
+        val row = assertNotNull(db.parcelDao().getById("p1"))
+        assertEquals("Now expected tomorrow by 8 AM", row.parcel.delayNote)
+        assertEquals(TrackingStatus.LABEL_CREATED.name, row.parcel.status)  // stage untouched
+    }
+
     @Test fun an_unclassified_snapshot_preserves_the_delay_note() = runTest {
         val r = repo(backgroundScope)
         db.parcelDao().upsertParcel(parcel.copy(delayNote = "Delayed by weather").toEntity())

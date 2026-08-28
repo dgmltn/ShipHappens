@@ -58,11 +58,12 @@ fun classifyStatusWording(raw: String?, extras: StatusKeywords = StatusKeywords(
         hit(LABEL_CREATED, extras.labelCreated) -> TrackingStatus.LABEL_CREATED
         hit(SHIPPED, extras.shipped) -> TrackingStatus.SHIPPED
         hit(IN_TRANSIT, extras.inTransit) -> TrackingStatus.IN_TRANSIT
-        // Last resort, below every stage: a delay is a modifier, not a stage (see
-        // [isDelayedWording]), so "On the Way: Delayed" must classify IN_TRANSIT. But a wording
-        // that names no stage at all ("Delivery updated - delay") has nothing better to be, and
-        // reporting EXCEPTION there preserves the pre-2026-08-28 behavior FedEx relies on.
-        hit(DELAYED, extras.delayed) -> TrackingStatus.EXCEPTION
+        // Note there is deliberately no delay branch: a delay is a modifier, not a stage (see
+        // [isDelayedWording]). "On the Way: Delayed" classifies IN_TRANSIT on its stage wording
+        // above, while a bare "Delivery updated - delay" names no stage and so answers null —
+        // a package can be late before it ships, late in transit, or late out for delivery, and
+        // picking one of those would be a guess. Null routes the caller to the event rows or the
+        // stored status; the delay still reports separately.
         else -> null
     }
 }

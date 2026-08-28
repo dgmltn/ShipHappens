@@ -170,7 +170,11 @@ class AmazonPageLogicTest {
     }
 
     @Test fun now_expected_marks_the_shipment_delayed() {
-        assertEquals(TrackingStatus.EXCEPTION, classifyAmazonStatus("Now expected tomorrow by 8 AM"))
+        // The revised promise reports the delay, but asserts no stage: Amazon shows a promise
+        // from the moment an order is placed, so a slipped one is equally valid on an order that
+        // has not shipped yet (2026-08-28).
+        assertTrue(isAmazonDelayed("Now expected tomorrow by 8 AM"))
+        assertNull(classifyAmazonStatus("Now expected tomorrow by 8 AM"))
     }
 
     @Test fun arriving_phrasing_still_resolves() {
@@ -226,7 +230,10 @@ class AmazonPageLogicTest {
         )
         assertEquals("2026-08-19", result.tracking?.etaDate)
         assertEquals("by 8 AM", result.tracking?.etaWindowText)
-        assertEquals(TrackingStatus.EXCEPTION.name, result.tracking?.status)
+        // The status line names no stage, so the stage falls to the newest event that does —
+        // "Package delayed in transit" — rather than the old blanket EXCEPTION (2026-08-28).
+        assertEquals(TrackingStatus.IN_TRANSIT.name, result.tracking?.status)
+        assertEquals("Now expected tomorrow by 8 AM", result.tracking?.delayNote)
     }
 
     // --- Delay as a modifier (2026-08-28) ---
@@ -240,11 +247,13 @@ class AmazonPageLogicTest {
         assertEquals(TrackingStatus.IN_TRANSIT, classifyAmazonStatus("Package delayed in transit"))
     }
 
-    @Test fun delay_wording_that_names_no_stage_still_classifies_exception() {
-        // Unchanged behavior for the headline wordings: nothing better to be.
-        assertEquals(TrackingStatus.EXCEPTION, classifyAmazonStatus("Now expected tomorrow by 8 AM"))
-        assertEquals(TrackingStatus.EXCEPTION, classifyAmazonStatus("Running late"))
-        assertEquals(TrackingStatus.EXCEPTION, classifyAmazonStatus("Delayed"))
+    @Test fun delay_wording_that_names_no_stage_asserts_no_stage() {
+        // Not EXCEPTION and not IN_TRANSIT — a guess either way. Null leaves the stage to the
+        // event rows or the stored status, which is what makes "not yet shipped, but late" a
+        // representable state.
+        assertNull(classifyAmazonStatus("Now expected tomorrow by 8 AM"))
+        assertNull(classifyAmazonStatus("Running late"))
+        assertNull(classifyAmazonStatus("Delayed"))
     }
 
     @Test fun a_real_exception_still_beats_delay_wording() {
@@ -335,7 +344,10 @@ class AmazonPageLogicTest {
         val result = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(delayed), todayIso = "2026-08-18"))
         assertEquals("goto", result.page)
         assertEquals("2026-08-19", result.tracking?.etaDate)
-        assertEquals(TrackingStatus.EXCEPTION.name, result.tracking?.status)
+        // The card names no stage; the coarse fallback carries the ETA and the delay, and leaves
+        // the stage UNKNOWN for the tracker hop (or the stored status) to supply.
+        assertEquals(TrackingStatus.UNKNOWN.name, result.tracking?.status)
+        assertEquals("Now expected tomorrow by 8 AM", result.tracking?.delayNote)
     }
 
     @Test fun order_page_not_found_wording_routes_not_found_from_page_text() {

@@ -56,10 +56,10 @@ class AmzlApiParserTest {
     }
 
     @Test fun delay_tokens_keep_the_stage_and_report_the_delay() {
-        // "InTransitDelayed" names its stage; only bare delay tokens fall through to EXCEPTION.
+        // "InTransitDelayed" names its stage; a bare delay token asserts none.
         assertEquals("IN_TRANSIT", AmzlApiParser.parse(envelope("InTransitDelayed"))!!.status)
-        assertEquals("EXCEPTION", AmzlApiParser.parse(envelope("Delayed"))!!.status)
-        assertEquals("EXCEPTION", AmzlApiParser.parse(envelope("DeliveryDelayed"))!!.status)
+        assertEquals("UNKNOWN", AmzlApiParser.parse(envelope("Delayed"))!!.status)
+        assertEquals("UNKNOWN", AmzlApiParser.parse(envelope("DeliveryDelayed"))!!.status)
     }
 
     @Test fun a_delay_token_becomes_a_readable_note() {

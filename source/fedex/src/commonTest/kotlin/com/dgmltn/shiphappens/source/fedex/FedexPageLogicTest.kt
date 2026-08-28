@@ -50,7 +50,8 @@ class FedexPageLogicTest {
     @Test fun classifies_exception_family() {
         assertEquals(TrackingStatus.EXCEPTION, classifyFedexStatus("Delivery exception"))
         assertEquals(TrackingStatus.EXCEPTION, classifyFedexStatus("Shipment exception"))
-        assertEquals(TrackingStatus.EXCEPTION, classifyFedexStatus("Delivery updated - delay"))
+        // A delay names no stage — the stage comes from the travel history instead (2026-08-28).
+        assertNull(classifyFedexStatus("Delivery updated - delay"))
         assertEquals(TrackingStatus.EXCEPTION, classifyFedexStatus("Held at FedEx location for pickup"))
         assertEquals(TrackingStatus.EXCEPTION, classifyFedexStatus("Returning to shipper"))
     }

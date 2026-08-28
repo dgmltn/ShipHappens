@@ -23,10 +23,9 @@ internal fun parseAmzlRaw(raw: DomRaw): DomExtraction? {
         "delivered" in t -> "DELIVERED"
         "arriving" in t || "in transit" in t || "on the way" in t || "on its way" in t || "shipped" in t -> "IN_TRANSIT"
         "label" in t || "package details" in t || "preparing" in t -> "LABEL_CREATED"
-        // Last resort, below every stage: a delay is a modifier, not a stage (2026-08-28,
-        // matching UPS and Amazon), so "Arriving Wednesday, delayed" keeps the stage it names.
-        // Stage-less delay wording has nothing better to be and stays EXCEPTION as before.
-        "delayed" in t -> "EXCEPTION"
+        // No delay branch: a delay is a modifier, not a stage (2026-08-28, matching UPS and
+        // Amazon). "Arriving Wednesday, delayed" keeps the stage its own wording names; a bare
+        // "Delayed" is UNKNOWN, which leaves the stage to the events or the stored status.
         else -> "UNKNOWN"
     }
     // The page copy is the only delay wording AMZL's DOM fallback has, so it is the note.

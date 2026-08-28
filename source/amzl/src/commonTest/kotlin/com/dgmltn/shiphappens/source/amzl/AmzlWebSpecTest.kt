@@ -53,8 +53,9 @@ class AmzlWebSpecTest {
         // A delay is a modifier, not a stage (2026-08-28, matching UPS/Amazon).
         assertEquals("IN_TRANSIT", trackingOf("Arriving Wednesday, delayed")?.status)
         assertEquals("Arriving Wednesday, delayed", trackingOf("Arriving Wednesday, delayed")?.delayNote)
-        // Stage-less delay wording has nothing better to be, so it stays EXCEPTION.
-        assertEquals("EXCEPTION", trackingOf("Delayed")?.status)
+        // Stage-less delay wording asserts no stage; UNKNOWN leaves it to the stored status.
+        assertEquals("UNKNOWN", trackingOf("Delayed")?.status)
+        assertEquals("Delayed", trackingOf("Delayed")?.delayNote)
         // A real problem still outranks a delay.
         assertEquals("EXCEPTION", trackingOf("Delivery attempted, delayed")?.status)
         assertNull(trackingOf("Out for delivery")?.delayNote)

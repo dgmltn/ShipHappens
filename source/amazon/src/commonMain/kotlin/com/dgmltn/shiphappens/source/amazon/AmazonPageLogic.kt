@@ -40,10 +40,13 @@ private val IN_TRANSIT_PHRASES = listOf("in transit", "on the way", "on its way"
  * which it uses only when the original promise slipped. Captured 2026-08-18 on a shipment whose
  * only other delay signal was an event row — hence [delayNoteFor]'s event fallback.
  *
- * These are NOT exception phrases: a delay is a modifier on the stage, not a stage (2026-08-28,
- * matching UPS). Matched below every stage in [classifyAmazonStatus], so "Package delayed in
- * transit" reports the IN_TRANSIT it names — as EXCEPTION its stepIndex was -1 and the timeline
- * could not advance past it — while the stage-less headlines still land on EXCEPTION as before.
+ * These are NOT status phrases at all: a delay is a modifier on the stage, never a stage itself
+ * (2026-08-28, matching UPS). [classifyAmazonStatus] has no delay branch, so "Package delayed in
+ * transit" reports the IN_TRANSIT its own wording names, while a stage-less "Now expected
+ * tomorrow by 8 AM" answers null rather than guessing. That null matters here specifically:
+ * Amazon shows a delivery promise from the moment an order is placed, so a slipped promise is a
+ * perfectly valid state for an order that has not shipped yet, and calling it IN_TRANSIT would
+ * repeat the bug the IN_TRANSIT_PHRASES note above describes.
  */
 private val DELAY_PHRASES = listOf("delayed", "running late", "now expected")
 
@@ -66,8 +69,7 @@ internal fun classifyAmazonStatus(raw: String?): TrackingStatus? {
         any(LABEL_CREATED_PHRASES) -> TrackingStatus.LABEL_CREATED
         any(SHIPPED_PHRASES) -> TrackingStatus.SHIPPED
         any(IN_TRANSIT_PHRASES) -> TrackingStatus.IN_TRANSIT
-        // Last resort, below every stage — see DELAY_PHRASES.
-        any(DELAY_PHRASES) -> TrackingStatus.EXCEPTION
+        // No delay branch, deliberately — see DELAY_PHRASES.
         else -> null
     }
 }

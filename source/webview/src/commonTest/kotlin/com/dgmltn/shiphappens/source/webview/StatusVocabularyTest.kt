@@ -18,7 +18,6 @@ class StatusVocabularyTest {
         assertEquals(TrackingStatus.EXCEPTION, classifyStatusWording("Delivery attempted - notice left"))
         assertEquals(TrackingStatus.EXCEPTION, classifyStatusWording("Action required"))
         assertEquals(TrackingStatus.EXCEPTION, classifyStatusWording("Held at location"))
-        assertEquals(TrackingStatus.EXCEPTION, classifyStatusWording("Delivery updated - delay"))
         assertEquals(TrackingStatus.EXCEPTION, classifyStatusWording("Unable to deliver"))
         assertEquals(TrackingStatus.EXCEPTION, classifyStatusWording("Returning to shipper"))
         assertEquals(TrackingStatus.LABEL_CREATED, classifyStatusWording("Label created"))
@@ -49,10 +48,15 @@ class StatusVocabularyTest {
         assertEquals(TrackingStatus.OUT_FOR_DELIVERY, classifyStatusWording("Out for delivery, delayed"))
     }
 
-    @Test fun delay_still_classifies_exception_when_no_stage_wording_is_present() {
-        // FedEx's "Delivery updated - delay" names no stage; the delay tier is its last resort,
-        // so the pre-2026-08-28 behavior survives for wordings that have nothing better.
-        assertEquals(TrackingStatus.EXCEPTION, classifyStatusWording("Delivery updated - delay"))
+    @Test fun delay_wording_alone_asserts_no_stage_at_all() {
+        // A delay says nothing about WHERE the package is: an order can be late before it ships,
+        // late in transit, or late out for delivery. Answering EXCEPTION (or IN_TRANSIT) here
+        // would be a guess; null is the caller's cue to take the stage from the event rows or the
+        // stored status instead. The delay itself still reports, via isDelayedWording.
+        assertNull(classifyStatusWording("Delivery updated - delay"))
+        assertNull(classifyStatusWording("Delayed"))
+        assertNull(classifyStatusWording("Running late"))
+        assertTrue(isDelayedWording("Delivery updated - delay"))
     }
 
     @Test fun a_real_exception_still_beats_delay_wording() {

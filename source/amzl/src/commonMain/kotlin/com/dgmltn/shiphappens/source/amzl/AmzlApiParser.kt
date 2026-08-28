@@ -139,10 +139,9 @@ object AmzlApiParser {
                 "return" in t || "reject" in t -> "EXCEPTION"
             "delivered" in t -> "DELIVERED"
             "intransit" in t || "arrived" in t || "departed" in t -> "IN_TRANSIT"
-            // Last resort, below every stage — a delay is a modifier, not a stage (2026-08-28,
-            // matching UPS and Amazon). "InTransitDelayed" keeps the stage it names; a bare
-            // delay token has nothing better to be.
-            "delay" in t -> "EXCEPTION"
+            // No delay branch — a delay is a modifier, not a stage (2026-08-28, matching UPS and
+            // Amazon). "InTransitDelayed" keeps the stage it names; a bare "Delayed" token is
+            // UNKNOWN, leaving the stage to the event history or the stored status.
             else -> UNKNOWN
         }
     }
