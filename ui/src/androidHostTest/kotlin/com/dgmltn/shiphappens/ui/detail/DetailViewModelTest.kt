@@ -99,6 +99,18 @@ class DetailViewModelTest {
         assertEquals("FedEx", s.carrierName)
     }
 
+    @Test fun rename_updates_the_header_name() = runTest {
+        val p = base(TrackingStatus.IN_TRANSIT, LocalDate(2026, 7, 14))
+        val v = vm(p)
+        db.parcelDao().upsertParcel(p.toEntity())
+        assertEquals("Trail running shoes", awaitState { it.loaded }.name)
+        v.onRename("Baseball cap")
+        // Runs the viewModelScope.launch itself; the Room write inside it lands on Room's own
+        // threads, so the assertion still awaits the emission rather than the scheduler.
+        advanceUntilIdle()
+        assertEquals("Baseball cap", awaitState { it.name == "Baseball cap" }.name)
+    }
+
     @Test fun window_with_both_bounds_renders_a_range() = runTest {
         val p = base(TrackingStatus.OUT_FOR_DELIVERY, LocalDate(2026, 7, 11))
             .copy(etaWindowStart = LocalTime(15, 0), etaWindowEnd = LocalTime(17, 0))

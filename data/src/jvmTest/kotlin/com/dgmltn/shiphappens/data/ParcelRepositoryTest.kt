@@ -144,6 +144,26 @@ class ParcelRepositoryTest {
         assertEquals(2, r.observeParcels(false).first().size)
     }
 
+    @Test fun rename_updates_the_name_and_trims() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val r = repo(scope)
+        val a = r.addParcel("New package", "1Z999AA10123456784", WellKnownCarriers.UPS) as AddResult.Added
+        r.rename(a.parcel.id, "  Baseball cap  ")
+        assertEquals("Baseball cap", r.observeParcel(a.parcel.id).first()!!.name)
+    }
+
+    /**
+     * A rename always has a prior name to fall back to, unlike addParcel (which has to invent
+     * "New package"), so clearing the field reverts rather than writing a blank title.
+     */
+    @Test fun rename_to_blank_keeps_the_existing_name() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val r = repo(scope)
+        val a = r.addParcel("Baseball cap", "1Z999AA10123456784", WellKnownCarriers.UPS) as AddResult.Added
+        r.rename(a.parcel.id, "   ")
+        assertEquals("Baseball cap", r.observeParcel(a.parcel.id).first()!!.name)
+    }
+
     @Test fun delete_removes_parcel() = runTest {
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
         val r = repo(scope)

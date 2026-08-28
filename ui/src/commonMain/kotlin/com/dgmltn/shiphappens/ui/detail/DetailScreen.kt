@@ -9,21 +9,38 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,11 +56,16 @@ fun DetailScreen(parcelId: String, onBack: () -> Unit, onOpenWeb: () -> Unit = {
     val vm: DetailViewModel = koinViewModel(key = parcelId) { parametersOf(parcelId) }
     val s by vm.state.collectAsState()
     StatusBarIconsForHeader(colorFromHex(s.accentHex))
-    DetailContent(s, onBack, onOpenWeb)
+    DetailContent(s, onBack, onOpenWeb, vm::onRename)
 }
 
 @Composable
-fun DetailContent(state: DetailUiState, onBack: () -> Unit = {}, onOpenWeb: () -> Unit = {}) {
+fun DetailContent(
+    state: DetailUiState,
+    onBack: () -> Unit = {},
+    onOpenWeb: () -> Unit = {},
+    onRename: (String) -> Unit = {},
+) {
     val accent = colorFromHex(state.accentHex)
 
     Column(Modifier.fillMaxSize().background(ShipColors.bg)) {
@@ -65,7 +87,7 @@ fun DetailContent(state: DetailUiState, onBack: () -> Unit = {}, onOpenWeb: () -
                 }
             }
             Spacer(Modifier.height(20.dp))
-            Text(state.name, color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.ExtraBold, fontFamily = hankenFamily())
+            EditableTitle(state.name, onRename)
             Spacer(Modifier.height(9.dp))
             Text(state.headline, color = Color.White.copy(alpha = .92f), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
         }
@@ -161,6 +183,108 @@ fun DetailContent(state: DetailUiState, onBack: () -> Unit = {}, onOpenWeb: () -
     }
 }
 
+/** Idle title and edit field share one style, so committing an edit never shifts the header. */
+private val titleTextStyle: TextStyle
+    @Composable get() = TextStyle(
+        color = Color.White, fontSize = 25.sp,
+        fontWeight = FontWeight.ExtraBold, fontFamily = hankenFamily(),
+    )
+
+/**
+ * The header title, renamed in place by tapping it. The draft lives here rather than in
+ * [DetailUiState] so a refresh landing mid-edit can't overwrite what is being typed; a commit
+ * hands the text up and the new name arrives back through the parcel flow like every other field.
+ */
+@Composable
+private fun EditableTitle(name: String, onRename: (String) -> Unit, modifier: Modifier = Modifier) {
+    var editing by rememberSaveable { mutableStateOf(false) }
+    var draft by remember { mutableStateOf(TextFieldValue()) }
+
+    if (editing) {
+        TitleField(
+            value = draft,
+            onValueChange = { draft = it },
+            onCommit = { onRename(draft.text); editing = false },
+            onCancel = { editing = false },
+            modifier = modifier,
+        )
+    } else {
+        TitleText(
+            name = name,
+            onClick = {
+                // Selected whole, so the first keystroke replaces a placeholder like "New package"
+                // instead of appending to it.
+                draft = TextFieldValue(name, selection = TextRange(0, name.length))
+                editing = true
+            },
+            modifier = modifier,
+        )
+    }
+}
+
+@Composable
+private fun TitleText(name: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier.clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(name, style = titleTextStyle, modifier = Modifier.weight(1f, fill = false))
+        // A glyph, not a vector asset — matches the header's "‹ Back" and the add card's ✓/✕.
+        // The only tappable text on this header, so the hint carries the whole affordance.
+        Text("✎", color = Color.White.copy(alpha = .55f), fontSize = 17.sp)
+    }
+}
+
+// BackHandler is still @ExperimentalComposeUiApi in CMP 1.11.1; it is the only common-source
+// way to make system back cancel the edit instead of leaving the screen.
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+private fun TitleField(
+    value: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
+    onCommit: () -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val focusRequester = remember { FocusRequester() }
+    // Composed only while editing, so Unit is the whole lifetime of the edit.
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    // onFocusChanged fires unfocused once before requestFocus lands; committing on that would
+    // close the editor before it ever opened.
+    var everFocused by remember { mutableStateOf(false) }
+    // Whichever of done / back / focus-loss happens first ends the edit, and the other two must
+    // then do nothing: ending it removes this field, and the removal itself fires onFocusChanged,
+    // so without this latch a cancel would immediately be overwritten by a commit and a Done
+    // would write the name twice.
+    var resolved by remember { mutableStateOf(false) }
+    fun resolve(action: () -> Unit) {
+        if (!resolved) { resolved = true; action() }
+    }
+
+    BackHandler { resolve(onCancel) }
+
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        textStyle = titleTextStyle,
+        cursorBrush = SolidColor(Color.White),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        keyboardActions = KeyboardActions(onDone = { resolve(onCommit) }),
+        modifier = modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            // No horizontal padding: the text keeps the exact x it had idle, so opening the
+            // editor lights up a highlight behind the title rather than nudging it sideways.
+            .background(Color.White.copy(alpha = .16f))
+            .padding(vertical = 2.dp)
+            .focusRequester(focusRequester)
+            .onFocusChanged {
+                if (it.isFocused) everFocused = true else if (everFocused) resolve(onCommit)
+            },
+    )
+}
+
 @Composable
 private fun DetailCard(content: @Composable ColumnScope.() -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(ShipColors.card)
@@ -172,6 +296,38 @@ private fun DetailCard(content: @Composable ColumnScope.() -> Unit) {
 private fun CardLabel(text: String) {
     Text(text.uppercase(), color = ShipColors.faint, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold,
         letterSpacing = 1.sp, modifier = Modifier.padding(bottom = 6.dp))
+}
+
+/** Both title states render white-on-accent, so the previews supply a carrier header behind them. */
+@Composable
+private fun TitlePreviewFrame(content: @Composable () -> Unit) {
+    ShipTheme {
+        Box(Modifier.background(colorFromHex("#1E3A8F")).padding(20.dp)) { content() }
+    }
+}
+
+@Preview
+@Composable
+private fun Preview_EditableTitle_Idle() {
+    TitlePreviewFrame { EditableTitle(name = "Baseball cap", onRename = {}) }
+}
+
+@Preview
+@Composable
+private fun Preview_EditableTitle_UnnamedPlaceholder() {
+    TitlePreviewFrame { EditableTitle(name = "New package", onRename = {}) }
+}
+
+@Preview
+@Composable
+private fun Preview_TitleField_Editing() {
+    TitlePreviewFrame {
+        TitleField(
+            // Select-all is what the tap actually seeds, so the preview shows the real entry state.
+            value = TextFieldValue("Baseball cap", selection = TextRange(0, "Baseball cap".length)),
+            onValueChange = {}, onCommit = {}, onCancel = {},
+        )
+    }
 }
 
 @Preview

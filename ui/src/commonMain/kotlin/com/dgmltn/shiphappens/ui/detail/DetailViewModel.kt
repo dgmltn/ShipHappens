@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.daysUntil
 import kotlinx.datetime.toLocalDateTime
@@ -43,8 +44,8 @@ data class DetailUiState(
 )
 
 class DetailViewModel(
-    parcelId: String,
-    repository: ParcelRepository,
+    private val parcelId: String,
+    private val repository: ParcelRepository,
     private val clock: AppClock,
     registry: SourceRegistry,
 ) : ViewModel() {
@@ -57,6 +58,14 @@ class DetailViewModel(
         combine(repository.observeParcel(parcelId), repository.refreshingIds) { parcel, refreshingIds ->
             parcel?.toDetail(refreshing = parcel.id in refreshingIds) ?: DetailUiState()
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailUiState())
+
+    /**
+     * Blank input is absorbed by the repository, which keeps the existing name — the header's
+     * editor cancels back to the stored value rather than showing an empty title.
+     */
+    fun onRename(name: String) {
+        viewModelScope.launch { repository.rename(parcelId, name) }
+    }
 
     private fun Parcel.toDetail(refreshing: Boolean): DetailUiState {
         val delivered = status == TrackingStatus.DELIVERED

@@ -38,6 +38,9 @@ interface ParcelDao {
         insertEvents(events)
     }
 
+    @Query("UPDATE parcels SET name = :name WHERE id = :id")
+    suspend fun rename(id: String, name: String)
+
     @Query("UPDATE parcels SET isArchived = 1, archivedAt = :at WHERE id = :id")
     suspend fun archive(id: String, at: Long)
 

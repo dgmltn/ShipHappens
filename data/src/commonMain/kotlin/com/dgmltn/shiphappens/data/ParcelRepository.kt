@@ -83,6 +83,15 @@ class ParcelRepository(
         return AddResult.Added(parcel)
     }
 
+    /**
+     * Blank is a deliberate no-op rather than a fallback to "New package": a rename always has a
+     * prior name to keep, so clearing the field reverts instead of retitling the parcel.
+     */
+    suspend fun rename(id: String, name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isNotEmpty()) dao.rename(id, trimmed)
+    }
+
     suspend fun archive(id: String) = dao.archive(id, clock.now().toEpochMilliseconds())
     suspend fun restore(id: String) = dao.restore(id)
     suspend fun delete(id: String) = dao.deleteParcel(id)
