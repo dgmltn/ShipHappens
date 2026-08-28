@@ -16,6 +16,7 @@ data class ParcelEntity(
     val etaDate: String?,       // ISO-8601 LocalDate
     val etaWindowStart: String?, // ISO-8601 LocalTime; null = open-ended ("by <end>")
     val etaWindowEnd: String?,   // ISO-8601 LocalTime; the cutoff / "by" time
+    val delayNote: String?,     // carrier's delay explanation; null = not delayed
     val latestLocation: String?,
     val isArchived: Boolean,
     val archivedAt: Long?,      // epoch millis, for archived-tab ordering

@@ -32,6 +32,8 @@ data class DetailUiState(
     val windowLabel: String = "",
     val windowText: String = "",
     val locationText: String? = null,
+    /** Carrier's delay explanation; null hides the delay note. Independent of [headline]. */
+    val delayNote: String? = null,
     val trackingNumber: String = "",
     val timeline: List<TimelineStepUi> = emptyList(),
     /** Carrier display name when an in-app web page exists for this parcel; null hides the button. */
@@ -59,6 +61,9 @@ class DetailViewModel(
     private fun Parcel.toDetail(refreshing: Boolean): DetailUiState {
         val delivered = status == TrackingStatus.DELIVERED
         val days = etaDate?.let { clock.today().daysUntil(it) }
+        // A delay never replaces the headline: the ETA is the thing the user came for, and a
+        // delayed package still has one (usually a freshly revised one). The delay shows as its
+        // own note below, so "Arrives tomorrow" + "Delayed — due to weather" both get said.
         val headline = when {
             delivered -> "Delivered"
             status == TrackingStatus.EXCEPTION -> "Delivery exception"
@@ -107,6 +112,7 @@ class DetailViewModel(
         return DetailUiState(
             loaded = true, name = name, carrierName = carrier.displayName, accentHex = carrier.accentHex(),
             headline = headline,
+            delayNote = delayNote,
             windowLabel = if (delivered) "Delivered" else "Estimated delivery",
             windowText = windowText,
             locationText = latestLocation ?: events.lastOrNull()?.location,

@@ -41,6 +41,8 @@ object ShipColors {
     val archiveAccent = Color(0xFF2563EB)
     val delivered = Color(0xFF1F7A4D)
     val deliveredBg = Color(0xFFE7F3EC)
+    val delayed = Color(0xFFB45309)
+    val delayedBg = Color(0xFFFBF0DE)
     val toggleOff = Color(0xFFDAD6CE)
 }
 

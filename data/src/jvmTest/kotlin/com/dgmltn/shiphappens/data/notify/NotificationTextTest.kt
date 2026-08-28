@@ -52,4 +52,25 @@ class NotificationTextTest {
         assertEquals("Ship Happens can't update your UPS packages until you sign in again.",
             NotificationText.signInBody("UPS"))
     }
+
+    @Test fun a_new_delay_leads_with_the_delay_not_the_unchanged_stage() {
+        val body = NotificationText.body(ParcelChange(
+            parcelId = "p1", parcelName = "Boots",
+            statusBefore = TrackingStatus.IN_TRANSIT, statusAfter = TrackingStatus.IN_TRANSIT,
+            etaBefore = LocalDate(2026, 8, 28), etaAfter = LocalDate(2026, 8, 29),
+            delayNoteAfter = "Due to weather, your package is delayed by one business day.",
+        ))
+        // The carrier's own sentence is the most useful thing we have; lead with it.
+        assertEquals("Delayed — Due to weather, your package is delayed by one business day.", body)
+    }
+
+    @Test fun a_delay_with_no_reason_sentence_still_says_delayed() {
+        val body = NotificationText.body(ParcelChange(
+            parcelId = "p1", parcelName = "Boots",
+            statusBefore = TrackingStatus.IN_TRANSIT, statusAfter = TrackingStatus.IN_TRANSIT,
+            etaBefore = LocalDate(2026, 8, 28), etaAfter = LocalDate(2026, 8, 29),
+            delayNoteAfter = "On the Way: Delayed",
+        ))
+        assertEquals("Delayed — On the Way: Delayed", body)
+    }
 }

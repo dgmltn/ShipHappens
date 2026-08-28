@@ -54,6 +54,34 @@ private const val OFD_FIXTURE = """
 }
 """
 
+// Captured live from webapis.ups.com GetStatus on 2026-08-28 for a weather-delayed ground
+// package, trimmed to the fields the parser reads; the tracking number is synthetic. This is the
+// shape that motivated delay-as-a-modifier: the package is plainly still moving ("On the Way"),
+// UPS supplies a fresh ETA and a plain-English reason, yet packageStatusType is "X" and
+// progressBarType "Exception".
+private const val DELAYED_FIXTURE = """
+{
+  "statusCode": "200",
+  "trackDetails": [{
+    "trackingNumber": "1ZX9Y8Z70311111111",
+    "packageStatus": "On the Way: Delayed",
+    "packageStatusType": "X",
+    "packageStatusCode": "048",
+    "progressBarType": "Exception",
+    "simplifiedText": "Due to weather, your package is delayed by one business day.",
+    "sdd": "20260829",
+    "sdst": "14:00:00",
+    "sdt": "18:00:00",
+    "shipmentProgressActivities": [
+      {"date": "08/28/2026", "time": "3:45 A.M.", "location": "", "activityScan": "Due to weather, your package is delayed by one business day."},
+      {"date": "08/25/2026", "time": "11:07 P.M.", "location": "Houston, TX, United States", "activityScan": "Departed from Facility"},
+      {"date": "08/25/2026", "time": "7:25 P.M.", "location": "Houston, TX, United States", "activityScan": "Arrived at Facility"},
+      {"date": "08/25/2026", "time": "7:36 A.M.", "location": "United States", "activityScan": "Shipper created a label, UPS has not received the package yet. "}
+    ]
+  }]
+}
+"""
+
 class UpsApiParserTest {
 
     @Test fun out_for_delivery_text_wins_over_coarse_type_code() {
@@ -69,7 +97,7 @@ class UpsApiParserTest {
         assertEquals("IN_TRANSIT", t.status)
         assertEquals("2026-07-14", t.etaDate)  // from "sdd":"20260714"
         assertEquals("14:30", t.etaWindowEnd)   // from "sdt":"14:30:00" (end of delivery window)
-        assertNull(t.etaWindowStart)            // UPS gives no window start
+        assertEquals("11:30", t.etaWindowStart) // from "sdst":"11:30:00" (start of delivery window)
         assertEquals("Riverside, CA, United States", t.location)  // newest activity's location
         assertEquals(4, t.events.size)
         // Events must be chronological ASCENDING (domain expectation); UPS sends newest-first.
@@ -78,6 +106,36 @@ class UpsApiParserTest {
         assertEquals("IN_TRANSIT", t.events.last().status)
         // Timestamps are ISO instants (parseable by the canonical layer).
         assertTrue(t.events.all { runCatching { kotlin.time.Instant.parse(it.timestamp) }.isSuccess })
+    }
+
+    @Test fun a_delayed_package_keeps_the_stage_it_is_actually_at() {
+        // packageStatusType "X" would say EXCEPTION; the text says the package is still moving.
+        val t = assertNotNull(UpsApiParser.parse(DELAYED_FIXTURE))
+        assertEquals("IN_TRANSIT", t.status)
+    }
+
+    @Test fun a_delayed_package_carries_the_carriers_own_reason() {
+        val t = assertNotNull(UpsApiParser.parse(DELAYED_FIXTURE))
+        assertEquals("Due to weather, your package is delayed by one business day.", t.delayNote)
+    }
+
+    @Test fun a_delayed_package_keeps_its_revised_eta_and_window() {
+        val t = assertNotNull(UpsApiParser.parse(DELAYED_FIXTURE))
+        assertEquals("2026-08-29", t.etaDate)
+        assertEquals("14:00", t.etaWindowStart)
+        assertEquals("18:00", t.etaWindowEnd)
+    }
+
+    @Test fun a_delay_with_no_reason_sentence_falls_back_to_the_status_headline() {
+        val t = assertNotNull(UpsApiParser.parse(
+            """{"trackDetails":[{"packageStatus":"On the Way: Delayed","packageStatusType":"X"}]}""",
+        ))
+        assertEquals("On the Way: Delayed", t.delayNote)
+    }
+
+    @Test fun an_undelayed_package_has_no_delay_note() {
+        assertNull(assertNotNull(UpsApiParser.parse(FIXTURE)).delayNote)
+        assertNull(assertNotNull(UpsApiParser.parse(OFD_FIXTURE)).delayNote)
     }
 
     @Test fun falls_back_to_legacy_scheduled_delivery_date() {

@@ -11,6 +11,7 @@ fun Parcel.toEntity(archivedAt: Long? = null) = ParcelEntity(
     sourceId = sourceId, status = status.name,
     etaDate = etaDate?.toString(),
     etaWindowStart = etaWindowStart?.toString(), etaWindowEnd = etaWindowEnd?.toString(),
+    delayNote = delayNote,
     latestLocation = latestLocation, isArchived = isArchived, archivedAt = archivedAt,
     createdAt = createdAt.toEpochMilliseconds(), lastRefreshedAt = lastRefreshedAt?.toEpochMilliseconds(),
 )
@@ -38,6 +39,7 @@ fun ParcelWithEvents.toDomain(): Parcel = Parcel(
             status = it.status?.let { s -> runCatching { TrackingStatus.valueOf(s) }.getOrNull() },
         )
     },
+    delayNote = parcel.delayNote,
     latestLocation = parcel.latestLocation, isArchived = parcel.isArchived,
     createdAt = Instant.fromEpochMilliseconds(parcel.createdAt),
     lastRefreshedAt = parcel.lastRefreshedAt?.let(Instant::fromEpochMilliseconds),

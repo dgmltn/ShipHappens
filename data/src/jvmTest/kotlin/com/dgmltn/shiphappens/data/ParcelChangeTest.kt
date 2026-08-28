@@ -113,4 +113,38 @@ class ParcelChangeTest {
 
         assertEquals(setOf("u"), r.refreshAll(force = true).succeededSourceIds)
     }
+
+    @Test fun a_newly_delayed_parcel_is_notable_even_when_stage_and_eta_hold() {
+        // The whole point of the feature: UPS can announce a delay before it moves the date.
+        val change = ParcelChange(
+            parcelId = "p1", parcelName = "Boots",
+            statusBefore = TrackingStatus.IN_TRANSIT, statusAfter = TrackingStatus.IN_TRANSIT,
+            etaBefore = LocalDate(2026, 8, 29), etaAfter = LocalDate(2026, 8, 29),
+            delayNoteBefore = null, delayNoteAfter = "Due to weather, delayed by one business day.",
+        )
+        assertTrue(change.becameDelayed)
+        assertTrue(change.isNotable)
+    }
+
+    @Test fun an_unchanged_delay_is_not_notable_on_its_own() {
+        // Don't re-notify every daily run for the duration of a delay.
+        val change = ParcelChange(
+            parcelId = "p1", parcelName = "Boots",
+            statusBefore = TrackingStatus.IN_TRANSIT, statusAfter = TrackingStatus.IN_TRANSIT,
+            etaBefore = LocalDate(2026, 8, 29), etaAfter = LocalDate(2026, 8, 29),
+            delayNoteBefore = "Delayed by weather", delayNoteAfter = "Delayed by weather",
+        )
+        assertFalse(change.becameDelayed)
+        assertFalse(change.isNotable)
+    }
+
+    @Test fun a_resolved_delay_is_not_reported_as_a_new_delay() {
+        val change = ParcelChange(
+            parcelId = "p1", parcelName = "Boots",
+            statusBefore = TrackingStatus.IN_TRANSIT, statusAfter = TrackingStatus.IN_TRANSIT,
+            etaBefore = LocalDate(2026, 8, 29), etaAfter = LocalDate(2026, 8, 29),
+            delayNoteBefore = "Delayed by weather", delayNoteAfter = null,
+        )
+        assertFalse(change.becameDelayed)
+    }
 }

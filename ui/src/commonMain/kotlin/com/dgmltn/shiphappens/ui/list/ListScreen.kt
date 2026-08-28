@@ -55,6 +55,7 @@ import com.dgmltn.shiphappens.design.colorFromHex
 import com.dgmltn.shiphappens.design.hankenFamily
 import com.dgmltn.shiphappens.design.monoFamily
 import com.dgmltn.shiphappens.ui.components.DaysRing
+import com.dgmltn.shiphappens.ui.components.DelayIcon
 import com.dgmltn.shiphappens.ui.components.ProhibitionIcon
 import com.dgmltn.shiphappens.ui.components.ToastOverlay
 import org.koin.compose.viewmodel.koinViewModel
@@ -292,6 +293,11 @@ private fun ParcelRow(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false)
                     )
+                    // Beside the stage, never instead of it. Icon-only: the labelled version
+                    // squeezed the status text to "In tr..." on a 720px device.
+                    if (card.delayed) {
+                        DelayIcon(tint = ShipColors.delayed, contentDescription = "Delayed")
+                    }
                     if (card.refreshing) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(11.dp),
@@ -593,6 +599,32 @@ private fun Preview_ListContent_RefreshingAndUnrefreshed() {
                     ParcelCardUi(
                         "9", "Fable test package", "Amazon Logistics", "#37475A", "Label created",
                         delivered = false, ring = null, urgent = false, sourceless = true
+                    ),
+                ),
+            ),
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview_ListContent_Delayed() {
+    ShipTheme {
+        ListContent(
+            ListUiState(
+                dateLabel = "Fri, Aug 28",
+                headerSub = "2 arriving soon",
+                cards = listOf(
+                    // Late but still moving: the stage stays "In transit", the chip carries the
+                    // delay, and the revised ETA still drives the ring.
+                    ParcelCardUi(
+                        "10", "Boots", "UPS", "#5A3A22", "In transit",
+                        delivered = false, ring = RingUi(1, 0.5f), urgent = true, delayed = true,
+                    ),
+                    // Delayed AND an exception — the two are independent.
+                    ParcelCardUi(
+                        "11", "Desk lamp", "FedEx", "#4D148C", "Delivery exception",
+                        delivered = false, ring = null, urgent = false, delayed = true,
                     ),
                 ),
             ),

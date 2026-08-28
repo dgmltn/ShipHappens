@@ -29,6 +29,12 @@ data class ScrapedTracking(
     val etaWindowEnd: String? = null,
     val etaWindowText: String? = null,
     val location: String? = null,
+    /**
+     * The carrier's own sentence explaining a delay, or null when the shipment is not delayed.
+     * Non-null IS the delay flag — a delay is orthogonal to [status] (a package can be in transit
+     * and late), so it rides alongside rather than overwriting the stage.
+     */
+    val delayNote: String? = null,
     val events: List<ScrapedEvent> = emptyList(),
 )
 
@@ -59,6 +65,7 @@ internal fun ScrapedTracking.backfilledFrom(coarse: ScrapedTracking?): ScrapedTr
         etaWindowStart = etaWindowStart ?: coarse.etaWindowStart,
         etaWindowEnd = etaWindowEnd ?: coarse.etaWindowEnd,
         etaWindowText = etaWindowText ?: coarse.etaWindowText,
+        delayNote = delayNote ?: coarse.delayNote,
     )
 }
 
@@ -73,6 +80,7 @@ fun ScrapedTracking.toSnapshot(): TrackingSnapshot {
         etaWindowStart = window?.start,
         etaWindowEnd = window?.end,
         latestLocation = location,
+        delayNote = delayNote,
         events = events.mapNotNull { e ->
             runCatching { Instant.parse(e.timestamp) }.getOrNull()?.let { ts ->
                 TrackingEvent(timestamp = ts, description = e.description, location = e.location, status = statusOrNull(e.status))

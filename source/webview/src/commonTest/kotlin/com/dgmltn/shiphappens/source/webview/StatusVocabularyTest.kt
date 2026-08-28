@@ -3,7 +3,9 @@ package com.dgmltn.shiphappens.source.webview
 import com.dgmltn.shiphappens.domain.TrackingStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class StatusVocabularyTest {
 
@@ -37,6 +39,40 @@ class StatusVocabularyTest {
         assertNull(classifyStatusWording(""))
         assertNull(classifyStatusWording("   "))
         assertNull(classifyStatusWording(null))
+    }
+
+    // -- delay is a modifier, not a stage --
+
+    @Test fun delay_wording_does_not_hide_the_stage_the_package_is_actually_at() {
+        // UPS's "On the Way: Delayed" is an in-transit package with a delay, not an exception.
+        assertEquals(TrackingStatus.IN_TRANSIT, classifyStatusWording("On the Way: Delayed"))
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, classifyStatusWording("Out for delivery, delayed"))
+    }
+
+    @Test fun delay_still_classifies_exception_when_no_stage_wording_is_present() {
+        // FedEx's "Delivery updated - delay" names no stage; the delay tier is its last resort,
+        // so the pre-2026-08-28 behavior survives for wordings that have nothing better.
+        assertEquals(TrackingStatus.EXCEPTION, classifyStatusWording("Delivery updated - delay"))
+    }
+
+    @Test fun a_real_exception_still_beats_delay_wording() {
+        assertEquals(TrackingStatus.EXCEPTION, classifyStatusWording("Delivery attempted, delayed"))
+    }
+
+    @Test fun delay_is_detected_independently_of_the_stage() {
+        assertTrue(isDelayedWording("On the Way: Delayed"))
+        assertTrue(isDelayedWording("Delivery updated - delay"))
+        assertTrue(isDelayedWording("  DELAYED  "))
+        assertFalse(isDelayedWording("In transit"))
+        assertFalse(isDelayedWording("Out for delivery"))
+        assertFalse(isDelayedWording(""))
+        assertFalse(isDelayedWording(null))
+    }
+
+    @Test fun provider_extras_add_delay_wordings() {
+        val amazonish = StatusKeywords(delayed = listOf("now expected"))
+        assertTrue(isDelayedWording("Now expected tomorrow by 8 AM", amazonish))
+        assertFalse(isDelayedWording("Now expected tomorrow by 8 AM"))
     }
 
     // -- precedence: one merged chain, canonical order --

@@ -97,7 +97,9 @@ class ListViewModel(
         val delivered = status == TrackingStatus.DELIVERED
         val days = etaDate?.let { clock.today().daysUntil(it) }
         val urgent = !delivered && days != null && days <= 1
-        // Same step the detail timeline marks CURRENT, so the two screens never disagree.
+        // Same step the detail timeline marks CURRENT, so the two screens never disagree. A
+        // delay does NOT appear here — it rides on `delayed` beside the stage, so a late but
+        // moving package reads "In transit ⚠ Delayed" rather than collapsing to an exception.
         val statusText = when {
             status == TrackingStatus.EXCEPTION -> "Delivery exception"
             lastRefreshedAt == null && status == TrackingStatus.UNKNOWN -> "Waiting for first update"
@@ -114,6 +116,7 @@ class ListViewModel(
             urgent = urgent,
             refreshing = refreshing,
             sourceless = sourceless,
+            delayed = delayNote != null,
         )
     }
 

@@ -112,6 +112,11 @@ class ParcelRepository(
             etaWindowStart = if (newWindow) snapshot.etaWindowStart?.toString() else row.parcel.etaWindowStart,
             etaWindowEnd = if (newWindow) snapshot.etaWindowEnd?.toString() else row.parcel.etaWindowEnd,
             latestLocation = snapshot.latestLocation ?: row.parcel.latestLocation,
+            // NOT `?: existing` like the fields above: a delay ends, and a stale "Delayed" chip
+            // on a back-on-schedule package is worse than none. Any snapshot that actually
+            // classified something therefore replaces the note outright, including with null;
+            // only an UNKNOWN scrape (which learned nothing) preserves it.
+            delayNote = if (snapshot.status == TrackingStatus.UNKNOWN) row.parcel.delayNote else snapshot.delayNote,
             sourceId = sourceId,
             lastRefreshedAt = clock.now().toEpochMilliseconds(),
         )
@@ -124,6 +129,8 @@ class ParcelRepository(
             statusAfter = updated.status.toTrackingStatus(),
             etaBefore = row.parcel.etaDate?.let(LocalDate::parse),
             etaAfter = updated.etaDate?.let(LocalDate::parse),
+            delayNoteBefore = row.parcel.delayNote,
+            delayNoteAfter = updated.delayNote,
         )
     }
 

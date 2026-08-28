@@ -61,6 +61,39 @@ class ApplySnapshotTest {
         assertEquals(1, row.events.size)
     }
 
+    @Test fun a_delay_note_is_stored_alongside_the_stage() = runTest {
+        val r = repo(backgroundScope)
+        db.parcelDao().upsertParcel(parcel.toEntity())
+        assertTrue(r.applySnapshot(
+            "p1",
+            TrackingSnapshot(status = TrackingStatus.IN_TRANSIT, delayNote = "Due to weather, delayed by one business day."),
+            sourceId = "ups",
+        ))
+        val row = assertNotNull(db.parcelDao().getById("p1"))
+        // The stage is untouched by the delay — that is the whole point of the modifier.
+        assertEquals(TrackingStatus.IN_TRANSIT.name, row.parcel.status)
+        assertEquals("Due to weather, delayed by one business day.", row.parcel.delayNote)
+    }
+
+    @Test fun a_resolved_delay_clears_the_stored_note() = runTest {
+        val r = repo(backgroundScope)
+        db.parcelDao().upsertParcel(parcel.copy(delayNote = "Delayed by weather").toEntity())
+        // A classified snapshot that reports no delay means the delay is over. Unlike
+        // latestLocation, the note must NOT survive on a null — a stale "Delayed" chip on a
+        // package that is back on schedule is worse than no chip at all.
+        assertTrue(r.applySnapshot("p1", TrackingSnapshot(status = TrackingStatus.OUT_FOR_DELIVERY), sourceId = "ups"))
+        assertNull(assertNotNull(db.parcelDao().getById("p1")).parcel.delayNote)
+    }
+
+    @Test fun an_unclassified_snapshot_preserves_the_delay_note() = runTest {
+        val r = repo(backgroundScope)
+        db.parcelDao().upsertParcel(parcel.copy(delayNote = "Delayed by weather").toEntity())
+        // UNKNOWN means "the scrape learned nothing", not "the delay resolved" — same rule the
+        // status and ETA already follow.
+        assertTrue(r.applySnapshot("p1", TrackingSnapshot(status = TrackingStatus.UNKNOWN), sourceId = "ups"))
+        assertEquals("Delayed by weather", assertNotNull(db.parcelDao().getById("p1")).parcel.delayNote)
+    }
+
     @Test fun unknown_status_and_null_fields_preserve_existing() = runTest {
         val r = repo(backgroundScope)
         db.parcelDao().upsertParcel(

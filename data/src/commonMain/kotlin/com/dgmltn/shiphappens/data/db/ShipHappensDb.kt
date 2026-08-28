@@ -10,8 +10,15 @@ import androidx.room3.migration.AutoMigrationSpec
 
 @Database(
     entities = [ParcelEntity::class, TrackingEventEntity::class],
-    version = 2,
-    autoMigrations = [AutoMigration(from = 1, to = 2, spec = ShipHappensDb.MoveEtaTimeToWindowEnd::class)],
+    version = 3,
+    autoMigrations = [
+        AutoMigration(from = 1, to = 2, spec = ShipHappensDb.MoveEtaTimeToWindowEnd::class),
+        // v2 -> v3 adds the nullable `delayNote` column (a delay is a modifier on the status,
+        // not a status of its own). Specless on purpose: a plain nullable column-add is an
+        // `ALTER TABLE ADD COLUMN`, so unlike v1 -> v2 it never recreates `parcels` and cannot
+        // endanger the cascading `tracking_events` foreign key described below.
+        AutoMigration(from = 2, to = 3),
+    ],
 )
 @ConstructedBy(ShipHappensDbConstructor::class)
 abstract class ShipHappensDb : RoomDatabase() {

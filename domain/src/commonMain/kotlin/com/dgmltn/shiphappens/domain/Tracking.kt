@@ -31,4 +31,6 @@ data class TrackingSnapshot(
     val etaWindowStart: LocalTime? = null,
     val etaWindowEnd: LocalTime? = null,
     val latestLocation: String? = null,
+    /** Carrier's own explanation of a delay; null means not delayed. See StatusVocabulary. */
+    val delayNote: String? = null,
 )

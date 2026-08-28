@@ -15,10 +15,14 @@ import kotlinx.serialization.json.Json
 @Serializable private data class UpsTrackDetail(
     val packageStatus: String? = null,
     val packageStatusType: String? = null,
-    // Current ups.com shape: scheduled delivery date "sdd" (compact "YYYYMMDD") + end-of-window
-    // time "sdt" ("HH:MM:SS"). "scheduledDeliveryDate" (MM/DD/YYYY) is the older field, kept as
-    // a fallback.
+    // UPS's plain-English gloss on the current status ("Due to weather, your package is delayed
+    // by one business day."); present on delayed and exception shipments, absent otherwise.
+    val simplifiedText: String? = null,
+    // Current ups.com shape: scheduled delivery date "sdd" (compact "YYYYMMDD") bounded by
+    // "sdst"/"sdt" ("HH:MM:SS", window start/end). "scheduledDeliveryDate" (MM/DD/YYYY) is the
+    // older field, kept as a fallback.
     val sdd: String? = null,
+    val sdst: String? = null,
     val sdt: String? = null,
     val scheduledDeliveryDate: String? = null,
     val shipmentProgressActivities: List<UpsActivity>? = null,
@@ -59,8 +63,15 @@ object UpsApiParser {
         return ScrapedTracking(
             status = classify(detail.packageStatusType, detail.packageStatus ?: ""),
             etaDate = (parseCompactDate(detail.sdd) ?: parseUpsDate(detail.scheduledDeliveryDate))?.toString(),
+            etaWindowStart = parseClockTime(detail.sdst)?.toString(),
             etaWindowEnd = parseClockTime(detail.sdt)?.toString(),
             location = activities.firstOrNull()?.location,
+            // Delay rides alongside the stage rather than replacing it: this package is
+            // "On the Way: Delayed" — genuinely in transit, and genuinely late. Prefer UPS's
+            // reason sentence; the headline itself is the fallback when there isn't one.
+            delayNote = detail.packageStatus
+                ?.takeIf { isUpsDelayed(it) }
+                ?.let { detail.simplifiedText?.takeIf(String::isNotBlank) ?: it },
             events = events,
         )
     }
@@ -79,7 +90,7 @@ object UpsApiParser {
         return runCatching { LocalDate(yyyy.toInt(), mm.toInt(), dd.toInt()) }.getOrNull()
     }
 
-    /** "14:30:00" (24-hour, end of delivery window) -> LocalTime. */
+    /** "14:30:00" (24-hour, a delivery-window bound) -> LocalTime. */
     private fun parseClockTime(raw: String?): LocalTime? {
         val m = Regex("""(\d{1,2}):(\d{2})""").find(raw ?: "") ?: return null
         val (h, min) = m.destructured

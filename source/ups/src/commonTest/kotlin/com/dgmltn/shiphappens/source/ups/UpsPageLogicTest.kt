@@ -54,6 +54,17 @@ class UpsPageLogicTest {
         assertEquals("ok", parseUpsRaw(DomRaw(kind = "tracker", statusText = "On the Way", pageText = "UPS tracking detail"))?.page)
     }
 
+    @Test fun a_delayed_headline_reports_in_transit_and_carries_the_delay() {
+        // The DOM fallback has no simplifiedText to quote, so the headline is the note.
+        val result = parseUpsRaw(DomRaw(kind = "tracker", statusText = "On the Way: Delayed"))
+        assertEquals("IN_TRANSIT", result?.tracking?.status)
+        assertEquals("On the Way: Delayed", result?.tracking?.delayNote)
+    }
+
+    @Test fun an_undelayed_headline_has_no_delay_note() {
+        assertNull(parseUpsRaw(DomRaw(kind = "tracker", statusText = "On the Way"))?.tracking?.delayNote)
+    }
+
     @Test fun blank_page_is_empty_and_foreign_kind_is_null() {
         assertEquals("empty", parseUpsRaw(DomRaw(kind = "tracker"))?.page)
         assertNull(parseUpsRaw(DomRaw(kind = "cards", statusText = "On the Way")))

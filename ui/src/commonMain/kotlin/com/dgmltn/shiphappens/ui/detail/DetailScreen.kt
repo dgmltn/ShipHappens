@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dgmltn.shiphappens.design.*
+import com.dgmltn.shiphappens.ui.components.DelayNote
 import com.dgmltn.shiphappens.ui.StatusBarIconsForHeader
 import androidx.compose.ui.tooling.preview.Preview
 import org.koin.compose.viewmodel.koinViewModel
@@ -73,6 +74,12 @@ fun DetailContent(state: DetailUiState, onBack: () -> Unit = {}, onOpenWeb: () -
             DetailCard {
                 CardLabel(state.windowLabel)
                 Text(state.windowText, color = ShipColors.ink, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, fontFamily = hankenFamily())
+            }
+            // Directly under the ETA it qualifies: the date stays the headline, the delay
+            // explains it, rather than one replacing the other.
+            state.delayNote?.let {
+                Spacer(Modifier.height(10.dp))
+                DelayNote(it)
             }
             Spacer(Modifier.height(14.dp))
             // Map placeholder card (spec: decorative, with real location text)
@@ -186,6 +193,35 @@ private fun Preview_DetailContent_InTransit() {
                     TimelineStepUi("Label created", "Wed, Jul 9", StepState.DONE),
                     TimelineStepUi("Shipped", "Thu, Jul 10", StepState.DONE),
                     TimelineStepUi("In transit", "Fri, Jul 11 · latest update", StepState.CURRENT),
+                    TimelineStepUi("Out for delivery", null, StepState.TODO),
+                    TimelineStepUi("Delivered", null, StepState.TODO),
+                ),
+            ),
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun Preview_DetailContent_Delayed() {
+    ShipTheme {
+        DetailContent(
+            DetailUiState(
+                loaded = true,
+                name = "Boots",
+                carrierName = "UPS",
+                accentHex = "#5A3A22",
+                // The delay does NOT displace the ETA headline — that is the point of the state.
+                headline = "Arrives tomorrow",
+                windowLabel = "Estimated delivery",
+                windowText = "Sat, Aug 29 · 2:00 – 6:00 PM",
+                delayNote = "Due to weather, your package is delayed by one business day.",
+                locationText = "Houston, TX",
+                trackingNumber = "1ZX9Y8Z70311111111",
+                timeline = listOf(
+                    TimelineStepUi("Label created", "Tue, Aug 25", StepState.DONE),
+                    TimelineStepUi("Shipped", "Tue, Aug 25", StepState.DONE),
+                    TimelineStepUi("In transit", "Fri, Aug 28 · latest update", StepState.CURRENT),
                     TimelineStepUi("Out for delivery", null, StepState.TODO),
                     TimelineStepUi("Delivered", null, StepState.TODO),
                 ),

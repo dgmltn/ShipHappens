@@ -6,6 +6,7 @@ import com.dgmltn.shiphappens.source.webview.DomRaw
 import com.dgmltn.shiphappens.source.webview.ScrapedTracking
 import com.dgmltn.shiphappens.source.webview.StatusKeywords
 import com.dgmltn.shiphappens.source.webview.classifyStatusWording
+import com.dgmltn.shiphappens.source.webview.isDelayedWording
 
 /**
  * Everything the UPS scrape *decides* — the last source to leave the classify-in-JS pattern
@@ -27,6 +28,9 @@ private val UPS_KEYWORDS = StatusKeywords(
 
 internal fun classifyUpsStatus(raw: String?): TrackingStatus? = classifyStatusWording(raw, UPS_KEYWORDS)
 
+/** Delay is orthogonal to the stage — see [isDelayedWording]. Same keyword set as the classifier. */
+internal fun isUpsDelayed(raw: String?): Boolean = isDelayedWording(raw, UPS_KEYWORDS)
+
 // Verbatim from the JS blob's original decision (moved to Kotlin 2026-08-20 so wording drift is
 // a unit-test fix, not a device hunt).
 private val UPS_NOT_FOUND =
@@ -42,5 +46,7 @@ internal fun parseUpsRaw(raw: DomRaw): DomExtraction? {
     if (raw.pageText?.let { UPS_NOT_FOUND.containsMatchIn(it) } == true) return DomExtraction(page = "notFound")
     if (raw.statusText.isNullOrBlank()) return DomExtraction(page = "empty")
     val status = classifyUpsStatus(raw.statusText) ?: TrackingStatus.UNKNOWN
-    return DomExtraction(page = "ok", tracking = ScrapedTracking(status = status.name))
+    // No simplifiedText on the DOM path, so the headline itself is the best note available.
+    val delayNote = raw.statusText.takeIf { isUpsDelayed(it) }
+    return DomExtraction(page = "ok", tracking = ScrapedTracking(status = status.name, delayNote = delayNote))
 }

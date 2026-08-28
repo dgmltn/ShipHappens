@@ -27,6 +27,11 @@ data class Parcel(
     val etaWindowStart: LocalTime? = null,
     val etaWindowEnd: LocalTime? = null,
     val events: List<TrackingEvent> = emptyList(),
+    /**
+     * The carrier's own sentence explaining a delay; null means not delayed. Orthogonal to
+     * [status] — a package can be IN_TRANSIT and late — so it never displaces the stage.
+     */
+    val delayNote: String? = null,
     val latestLocation: String? = null,
     val isArchived: Boolean = false,
     val createdAt: Instant,

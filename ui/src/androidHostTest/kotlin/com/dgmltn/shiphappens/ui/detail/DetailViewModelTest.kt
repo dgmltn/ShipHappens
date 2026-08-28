@@ -197,4 +197,35 @@ class DetailViewModelTest {
         db.parcelDao().upsertParcel(ups.toEntity())
         assertEquals("UPS", awaitState { it.loaded }.webCarrierName)
     }
+
+    @Test fun a_delayed_parcel_keeps_its_eta_headline_and_shows_the_reason() = runTest {
+        // The bug this feature fixes: EXCEPTION used to replace "Arrives tomorrow" with
+        // "Delivery exception", hiding an ETA the carrier had just told us.
+        val note = "Due to weather, your package is delayed by one business day."
+        val p = base(TrackingStatus.IN_TRANSIT, LocalDate(2026, 7, 11)).copy(delayNote = note)
+        vm(p)
+        db.parcelDao().upsertParcel(p.toEntity())
+        val s = awaitState { it.loaded && it.delayNote != null }
+        assertEquals("Arrives tomorrow", s.headline)
+        assertEquals(note, s.delayNote)
+    }
+
+    @Test fun an_undelayed_parcel_has_no_delay_note() = runTest {
+        val p = base(TrackingStatus.IN_TRANSIT, LocalDate(2026, 7, 11))
+        vm(p)
+        db.parcelDao().upsertParcel(p.toEntity())
+        val s = awaitState { it.loaded }
+        assertNull(s.delayNote)
+    }
+
+    @Test fun a_delayed_exception_still_reads_as_an_exception() = runTest {
+        // Delay and exception are independent; a parcel can be both, and the stage still wins
+        // the headline.
+        val p = base(TrackingStatus.EXCEPTION, null).copy(delayNote = "Delayed by weather")
+        vm(p)
+        db.parcelDao().upsertParcel(p.toEntity())
+        val s = awaitState { it.loaded && it.delayNote != null }
+        assertEquals("Delivery exception", s.headline)
+        assertEquals("Delayed by weather", s.delayNote)
+    }
 }

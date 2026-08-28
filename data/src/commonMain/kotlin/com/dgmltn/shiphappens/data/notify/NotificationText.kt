@@ -15,6 +15,9 @@ object NotificationText {
     fun title(change: ParcelChange): String = change.parcelName
 
     fun body(change: ParcelChange): String = when {
+        // A new delay outranks both: it's the most specific thing we know, and the carrier's own
+        // sentence usually explains the date move that would otherwise be reported bare.
+        change.becameDelayed -> "Delayed — ${change.delayNoteAfter}"
         change.statusChanged -> statusLine(change)
         else -> etaLine(change)
     }

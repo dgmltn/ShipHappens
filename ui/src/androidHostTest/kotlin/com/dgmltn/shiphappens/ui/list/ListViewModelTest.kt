@@ -151,6 +151,34 @@ class ListViewModelTest {
         assertEquals("1 arriving soon", s.headerSub)
     }
 
+    @Test fun a_delayed_card_flags_the_delay_without_losing_the_stage() = runTest {
+        val vm = vm()
+        settings.setSourceConfig("fake", SourceConfig(enabled = true))
+        source.snapshot = TrackingSnapshot(
+            TrackingStatus.IN_TRANSIT,
+            etaDate = LocalDate(2026, 7, 12),
+            delayNote = "Due to weather, your package is delayed by one business day.",
+        )
+        val added = repo.addParcel("Keyboard", "1Z999AA10123456784", WellKnownCarriers.UPS) as AddResult.Added
+        repo.refresh(added.parcel.id)
+        val s = awaitState { it.cards.size == 1 && it.cards.single().delayed }
+        val card = s.cards.single()
+        // The stage still reads as the stage; the delay is a separate flag, so the card can
+        // show "In transit" AND a delay chip instead of collapsing to "Delivery exception".
+        assertEquals("In transit", card.statusText)
+        assertTrue(card.delayed)
+        assertEquals(2, card.ring?.number)  // the revised ETA still drives the ring
+    }
+
+    @Test fun an_undelayed_card_is_not_flagged() = runTest {
+        val vm = vm()
+        settings.setSourceConfig("fake", SourceConfig(enabled = true))
+        val added = repo.addParcel("Keyboard", "1Z999AA10123456784", WellKnownCarriers.UPS) as AddResult.Added
+        repo.refresh(added.parcel.id)
+        val s = awaitState { it.cards.size == 1 && it.cards.single().statusText == "In transit" }
+        assertFalse(s.cards.single().delayed)
+    }
+
     @Test fun out_for_delivery_shows_step_label_and_is_urgent() = runTest {
         val vm = vm()
         settings.setSourceConfig("fake", SourceConfig(enabled = true))

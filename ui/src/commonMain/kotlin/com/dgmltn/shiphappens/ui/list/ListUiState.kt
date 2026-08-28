@@ -16,6 +16,8 @@ data class ParcelCardUi(
     val refreshing: Boolean = false,
     /** True when no enabled source will refresh this parcel (its source is toggled off). */
     val sourceless: Boolean = false,
+    /** Carrier reports a delay. Independent of [statusText] — a package can be late in transit. */
+    val delayed: Boolean = false,
 )
 
 data class PendingImportUi(

@@ -40,6 +40,14 @@ class ParcelDaoTest {
         assertEquals("Memphis, TN", domain.events[0].location)
     }
 
+    @Test fun delay_note_roundtrips() = runTest {
+        val dao = db().parcelDao()
+        dao.upsertParcel(parcel("a").copy(delayNote = "Delayed by weather").toEntity())
+        assertEquals("Delayed by weather", dao.getById("a")!!.toDomain().delayNote)
+        dao.upsertParcel(parcel("b").toEntity())
+        assertNull(dao.getById("b")!!.toDomain().delayNote)
+    }
+
     @Test fun archive_and_restore() = runTest {
         val dao = db().parcelDao()
         dao.upsertParcel(parcel("a").toEntity())
