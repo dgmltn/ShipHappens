@@ -6,6 +6,8 @@ import com.dgmltn.shiphappens.domain.TRACKING_STEP_LABELS
 import com.dgmltn.shiphappens.domain.TrackingStatus
 import com.dgmltn.shiphappens.domain.designFormat
 import com.dgmltn.shiphappens.domain.stepIndex
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.daysUntil
 
 /**
  * Every user-facing string the daily run can post. Shared by the Android and iOS notifiers so
@@ -26,18 +28,39 @@ object NotificationText {
     fun runSummaryTitle(): String = "Background check finished"
 
     /**
-     * Debug summary of a whole pass. "updated" counts notable diffs — the same rule that decides
-     * per-parcel notifications, so the number matches how many update rows the run posted.
+     * One-line summary for the collapsed notification. "updated" counts notable diffs — the same
+     * rule that decides per-parcel notifications, so the number matches the update rows posted.
      */
-    fun runSummaryBody(summary: RefreshSummary): String {
+    fun runSummaryShort(summary: RefreshSummary): String {
         if (summary.attempted == 0) return "No packages needed checking"
         val checked = if (summary.attempted == 1) "1 package" else "${summary.attempted} packages"
-        val failed = when {
-            summary.failed == 0 -> ""
-            else -> " · ${summary.failed} failed" +
-                (summary.firstFailureReason?.let { " ($it)" } ?: "")
-        }
+        val failed = failedLine(summary)?.let { " · $it" } ?: ""
         return "Checked $checked · ${summary.changes.count { it.isNotable }} updated$failed"
+    }
+
+    /**
+     * Expanded body: one bullet per checked package with where it stands — a nearby ETA as
+     * relative days, a far one as the date, and the stage when the carrier gave no date.
+     */
+    fun runSummaryBody(summary: RefreshSummary, today: LocalDate): String {
+        if (summary.attempted == 0) return "No packages needed checking"
+        val lines = summary.changes.map { "• ${it.parcelName} — ${whereItStands(it, today)}" }
+        return (lines + listOfNotNull(failedLine(summary))).joinToString("\n")
+    }
+
+    private fun whereItStands(change: ParcelChange, today: LocalDate): String {
+        val eta = change.etaAfter ?: return statusLabel(change.statusAfter)
+        return when (val days = today.daysUntil(eta)) {
+            0 -> "today"
+            1 -> "tomorrow"
+            in 2..6 -> "$days days"
+            else -> eta.designFormat()  // far out, or already past — the date says it best
+        }
+    }
+
+    private fun failedLine(summary: RefreshSummary): String? = when {
+        summary.failed == 0 -> null
+        else -> "${summary.failed} failed" + (summary.firstFailureReason?.let { " ($it)" } ?: "")
     }
 
     fun runProgressTitle(): String = "Checking packages…"

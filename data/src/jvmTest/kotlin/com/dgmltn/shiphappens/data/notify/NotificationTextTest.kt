@@ -55,23 +55,70 @@ class NotificationTextTest {
             NotificationText.signInBody("UPS"))
     }
 
-    @Test fun run_summary_counts_checked_updated_and_failed() {
+    @Test fun run_summary_short_counts_checked_updated_and_failed() {
         val summary = RefreshSummary(
             attempted = 5, failed = 1, firstFailureReason = FailureReason.NETWORK,
             changes = listOf(change(), change(after = TrackingStatus.DELIVERED)),
         )
         assertEquals("Checked 5 packages · 2 updated · 1 failed (NETWORK)",
-            NotificationText.runSummaryBody(summary))
+            NotificationText.runSummaryShort(summary))
     }
 
-    @Test fun run_summary_with_one_quiet_parcel_reads_singular_and_clean() {
+    @Test fun run_summary_short_with_one_quiet_parcel_reads_singular_and_clean() {
         val summary = RefreshSummary(attempted = 1, failed = 0)
-        assertEquals("Checked 1 package · 0 updated", NotificationText.runSummaryBody(summary))
+        assertEquals("Checked 1 package · 0 updated", NotificationText.runSummaryShort(summary))
+    }
+
+    @Test fun run_summary_body_lists_each_package_with_its_eta() {
+        val today = LocalDate(2026, 9, 3)
+        fun pkg(name: String, eta: LocalDate?, status: TrackingStatus = TrackingStatus.IN_TRANSIT) =
+            ParcelChange(name, name, status, status, eta, eta)
+        val summary = RefreshSummary(
+            attempted = 4, failed = 0,
+            changes = listOf(
+                pkg("Keyboard", LocalDate(2026, 9, 3)),
+                pkg("Mouse", LocalDate(2026, 9, 4)),
+                pkg("Boots", LocalDate(2026, 9, 5)),
+                pkg("Desk", LocalDate(2026, 9, 12)),
+            ),
+        )
+        assertEquals(
+            """
+            • Keyboard — today
+            • Mouse — tomorrow
+            • Boots — 2 days
+            • Desk — Sat, Sep 12
+            """.trimIndent(),
+            NotificationText.runSummaryBody(summary, today),
+        )
+    }
+
+    @Test fun run_summary_body_falls_back_to_the_status_when_there_is_no_eta() {
+        val today = LocalDate(2026, 9, 3)
+        val summary = RefreshSummary(
+            attempted = 1, failed = 0,
+            changes = listOf(ParcelChange("p1", "Keyboard",
+                TrackingStatus.IN_TRANSIT, TrackingStatus.IN_TRANSIT, null, null)),
+        )
+        assertEquals("• Keyboard — In transit", NotificationText.runSummaryBody(summary, today))
+    }
+
+    @Test fun run_summary_body_appends_a_failure_line() {
+        val today = LocalDate(2026, 9, 3)
+        val summary = RefreshSummary(
+            attempted = 2, failed = 1, firstFailureReason = FailureReason.NETWORK,
+            changes = listOf(ParcelChange("p1", "Keyboard",
+                TrackingStatus.IN_TRANSIT, TrackingStatus.IN_TRANSIT, LocalDate(2026, 9, 3), LocalDate(2026, 9, 3))),
+        )
+        assertEquals("• Keyboard — today\n1 failed (NETWORK)",
+            NotificationText.runSummaryBody(summary, today))
     }
 
     @Test fun run_summary_with_nothing_to_check_says_so() {
         assertEquals("No packages needed checking",
-            NotificationText.runSummaryBody(RefreshSummary(attempted = 0, failed = 0)))
+            NotificationText.runSummaryBody(RefreshSummary(attempted = 0, failed = 0), LocalDate(2026, 9, 3)))
+        assertEquals("No packages needed checking",
+            NotificationText.runSummaryShort(RefreshSummary(attempted = 0, failed = 0)))
     }
 
     @Test fun a_new_delay_leads_with_the_delay_not_the_unchanged_stage() {
