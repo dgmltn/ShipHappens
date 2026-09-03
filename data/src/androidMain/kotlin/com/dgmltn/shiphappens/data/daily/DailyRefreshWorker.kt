@@ -24,11 +24,15 @@ class DailyRefreshWorker(
     private val runner: DailyRefreshRunner by inject()
     private val settings: SettingsRepository by inject()
     private val scheduler: DailyRefreshScheduler by inject()
+    private val notifier: StatusNotifier by inject()
 
     override suspend fun doWork(): Result = try {
         runner.runOnce()
         Result.success()
     } catch (t: Throwable) {
+        // The runner posts its own finished summary; a crash before that would otherwise be
+        // indistinguishable from a run that never fired.
+        notifier.notifyRunFailed(t.toString())
         Result.retry()
     } finally {
         // Re-anchor tomorrow's run whatever happened — a failed pass must not end the series.

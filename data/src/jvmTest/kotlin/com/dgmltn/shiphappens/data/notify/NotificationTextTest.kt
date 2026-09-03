@@ -1,7 +1,9 @@
 package com.dgmltn.shiphappens.data.notify
 
 import com.dgmltn.shiphappens.data.ParcelChange
+import com.dgmltn.shiphappens.data.RefreshSummary
 import com.dgmltn.shiphappens.domain.TrackingStatus
+import com.dgmltn.shiphappens.source.api.FailureReason
 import kotlinx.datetime.LocalDate
 import kotlin.test.*
 
@@ -51,6 +53,25 @@ class NotificationTextTest {
         assertEquals("Sign in to UPS", NotificationText.signInTitle("UPS"))
         assertEquals("Ship Happens can't update your UPS packages until you sign in again.",
             NotificationText.signInBody("UPS"))
+    }
+
+    @Test fun run_summary_counts_checked_updated_and_failed() {
+        val summary = RefreshSummary(
+            attempted = 5, failed = 1, firstFailureReason = FailureReason.NETWORK,
+            changes = listOf(change(), change(after = TrackingStatus.DELIVERED)),
+        )
+        assertEquals("Checked 5 packages · 2 updated · 1 failed (NETWORK)",
+            NotificationText.runSummaryBody(summary))
+    }
+
+    @Test fun run_summary_with_one_quiet_parcel_reads_singular_and_clean() {
+        val summary = RefreshSummary(attempted = 1, failed = 0)
+        assertEquals("Checked 1 package · 0 updated", NotificationText.runSummaryBody(summary))
+    }
+
+    @Test fun run_summary_with_nothing_to_check_says_so() {
+        assertEquals("No packages needed checking",
+            NotificationText.runSummaryBody(RefreshSummary(attempted = 0, failed = 0)))
     }
 
     @Test fun a_new_delay_leads_with_the_delay_not_the_unchanged_stage() {

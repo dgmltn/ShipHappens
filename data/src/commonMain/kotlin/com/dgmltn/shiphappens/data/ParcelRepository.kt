@@ -204,7 +204,10 @@ class ParcelRepository(
         }
     }
 
-    suspend fun refreshAll(force: Boolean): RefreshSummary {
+    suspend fun refreshAll(
+        force: Boolean,
+        onProgress: suspend (done: Int, total: Int) -> Unit = { _, _ -> },
+    ): RefreshSummary {
         val staleAfter = settings.settings.first().refreshFrequency.staleAfterMinutes
         if (!force && staleAfter == null) return RefreshSummary(0, 0)  // MANUAL
         val cutoff = staleAfter?.let { clock.now() - it.minutes }
@@ -218,7 +221,8 @@ class ParcelRepository(
         val changes = mutableListOf<ParcelChange>()
         val authFailed = mutableSetOf<String>()
         val succeeded = mutableSetOf<String>()
-        for (e in candidates) {
+        onProgress(0, candidates.size)
+        for ((index, e) in candidates.withIndex()) {
             when (val outcome = refreshRow(e.id)) {
                 is RefreshOutcome.Success -> {
                     outcome.change?.let(changes::add)
@@ -233,6 +237,7 @@ class ParcelRepository(
                 }
                 RefreshOutcome.NoSource -> Unit
             }
+            onProgress(index + 1, candidates.size)
         }
         return RefreshSummary(candidates.size, failed, firstReason, changes, authFailed, succeeded)
     }

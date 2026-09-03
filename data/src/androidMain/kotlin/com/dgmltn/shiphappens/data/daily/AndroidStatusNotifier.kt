@@ -9,6 +9,7 @@ import android.net.Uri
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.dgmltn.shiphappens.data.ParcelChange
+import com.dgmltn.shiphappens.data.RefreshSummary
 import com.dgmltn.shiphappens.data.notify.NotificationText
 
 /**
@@ -54,6 +55,48 @@ class AndroidStatusNotifier(private val context: Context) : StatusNotifier {
         post(SIGN_IN_ID_BASE + sourceId.hashCode(), notification)
     }
 
+    override suspend fun notifyRunProgress(done: Int, total: Int) {
+        ensureChannels()
+        val notification = NotificationCompat.Builder(context, CHANNEL_DIAGNOSTICS)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle(NotificationText.runProgressTitle())
+            .setContentText("$done of $total")
+            .setProgress(total, done, total == 0)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .build()
+        post(RUN_PROGRESS_ID, notification)
+    }
+
+    override suspend fun notifyRunFinished(summary: RefreshSummary) {
+        ensureChannels()
+        manager.cancel(RUN_PROGRESS_ID)
+        val body = NotificationText.runSummaryBody(summary)
+        val notification = NotificationCompat.Builder(context, CHANNEL_DIAGNOSTICS)
+            .setSmallIcon(android.R.drawable.stat_sys_download_done)
+            .setContentTitle(NotificationText.runSummaryTitle())
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setShowWhen(true)
+            .setAutoCancel(true)
+            .build()
+        post(RUN_SUMMARY_ID, notification)
+    }
+
+    override suspend fun notifyRunFailed(message: String) {
+        ensureChannels()
+        manager.cancel(RUN_PROGRESS_ID)
+        val notification = NotificationCompat.Builder(context, CHANNEL_DIAGNOSTICS)
+            .setSmallIcon(android.R.drawable.stat_sys_warning)
+            .setContentTitle(NotificationText.runFailedTitle())
+            .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setShowWhen(true)
+            .setAutoCancel(true)
+            .build()
+        post(RUN_SUMMARY_ID, notification)
+    }
+
     private fun postGroupSummary() {
         val summary = NotificationCompat.Builder(context, CHANNEL_UPDATES)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
@@ -95,13 +138,21 @@ class AndroidStatusNotifier(private val context: Context) : StatusNotifier {
                 description = "A carrier session expired and packages can't be updated"
             }
         )
+        system.createNotificationChannel(
+            NotificationChannel(CHANNEL_DIAGNOSTICS, "Background check", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Progress and result of every background check, even a quiet one"
+            }
+        )
     }
 
     private companion object {
         const val CHANNEL_UPDATES = "package_updates"
         const val CHANNEL_SIGN_IN = "sign_in"
+        const val CHANNEL_DIAGNOSTICS = "diagnostics"
         const val GROUP_UPDATES = "com.dgmltn.shiphappens.UPDATES"
         const val SUMMARY_ID = 1
+        const val RUN_PROGRESS_ID = 2
+        const val RUN_SUMMARY_ID = 3
         const val SIGN_IN_ID_BASE = 100_000
     }
 }

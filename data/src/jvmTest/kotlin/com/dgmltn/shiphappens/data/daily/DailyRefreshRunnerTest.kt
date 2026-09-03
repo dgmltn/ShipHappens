@@ -7,6 +7,7 @@ import com.dgmltn.shiphappens.data.AddResult
 import com.dgmltn.shiphappens.data.FixedClock
 import com.dgmltn.shiphappens.data.ParcelChange
 import com.dgmltn.shiphappens.data.ParcelRepository
+import com.dgmltn.shiphappens.data.RefreshSummary
 import com.dgmltn.shiphappens.data.db.ShipHappensDb
 import com.dgmltn.shiphappens.data.settings.SettingsRepository
 import com.dgmltn.shiphappens.data.source.FakeSource
@@ -23,8 +24,14 @@ import kotlin.test.*
 private class RecordingNotifier : StatusNotifier {
     val changes = mutableListOf<ParcelChange>()
     val signIns = mutableListOf<String>()
+    val progress = mutableListOf<Pair<Int, Int>>()
+    val finished = mutableListOf<RefreshSummary>()
+    val failures = mutableListOf<String>()
     override suspend fun notifyStatusChange(change: ParcelChange) { changes += change }
     override suspend fun notifySignInNeeded(sourceId: String, sourceDisplayName: String) { signIns += sourceId }
+    override suspend fun notifyRunProgress(done: Int, total: Int) { progress += done to total }
+    override suspend fun notifyRunFinished(summary: RefreshSummary) { finished += summary }
+    override suspend fun notifyRunFailed(message: String) { failures += message }
 }
 
 class DailyRefreshRunnerTest {
@@ -121,6 +128,50 @@ class DailyRefreshRunnerTest {
         r.runOnce()
 
         assertEquals(listOf("u", "u"), notifier.signIns)
+    }
+
+    @Test fun every_run_reports_finished_even_when_nothing_changed() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val src = FakeSource("u", detects = WellKnownCarriers.UPS,
+            trackResult = SourceResult.Success(TrackingSnapshot(TrackingStatus.IN_TRANSIT)))
+        val r = runner(scope, src)
+        enableAll("u")
+        repository.addParcel("Keyboard", "1Z999AA10123456784", null)
+        r.runOnce()  // first run: UNKNOWN -> IN_TRANSIT
+
+        r.runOnce()  // second run: no change at all
+
+        assertEquals(2, notifier.finished.size)
+        assertEquals(1, notifier.finished.last().attempted)
+        assertTrue(notifier.finished.last().changes.none { it.isNotable })
+    }
+
+    @Test fun run_reports_per_parcel_progress() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val src = FakeSource("u", detects = WellKnownCarriers.UPS,
+            trackResult = SourceResult.Success(TrackingSnapshot(TrackingStatus.IN_TRANSIT)))
+        val r = runner(scope, src)
+        enableAll("u")
+        repository.addParcel("Keyboard", "1Z999AA10123456784", null)
+        repository.addParcel("Mouse", "1Z999AA10123456785", null)
+        notifier.progress.clear()
+
+        r.runOnce()
+
+        assertEquals(listOf(0 to 2, 1 to 2, 2 to 2), notifier.progress)
+    }
+
+    @Test fun disabled_setting_reports_neither_progress_nor_finished() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val src = FakeSource("u", detects = WellKnownCarriers.UPS)
+        val r = runner(scope, src)
+        settings.setSourceConfig("u", SourceConfig(enabled = true))
+        repository.addParcel("Keyboard", "1Z999AA10123456784", null)
+
+        r.runOnce()
+
+        assertTrue(notifier.progress.isEmpty())
+        assertTrue(notifier.finished.isEmpty())
     }
 
     @Test fun archived_and_delivered_parcels_are_never_candidates() = runTest {

@@ -28,7 +28,8 @@ class DailyRefreshRunner(
 
         // force = true: the daily pass deliberately ignores the foreground staleness setting,
         // including MANUAL. refreshAll's own filter already excludes archived and DELIVERED.
-        val summary = repository.refreshAll(force = true)
+        val summary = repository.refreshAll(force = true, onProgress = notifier::notifyRunProgress)
+        notifier.notifyRunFinished(summary)
 
         summary.changes.filter { it.isNotable }.forEach { notifier.notifyStatusChange(it) }
 

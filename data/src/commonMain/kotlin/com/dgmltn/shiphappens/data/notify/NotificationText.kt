@@ -1,6 +1,7 @@
 package com.dgmltn.shiphappens.data.notify
 
 import com.dgmltn.shiphappens.data.ParcelChange
+import com.dgmltn.shiphappens.data.RefreshSummary
 import com.dgmltn.shiphappens.domain.TRACKING_STEP_LABELS
 import com.dgmltn.shiphappens.domain.TrackingStatus
 import com.dgmltn.shiphappens.domain.designFormat
@@ -21,6 +22,27 @@ object NotificationText {
         change.statusChanged -> statusLine(change)
         else -> etaLine(change)
     }
+
+    fun runSummaryTitle(): String = "Background check finished"
+
+    /**
+     * Debug summary of a whole pass. "updated" counts notable diffs — the same rule that decides
+     * per-parcel notifications, so the number matches how many update rows the run posted.
+     */
+    fun runSummaryBody(summary: RefreshSummary): String {
+        if (summary.attempted == 0) return "No packages needed checking"
+        val checked = if (summary.attempted == 1) "1 package" else "${summary.attempted} packages"
+        val failed = when {
+            summary.failed == 0 -> ""
+            else -> " · ${summary.failed} failed" +
+                (summary.firstFailureReason?.let { " ($it)" } ?: "")
+        }
+        return "Checked $checked · ${summary.changes.count { it.isNotable }} updated$failed"
+    }
+
+    fun runProgressTitle(): String = "Checking packages…"
+
+    fun runFailedTitle(): String = "Background check failed"
 
     fun signInTitle(sourceDisplayName: String): String = "Sign in to $sourceDisplayName"
 

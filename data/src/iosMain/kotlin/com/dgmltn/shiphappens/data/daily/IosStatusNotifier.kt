@@ -1,6 +1,7 @@
 package com.dgmltn.shiphappens.data.daily
 
 import com.dgmltn.shiphappens.data.ParcelChange
+import com.dgmltn.shiphappens.data.RefreshSummary
 import com.dgmltn.shiphappens.data.notify.NotificationText
 import platform.Foundation.NSUUID
 import platform.UserNotifications.UNMutableNotificationContent
@@ -31,7 +32,52 @@ class IosStatusNotifier : StatusNotifier {
         )
     }
 
-    private fun post(title: String, body: String, thread: String, userInfo: Map<Any?, Any?>) {
+    override suspend fun notifyRunProgress(done: Int, total: Int) {
+        // A fixed identifier makes each progress tick REPLACE the previous one — iOS has no
+        // notification progress bar, so the body carries the count.
+        post(
+            title = NotificationText.runProgressTitle(),
+            body = "$done of $total",
+            thread = THREAD_DIAGNOSTICS,
+            userInfo = emptyMap(),
+            identifier = RUN_PROGRESS_ID,
+        )
+    }
+
+    override suspend fun notifyRunFinished(summary: RefreshSummary) {
+        clearProgress()
+        post(
+            title = NotificationText.runSummaryTitle(),
+            body = NotificationText.runSummaryBody(summary),
+            thread = THREAD_DIAGNOSTICS,
+            userInfo = emptyMap(),
+            identifier = RUN_SUMMARY_ID,
+        )
+    }
+
+    override suspend fun notifyRunFailed(message: String) {
+        clearProgress()
+        post(
+            title = NotificationText.runFailedTitle(),
+            body = message,
+            thread = THREAD_DIAGNOSTICS,
+            userInfo = emptyMap(),
+            identifier = RUN_SUMMARY_ID,
+        )
+    }
+
+    private fun clearProgress() {
+        UNUserNotificationCenter.currentNotificationCenter()
+            .removeDeliveredNotificationsWithIdentifiers(listOf(RUN_PROGRESS_ID))
+    }
+
+    private fun post(
+        title: String,
+        body: String,
+        thread: String,
+        userInfo: Map<Any?, Any?>,
+        identifier: String = NSUUID().UUIDString,
+    ) {
         val content = UNMutableNotificationContent().apply {
             setTitle(title)
             setBody(body)
@@ -39,7 +85,7 @@ class IosStatusNotifier : StatusNotifier {
             setUserInfo(userInfo)
         }
         val request = UNNotificationRequest.requestWithIdentifier(
-            identifier = NSUUID().UUIDString, content = content, trigger = null,
+            identifier = identifier, content = content, trigger = null,
         )
         UNUserNotificationCenter.currentNotificationCenter().addNotificationRequest(request, null)
     }
@@ -47,5 +93,8 @@ class IosStatusNotifier : StatusNotifier {
     private companion object {
         const val THREAD_UPDATES = "package_updates"
         const val THREAD_SIGN_IN = "sign_in"
+        const val THREAD_DIAGNOSTICS = "diagnostics"
+        const val RUN_PROGRESS_ID = "run-progress"
+        const val RUN_SUMMARY_ID = "run-summary"
     }
 }
