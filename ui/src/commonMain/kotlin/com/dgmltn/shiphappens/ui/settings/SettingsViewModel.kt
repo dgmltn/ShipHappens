@@ -2,6 +2,7 @@ package com.dgmltn.shiphappens.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.dgmltn.shiphappens.data.AppClock
 import com.dgmltn.shiphappens.data.ParcelRepository
 import com.dgmltn.shiphappens.data.daily.DailyRefreshScheduler
 import com.dgmltn.shiphappens.data.settings.DEFAULT_DAILY_UPDATE_TIME
@@ -18,6 +19,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
 
 data class SourceCardUi(
     val id: String, val name: String, val accentHex: String, val enabled: Boolean,
@@ -42,6 +44,7 @@ class SettingsViewModel(
     private val repository: ParcelRepository,
     private val cookieJar: WebCookieJar,
     private val scheduler: DailyRefreshScheduler,
+    private val clock: AppClock,
 ) : ViewModel() {
 
     private val toast = MutableStateFlow<String?>(null)
@@ -118,7 +121,10 @@ class SettingsViewModel(
 
     fun onDailyUpdateTime(time: LocalTime): Job = viewModelScope.launch {
         settings.setDailyUpdateTime(time)
-        if (settings.settings.first().dailyUpdateEnabled) scheduler.schedule(time)
+        if (settings.settings.first().dailyUpdateEnabled) {
+            scheduler.schedule(time)
+            flash(NextUpdateToast.message(time, clock.now(), TimeZone.currentSystemDefault()))
+        }
     }
 
     fun onAutoImport(enabled: Boolean) { viewModelScope.launch { settings.setAutoClipboardImport(enabled) } }

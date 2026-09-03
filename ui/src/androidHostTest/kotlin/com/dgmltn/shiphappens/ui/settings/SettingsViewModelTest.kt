@@ -91,7 +91,7 @@ class SettingsViewModelTest {
             settings,
         )
         repo = ParcelRepository(db.parcelDao(), registry, settings, FixedClock())
-        vm = SettingsViewModel(registry, settings, repo, NoOpCookieJar, scheduler)
+        vm = SettingsViewModel(registry, settings, repo, NoOpCookieJar, scheduler, FixedClock())
         // Records every emission and keeps WhileSubscribed alive for the whole test.
         backgroundScope.launch { vm.state.collect { check(recordedStates.tryEmit(it)) } }
         // Prime the pipeline: the first combined emission requires settings.settings' initial load.
@@ -203,5 +203,17 @@ class SettingsViewModelTest {
 
         awaitState { it.dailyUpdateTime == LocalTime(6, 30) }
         assertTrue(scheduler.scheduled.isEmpty())
+        // No booking happened, so promising a "next update" would lie.
+        assertTrue(recordedStates.replayCache.none { it.toast != null })
+    }
+
+    @Test fun changing_the_time_while_enabled_flashes_the_next_update_toast() = runTest {
+        val vm = vm()
+        vm.onDailyUpdateEnabled(enabled = true, permissionGranted = true).awaitDone()
+        awaitState { it.dailyUpdateEnabled }
+        vm.onDailyUpdateTime(LocalTime(6, 30)).awaitDone()
+
+        // Exact copy is NextUpdateToastTest's job — the system zone isn't pinned here.
+        awaitRecorded { it.toast?.startsWith("Next scheduled update") == true }
     }
 }
