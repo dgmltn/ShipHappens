@@ -22,7 +22,6 @@ import kotlinx.datetime.daysUntil
 
 private sealed interface PendingUndo {
     data class FlagFlip(val reverse: suspend () -> Unit) : PendingUndo
-    data class PendingDelete(val id: String, val job: Job) : PendingUndo
 }
 
 class ListViewModel(
@@ -39,7 +38,6 @@ class ListViewModel(
     private val pendingName = MutableStateFlow("")
     private val toast = MutableStateFlow<ToastUi?>(null)
     private val refreshing = MutableStateFlow(false)
-    private val pendingDeleteIds = MutableStateFlow<Set<String>>(emptySet())
     private var pendingUndo: PendingUndo? = null
     private var toastJob: Job? = null
 
@@ -65,9 +63,9 @@ class ListViewModel(
         .combine(settingsRepository.settings) { c, s -> c.copy(sourceConfigs = s.sourceConfigs) }
 
     val state: StateFlow<ListUiState> =
-        combine(content, pendingName, toast, refreshing, pendingDeleteIds) { c, pName, t, r, del ->
-            val active = c.active.filterNot { it.id in del }
-            val archived = c.archived.filterNot { it.id in del }
+        combine(content, pendingName, toast, refreshing) { c, pName, t, r ->
+            val active = c.active
+            val archived = c.archived
             val parcels = if (c.tab == ListTab.ACTIVE) active else archived
             val arriving = active.count { it.status != TrackingStatus.DELIVERED }
             ListUiState(
@@ -186,14 +184,15 @@ class ListViewModel(
     }
 
     fun onDelete(id: String) {
-        pendingDeleteIds.update { it + id }
-        val job = viewModelScope.launch {
-            delay(3_800)
-            repository.delete(id)
-            pendingDeleteIds.update { it - id }
+        viewModelScope.launch {
+            // Delete NOW; undo is the inverse (a faithful reinsert the repository hands back).
+            // The old grace-period delete kept the row alive behind a "deleted" toast — blocking
+            // a re-add of the same number, and resurrecting the parcel if the screen was left
+            // before the window expired (Pixel QA 2026-09-03).
+            val undo = repository.deleteReturningUndo(id) ?: return@launch
+            pendingUndo = PendingUndo.FlagFlip(undo)
+            flash("Package deleted", undo = true, ms = 3_800)
         }
-        pendingUndo = PendingUndo.PendingDelete(id, job)
-        flash("Package deleted", undo = true, ms = 3_800)
     }
 
     fun onUndo() {
@@ -201,11 +200,6 @@ class ListViewModel(
             is PendingUndo.FlagFlip -> {
                 toastJob?.cancel(); toast.value = null
                 viewModelScope.launch { pending.reverse() }
-            }
-            is PendingUndo.PendingDelete -> {
-                pending.job.cancel()
-                pendingDeleteIds.update { it - pending.id }
-                toastJob?.cancel(); toast.value = null
             }
             null -> return
         }

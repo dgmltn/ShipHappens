@@ -299,38 +299,36 @@ class ListViewModelTest {
         assertEquals(1, afterUndo.cards.size)
     }
 
-    /**
-     * Timing note: unlike the other awaits in this class, the "hidden, not deleted yet" check
-     * here deliberately avoids a *fresh* `repo.observeParcel(id).first()` call at that exact
-     * instant. A brand-new Room Flow query always requires a genuine real-thread round-trip;
-     * while `runTest`'s scheduler is genuinely blocked waiting on that real completion, it
-     * opportunistically drains every other pending virtual-time task too — including onDelete's
-     * 3.8s grace-period job — racing straight past the very "not yet deleted" state under test
-     * (verified empirically: a bare `.first()` call there jumps `testScheduler.currentTime` from
-     * 0 to 3800 before it resolves, regardless of whether the call goes through
-     * `withContext(Dispatchers.Default)` or not). Pre-subscribing a hot `StateFlow` to the row
-     * *before* deleting sidesteps this: once primed, its cached `.value` needs no further Room
-     * I/O, so reading it can't trigger that drain.
-     */
-    @Test fun delete_hides_immediately_and_undo_restores_it() = runTest {
+    @Test fun delete_removes_immediately_and_undo_reinserts_it() = runTest {
+        // Delete commits at once (undo is a reinsert, not a cancelled delete) — so a re-add of
+        // the same number can never hit the departed row, and the card/toast state follows the DB.
         val vm = vm()
         val added = repo.addParcel("Beans", "9400111899223197428", WellKnownCarriers.USPS) as AddResult.Added
         awaitState { it.cards.size == 1 }
-        val parcelRow = repo.observeParcel(added.parcel.id).stateIn(backgroundScope, SharingStarted.Eagerly, null)
-        withContext(Dispatchers.Default) { withTimeout(10_000) { parcelRow.first { it != null } } }
 
         vm.onDelete(added.parcel.id)
-        testScheduler.runCurrent()
-        val afterDelete = vm.state.value
-        assertTrue(afterDelete.cards.isEmpty())
-        val toast = afterDelete.toast!!
-        assertEquals("Package deleted", toast.message)
+        awaitParcelDeleted(added.parcel.id)  // committed NOW — no grace period
+        val toast = awaitRecorded { it.toast?.message == "Package deleted" }.toast!!
         assertTrue(toast.showUndo)
-        assertNotNull(parcelRow.value)  // hidden, not deleted yet — cached pre-delete row, no fresh Room I/O
+        awaitState { it.cards.isEmpty() }
         vm.onUndo()
-        val afterUndo = awaitState { it.cards.size == 1 && it.toast == null }
+        val afterUndo = awaitState { it.cards.size == 1 }
         assertEquals(1, afterUndo.cards.size)
         assertNotNull(repo.observeParcel(added.parcel.id).first())
+    }
+
+    @Test fun delete_commits_even_if_the_screen_is_left_before_the_toast_expires() = runTest {
+        // The resurrection half of the Pixel bug 2026-09-03: the old grace-period job lived in
+        // viewModelScope, so leaving the screen inside the undo window cancelled the delete and
+        // the "deleted" parcel came back.
+        val vm = vm()
+        val added = repo.addParcel("Beans", "9400111899223197428", WellKnownCarriers.USPS) as AddResult.Added
+        awaitState { it.cards.size == 1 }
+        vm.onDelete(added.parcel.id)
+        testScheduler.runCurrent()
+        vm.viewModelScope.cancel()  // screen gone, undo window not yet expired
+        awaitParcelDeleted(added.parcel.id)
+        assertNull(repo.observeParcel(added.parcel.id).first())
     }
 
     @Test fun delete_without_undo_removes_parcel_after_grace_period() = runTest {

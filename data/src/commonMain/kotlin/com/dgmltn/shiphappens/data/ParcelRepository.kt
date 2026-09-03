@@ -5,6 +5,7 @@ import com.dgmltn.shiphappens.data.settings.SettingsRepository
 import com.dgmltn.shiphappens.data.source.SourceRegistry
 import com.dgmltn.shiphappens.domain.*
 import com.dgmltn.shiphappens.source.api.*
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
 import kotlin.time.Duration.Companion.minutes
 import kotlin.uuid.Uuid
@@ -95,6 +97,27 @@ class ParcelRepository(
     suspend fun archive(id: String) = dao.archive(id, clock.now().toEpochMilliseconds())
     suspend fun restore(id: String) = dao.restore(id)
     suspend fun delete(id: String) = dao.deleteParcel(id)
+
+    /**
+     * Deletes the row NOW and returns the inverse action: a faithful reinsert of the row and its
+     * events (archived state included). Undo-as-inverse means there is never a window where the
+     * UI says "deleted" while the row still blocks re-adding its number, and no pending job whose
+     * cancellation quietly resurrects the parcel (both halves seen in Pixel QA 2026-09-03 under
+     * the old grace-period delete). NonCancellable: once the user has been told "deleted", a
+     * dying caller scope must not abort the write. The undo no-ops if the number was re-added in
+     * the meantime — reinserting alongside the replacement would duplicate it. Null only when the
+     * row doesn't exist.
+     */
+    suspend fun deleteReturningUndo(id: String): (suspend () -> Unit)? = withContext(NonCancellable) {
+        val row = dao.getById(id) ?: return@withContext null
+        dao.deleteParcel(id)
+        suspend {
+            if (!dao.normalizedNumbers().contains(row.parcel.normalizedTracking)) {
+                dao.upsertParcel(row.parcel)
+                dao.replaceEvents(row.parcel.id, row.events)
+            }
+        }
+    }
 
     suspend fun refresh(id: String): Boolean = refreshRow(id) is RefreshOutcome.Success
 

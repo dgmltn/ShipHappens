@@ -164,6 +164,56 @@ class ParcelRepositoryTest {
         assertEquals("Baseball cap", r.observeParcel(a.parcel.id).first()!!.name)
     }
 
+    @Test fun delete_returning_undo_removes_immediately_and_undo_restores_faithfully() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val r = repo(scope)
+        val a = r.addParcel("Cap", "1Z999AA10123456784", WellKnownCarriers.UPS) as AddResult.Added
+        r.applySnapshot(
+            a.parcel.id,
+            TrackingSnapshot(
+                status = TrackingStatus.IN_TRANSIT,
+                events = listOf(TrackingEvent(clock.now(), "Departed facility", "Reno, NV")),
+            ),
+            sourceId = "ups",
+        )
+        val undo = r.deleteReturningUndo(a.parcel.id)
+        assertNotNull(undo)
+        assertNull(r.observeParcel(a.parcel.id).first())  // gone NOW, not after a grace period
+        undo()
+        val restored = r.observeParcel(a.parcel.id).first()
+        assertNotNull(restored)
+        assertEquals("Cap", restored.name)
+        assertEquals(TrackingStatus.IN_TRANSIT, restored.status)
+        assertEquals(listOf("Departed facility"), restored.events.map { it.description })
+    }
+
+    @Test fun same_number_readds_immediately_after_delete() = runTest {
+        // The Pixel bug 2026-09-03: "deleted" must mean deleted — a re-add moments later may
+        // never see the old row and answer Duplicate.
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val r = repo(scope)
+        val a = r.addParcel("Cap", "1Z999AA10123456784", WellKnownCarriers.UPS) as AddResult.Added
+        r.deleteReturningUndo(a.parcel.id)
+        assertIs<AddResult.Added>(r.addParcel("Cap again", "1Z999AA10123456784", WellKnownCarriers.UPS))
+    }
+
+    @Test fun undo_after_the_number_was_readded_does_not_duplicate() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val r = repo(scope)
+        val a = r.addParcel("Cap", "1Z999AA10123456784", WellKnownCarriers.UPS) as AddResult.Added
+        val undo = r.deleteReturningUndo(a.parcel.id)!!
+        val readded = r.addParcel("Cap again", "1Z999AA10123456784", WellKnownCarriers.UPS) as AddResult.Added
+        undo()  // stale undo tapped after the user already re-added the same number
+        val all = r.observeParcels(false).first()
+        assertEquals(listOf(readded.parcel.id), all.map { it.id })
+    }
+
+    @Test fun delete_returning_undo_on_missing_row_is_null() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val r = repo(scope)
+        assertNull(r.deleteReturningUndo("nope"))
+    }
+
     @Test fun delete_removes_parcel() = runTest {
         val scope = CoroutineScope(coroutineContext + SupervisorJob())
         val r = repo(scope)
