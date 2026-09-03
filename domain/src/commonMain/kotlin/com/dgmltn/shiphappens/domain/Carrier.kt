@@ -14,7 +14,9 @@ object WellKnownCarriers {
     val AMAZON = Carrier("amazon", "Amazon", "#146EB4")
     // Amazon's squid-ink navy; distinct from the orders source so carrier→webSpec lookups stay 1:1.
     val AMAZON_LOGISTICS = Carrier("amzl", "Amazon Logistics", "#37475A")
-    val all = listOf(UPS, USPS, FEDEX, AMAZON, AMAZON_LOGISTICS)
+    // DHL red (#D40511) darkened likewise; "dhlecs" not "dhl", leaving room for a DHL Express carrier.
+    val DHL_ECOMMERCE = Carrier("dhlecs", "DHL eCommerce", "#B3040D")
+    val all = listOf(UPS, USPS, FEDEX, AMAZON, AMAZON_LOGISTICS, DHL_ECOMMERCE)
     fun byCode(code: String): Carrier? = all.firstOrNull { it.code == code.trim().lowercase() }
 }
 

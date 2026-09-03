@@ -13,6 +13,9 @@ object BuiltInCarrierDetection {
     private val AMAZON = Regex("^[17]\\d{16}$")
     // Amazon Logistics: TBA + 9-15 digits (e.g. TBA333593378975).
     private val AMZL = Regex("^TBA\\d{9,15}$")
+    // DHL eCommerce: only the 420+ZIP-prefixed IMpb form — the bare 22-digit body stays USPS's,
+    // whose regex claims it first anyway (USPS does the last mile and tracks it too). 2026-09-03.
+    private val DHLECS = Regex("^420\\d{5}9\\d{21,25}$")
 
     fun detect(raw: String): Carrier? {
         val norm = normalizeTracking(raw.trim())
@@ -23,6 +26,7 @@ object BuiltInCarrierDetection {
             FEDEX.matches(norm) -> WellKnownCarriers.FEDEX
             AMAZON.matches(norm) -> WellKnownCarriers.AMAZON
             AMZL.matches(norm) -> WellKnownCarriers.AMAZON_LOGISTICS
+            DHLECS.matches(norm) -> WellKnownCarriers.DHL_ECOMMERCE
             else -> null
         }
     }

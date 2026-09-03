@@ -20,6 +20,12 @@ class ModelTest {
         assertEquals(WellKnownCarriers.AMAZON, WellKnownCarriers.byCode("Amazon"))
     }
 
+    @Test fun dhl_ecommerce_carrier_is_well_known() {
+        val c = WellKnownCarriers.byCode("dhlecs")
+        assertEquals("DHL eCommerce", c?.displayName)
+        assertEquals("#B3040D", c?.accentColorHex)
+    }
+
     @Test fun fallback_color_is_deterministic_and_from_palette() {
         assertEquals(fallbackAccentColor("dhl"), fallbackAccentColor("dhl"))
         assertTrue(fallbackAccentColor("dhl").startsWith("#"))

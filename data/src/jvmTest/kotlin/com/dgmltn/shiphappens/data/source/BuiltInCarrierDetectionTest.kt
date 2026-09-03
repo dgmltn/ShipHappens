@@ -21,6 +21,12 @@ class BuiltInCarrierDetectionTest {
         assertEquals(WellKnownCarriers.AMAZON, BuiltInCarrierDetection.detect("701-2345678-9012345"))
         assertNull(BuiltInCarrierDetection.detect("213-1234567-1234567"))
     }
+    @Test fun detects_dhl_ecommerce_zip_prefixed_impb_only() {
+        assertEquals("dhlecs", BuiltInCarrierDetection.detect("420 30001 9261-2345 0000 0000 0000 42")?.code)
+        // The bare 22-digit IMpb stays USPS's: tools.usps.com tracks these too (2026-09-03).
+        assertEquals(WellKnownCarriers.USPS, BuiltInCarrierDetection.detect("9261234500000000000042"))
+    }
+
     @Test fun rejects_short_and_garbage() {
         assertNull(BuiltInCarrierDetection.detect("123"))
         assertNull(BuiltInCarrierDetection.detect("hello world, meeting at 3pm"))
