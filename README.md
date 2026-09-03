@@ -35,6 +35,7 @@ source/
   fedex/       FedEx carrier source (fedex.com/fedextrack in a WebView).
   amazon/      Amazon orders source (amazon.com order pages, login required).
   amzl/        Amazon Logistics source (track.amazon.com, anonymous TBA tracking).
+  dhlecs/      DHL eCommerce source (webtrack.dhlecs.com, anonymous API + locale-file vocabulary).
 ui/            Compose Multiplatform screens (list, detail, settings), Navigation 3, ViewModels,
                and appModules() — the single place all Koin modules are assembled.
 app-android/   Android application shell: MainActivity, Koin bootstrap with androidContext.
@@ -85,19 +86,23 @@ gitignored and recreated by `xcodegen generate`, while `app-ios/ShipHappens/Info
 ```bash
 ./gradlew :domain:jvmTest :data:jvmTest :source:api:jvmTest :source:ups:jvmTest \
           :source:usps:jvmTest :source:fedex:jvmTest :source:amazon:jvmTest \
-          :source:amzl:jvmTest :source:webview:jvmTest \
+          :source:amzl:jvmTest :source:dhlecs:jvmTest :source:webview:jvmTest \
           :ui:testAndroidHostTest --console=plain
 ```
 
 Note `:ui`'s task is `testAndroidHostTest`, not `testDebugUnitTest` — the UI module's unit tests
-run on the Android-host test source set. Current suite: 351 tests across 10 modules (domain 14,
-data 66, api 2, ups 16, usps 29, fedex 35, amazon 45, amzl 17, webview 79, ui 48), all passing.
+run on the Android-host test source set. Current suite: 444 tests across 11 modules (domain 15,
+data 92, api 2, ups 23, usps 29, fedex 35, amazon 55, amzl 21, dhlecs 27, webview 85, ui 60),
+all passing.
 
 ## Daily update
 
 With "Daily update" enabled in Settings, the app refreshes every undelivered parcel once a day at
 the chosen local time (8:00 AM by default) and posts one notification per parcel whose status or
-delivery date changed. The decision logic — candidate selection, change detection, notification
+delivery date changed. Every pass also posts, on a separate diagnostics channel, a live progress
+notification while it runs and an unconditional per-parcel summary when it finishes (or a failure
+notification if the pass itself dies) — so a quiet pass is still visibly a pass that ran. The
+decision logic — candidate selection, change detection, notification
 copy, sign-in-nag dedup — lives in `data/commonMain` (`DailyRefreshRunner`, `NotificationText`);
 Android schedules it with self-rescheduling WorkManager one-time work, iOS with `BGAppRefreshTask`,
 which iOS runs opportunistically, so the time is a hint there rather than a promise. iOS also has
