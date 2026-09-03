@@ -69,6 +69,30 @@ fun classifyStatusWording(raw: String?, extras: StatusKeywords = StatusKeywords(
 }
 
 /**
+ * True when a wording names two or more DIFFERENT stages — the signature of a scraped progress
+ * rail, whose step labels are all in the DOM regardless of the package's actual state (the dhlecs
+ * details route concatenates "Notified En Route Delivered" after the real status; live QA
+ * 2026-09-03 saw it classify a label-only package DELIVERED). No genuine single-status sentence
+ * names two stages, so a DOM fallback should refuse such text instead of letting the precedence
+ * chain pick whichever stage matches first. Delay wordings don't count: a delay is a modifier,
+ * not a stage.
+ */
+fun isMultiStageWording(raw: String?, extras: StatusKeywords = StatusKeywords()): Boolean {
+    val t = normalizeWording(raw)
+    if (t.isEmpty()) return false
+    fun hit(shared: List<String>, extra: List<String>) = shared.any { it in t } || extra.any { it in t }
+    val stages = listOf(
+        hit(OUT_FOR_DELIVERY, extras.outForDelivery),
+        hit(DELIVERED, extras.delivered),
+        hit(EXCEPTION, extras.exception),
+        hit(LABEL_CREATED, extras.labelCreated),
+        hit(SHIPPED, extras.shipped),
+        hit(IN_TRANSIT, extras.inTransit),
+    )
+    return stages.count { it } >= 2
+}
+
+/**
  * Whether a wording reports a delay — asked independently of [classifyStatusWording], because a
  * delay is orthogonal to the stage: a package can be in transit and late, out for delivery and
  * late, or an exception and late. Callers persist the answer as a note alongside the status

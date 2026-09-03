@@ -29,6 +29,18 @@ class DhlEcsPageLogicTest {
         assertNull(trackingOf("En Route")?.delayNote)
     }
 
+    @Test fun progress_rail_text_is_refused_not_classified() {
+        // Live-QA capture 2026-09-03 (number fabricated): on the SPA's details route the fallback
+        // selector matched a container whose text concatenates the current status WITH the rail's
+        // static step labels — and "Delivered" in the rail overwrote a label-only package via
+        // scrape-on-view. Ambiguous multi-stage text must route to Unparsed (null), leaving the
+        // truth to the API capture that fires on the same page.
+        val rail = "Tracking Number: 420300019261234500000000000042Electronic Notification" +
+            "FromPLAINFIELD, IN 46168, USNotifiedEn RouteDeliveredNotifiedEn RouteDeliveredNotifiedEn RouteDelivered"
+        assertNull(parseDhlEcsRaw(DomRaw(kind = "tracker", statusText = rail)))
+        assertNull(parseDhlEcsRaw(DomRaw(kind = "tracker", statusText = "En Route Delivered")))
+    }
+
     @Test fun not_found_wording_routes_to_not_found() {
         // "Unfortunately, no results found." — webtrack's en-US locale copy (recon 2026-09-03).
         assertEquals(

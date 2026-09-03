@@ -121,6 +121,23 @@ class StatusVocabularyTest {
         )
     }
 
+    @Test fun multi_stage_wording_is_recognized_as_a_progress_rail() {
+        // A scraped progress rail carries EVERY step label regardless of the package's state
+        // (dhlecs live QA 2026-09-03: "…Electronic Notification…NotifiedEn RouteDelivered…"
+        // classified DELIVERED for a label-only package). Two or more distinct stages in one
+        // wording is that signature, and no real single-status sentence looks like it.
+        val dhlish = StatusKeywords(labelCreated = listOf("electronic notification"), inTransit = listOf("en route"))
+        assertTrue(isMultiStageWording("Electronic Notification Notified En Route Delivered", dhlish))
+        assertTrue(isMultiStageWording("Label created In transit Delivered"))
+        // Single-status sentences — including multi-keyword ones within a stage — are not rails.
+        assertFalse(isMultiStageWording("Out for delivery"))
+        assertFalse(isMultiStageWording("En Route - Delayed", dhlish))  // delay is a modifier, not a stage
+        assertFalse(isMultiStageWording("Delivery attempted; returned for re-delivery"))
+        assertFalse(isMultiStageWording("Electronic Notification", dhlish))
+        assertFalse(isMultiStageWording(""))
+        assertFalse(isMultiStageWording(null))
+    }
+
     @Test fun extras_earlier_in_the_chain_beat_shared_later_stages() {
         // An extra exception keyword must win over a shared transit keyword in the same text.
         assertEquals(

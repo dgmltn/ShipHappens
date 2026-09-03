@@ -7,6 +7,7 @@ import com.dgmltn.shiphappens.source.webview.ScrapedTracking
 import com.dgmltn.shiphappens.source.webview.StatusKeywords
 import com.dgmltn.shiphappens.source.webview.classifyStatusWording
 import com.dgmltn.shiphappens.source.webview.isDelayedWording
+import com.dgmltn.shiphappens.source.webview.isMultiStageWording
 
 /**
  * Everything the DHL eCommerce scrape *decides*. The wordings come from webtrack's en-US locale
@@ -46,6 +47,11 @@ internal fun parseDhlEcsRaw(raw: DomRaw): DomExtraction? {
     if (raw.kind != "tracker") return null
     if (raw.pageText?.let { DHLECS_NOT_FOUND.containsMatchIn(it) } == true) return DomExtraction(page = "notFound")
     val statusText = raw.statusText?.takeIf { it.isNotBlank() } ?: return null
+    // A container grab that swallowed the progress rail names every stage at once — refuse it
+    // (Unparsed, nothing persisted) rather than classify; the API capture on the same page has
+    // the truth. Live QA 2026-09-03: the details route's rail overwrote a label-only package as
+    // DELIVERED through the scrape-on-view path.
+    if (isMultiStageWording(statusText, DHLECS_KEYWORDS)) return null
     val status = classifyDhlEcsStatus(statusText) ?: TrackingStatus.UNKNOWN
     // The page copy is the only delay wording the DOM fallback has, so it is the note.
     val delayNote = statusText.takeIf { isDelayedWording(it) }

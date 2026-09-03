@@ -16,8 +16,12 @@ function() {
   var text = (document.body && document.body.innerText) || '';
   var pageText = text.replace(/\s+/g, ' ').slice(0, 400);
   function clean(el) { return el ? el.textContent.replace(/\s+/g, ' ').trim() : null; }
+  // .list-status only (the results list's status cell) — NOT [class*="shipment-status"]: on the
+  // details route that matched a CONTAINER whose text concatenates the progress rail's static
+  // step labels ("Notified En Route Delivered"), and the rail's "Delivered" overwrote a
+  // label-only package (live QA 2026-09-03). Kotlin refuses multi-stage text too, but the
+  // precise-node-or-nothing rule is the same lesson as USPS's 2026-07-15 ancestor-wrapper bug.
   var statusEl = document.querySelector('.list-status')
-    || document.querySelector('[class*="shipment-status"], [class*="delivery-status"]')
     || document.querySelector('main h1, h1');
   var statusText = clean(statusEl);
   if (statusText) return {page: 'raw', raw: {kind: 'tracker', statusText: statusText, pageText: pageText}};
