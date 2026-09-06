@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dgmltn.shiphappens.data.AppClock
 import com.dgmltn.shiphappens.data.ParcelRepository
+import com.dgmltn.shiphappens.data.TimeFormat
 import com.dgmltn.shiphappens.data.daily.DailyRefreshScheduler
 import com.dgmltn.shiphappens.data.settings.DEFAULT_DAILY_UPDATE_TIME
 import com.dgmltn.shiphappens.data.settings.RefreshFrequency
@@ -35,6 +36,8 @@ data class SettingsUiState(
     val dailyUpdateTime: LocalTime = DEFAULT_DAILY_UPDATE_TIME,
     /** True after the user tried to enable daily updates and the system permission was denied. */
     val dailyUpdateBlocked: Boolean = false,
+    /** The device's clock convention, which the time row and its picker both follow. */
+    val uses24HourClock: Boolean = false,
     val toast: String? = null,
 )
 
@@ -45,6 +48,7 @@ class SettingsViewModel(
     private val cookieJar: WebCookieJar,
     private val scheduler: DailyRefreshScheduler,
     private val clock: AppClock,
+    private val timeFormat: TimeFormat,
 ) : ViewModel() {
 
     private val toast = MutableStateFlow<String?>(null)
@@ -76,6 +80,7 @@ class SettingsViewModel(
             dailyUpdateEnabled = s.dailyUpdateEnabled,
             dailyUpdateTime = s.dailyUpdateTime,
             dailyUpdateBlocked = b,
+            uses24HourClock = timeFormat.uses24HourClock(),
             toast = t,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
@@ -123,7 +128,7 @@ class SettingsViewModel(
         settings.setDailyUpdateTime(time)
         if (settings.settings.first().dailyUpdateEnabled) {
             scheduler.schedule(time)
-            flash(NextUpdateToast.message(time, clock.now(), TimeZone.currentSystemDefault()))
+            flash(NextUpdateToast.message(time, clock.now(), TimeZone.currentSystemDefault(), timeFormat.uses24HourClock()))
         }
     }
 

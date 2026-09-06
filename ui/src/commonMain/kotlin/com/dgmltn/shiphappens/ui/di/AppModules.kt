@@ -23,7 +23,7 @@ import org.koin.dsl.module
 val uiModule = module {
     viewModelOf(::ListViewModel)
     viewModelOf(::SettingsViewModel)
-    viewModel { params -> DetailViewModel(params.get(), get(), get(), get()) }
+    viewModel { params -> DetailViewModel(params.get(), get(), get(), get(), get()) }
     viewModel { params -> com.dgmltn.shiphappens.ui.web.WebDetailViewModel(params.get(), get(), get(), get(), get()) }
     viewModel { params -> com.dgmltn.shiphappens.ui.web.WebLoginViewModel(params.get(), get(), get(), get()) }
 }

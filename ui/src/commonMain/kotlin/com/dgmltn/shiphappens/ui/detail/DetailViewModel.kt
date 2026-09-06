@@ -4,12 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dgmltn.shiphappens.data.AppClock
 import com.dgmltn.shiphappens.data.ParcelRepository
+import com.dgmltn.shiphappens.data.TimeFormat
 import com.dgmltn.shiphappens.data.source.SourceRegistry
 import com.dgmltn.shiphappens.domain.*
 import com.dgmltn.shiphappens.design.accentHex
 import com.dgmltn.shiphappens.source.webview.WebCapableSource
 import com.dgmltn.shiphappens.domain.TRACKING_STEP_LABELS
-import com.dgmltn.shiphappens.domain.design12h
+import com.dgmltn.shiphappens.domain.designTime
 import com.dgmltn.shiphappens.domain.designFormat
 import com.dgmltn.shiphappens.domain.formatEtaWindow
 import kotlinx.coroutines.flow.SharingStarted
@@ -48,6 +49,7 @@ class DetailViewModel(
     private val repository: ParcelRepository,
     private val clock: AppClock,
     registry: SourceRegistry,
+    private val timeFormat: TimeFormat,
 ) : ViewModel() {
 
     private val webCarrierNames: Map<String, String> =
@@ -87,14 +89,15 @@ class DetailViewModel(
             else -> "Arrives in $days days"
         }
         val tz = TimeZone.currentSystemDefault()
+        val is24Hour = timeFormat.uses24HourClock()
         // Delivered parcels show the actual delivery time (last DELIVERED event) rather than a
         // stale or absent ETA — USPS delivered pages carry no expected-delivery block at all.
         val deliveredAt = if (delivered) events.lastOrNull { it.status == TrackingStatus.DELIVERED }?.timestamp else null
-        val windowText = deliveredAt?.toLocalDateTime(tz)?.let { "${it.date.designFormat()} · ${it.time.design12h()}" }
+        val windowText = deliveredAt?.toLocalDateTime(tz)?.let { "${it.date.designFormat()} · ${it.time.designTime(is24Hour)}" }
             ?: etaDate?.let { d ->
                 // Delivered parcels show a bare time (no "by"/range); otherwise render the window.
-                val w = if (delivered) etaWindowEnd?.design12h()
-                        else formatEtaWindow(etaWindowStart, etaWindowEnd)
+                val w = if (delivered) etaWindowEnd?.designTime(is24Hour)
+                        else formatEtaWindow(etaWindowStart, etaWindowEnd, is24Hour)
                 d.designFormat() + if (w == null) "" else " · $w"
             } ?: "—"
 
@@ -110,7 +113,7 @@ class DetailViewModel(
                 val ldt = it.timestamp.toLocalDateTime(tz)
                 val base = ldt.date.designFormat()
                 when {
-                    i == 4 -> "$base · ${ldt.time.design12h()}"
+                    i == 4 -> "$base · ${ldt.time.designTime(is24Hour)}"
                     stepState == StepState.CURRENT -> "$base · latest update"
                     else -> base
                 }

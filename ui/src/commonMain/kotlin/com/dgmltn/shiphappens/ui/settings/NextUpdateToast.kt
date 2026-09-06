@@ -1,7 +1,7 @@
 package com.dgmltn.shiphappens.ui.settings
 
 import com.dgmltn.shiphappens.data.daily.NextRunTime
-import com.dgmltn.shiphappens.domain.design12h
+import com.dgmltn.shiphappens.domain.designTime
 import kotlin.time.Instant
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
@@ -14,10 +14,10 @@ import kotlinx.datetime.toLocalDateTime
  */
 object NextUpdateToast {
 
-    fun message(target: LocalTime, now: Instant, zone: TimeZone): String {
+    fun message(target: LocalTime, now: Instant, zone: TimeZone, is24Hour: Boolean): String {
         val next = NextRunTime.nextOccurrence(target, now, zone)
         if (next.toLocalDateTime(zone).date != now.toLocalDateTime(zone).date) {
-            return "Next scheduled update tomorrow at ${target.design12h()}"
+            return "Next scheduled update tomorrow at ${target.designTime(is24Hour)}"
         }
         val minutes = (next - now).inWholeMinutes
         val amount = when {

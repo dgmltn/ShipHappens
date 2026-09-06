@@ -3,6 +3,8 @@ package com.dgmltn.shiphappens.data.di
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room3.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import com.dgmltn.shiphappens.data.TimeFormat
+import com.dgmltn.shiphappens.data.TwelveHourFormat
 import com.dgmltn.shiphappens.data.clipboard.ClipboardReader
 import com.dgmltn.shiphappens.data.daily.*
 import com.dgmltn.shiphappens.data.db.ShipHappensDb
@@ -23,4 +25,5 @@ actual fun platformDataModule(): Module = module {
     single<ClipboardReader> { object : ClipboardReader { override suspend fun readText(): String? = null } }
     single<StatusNotifier> { NoOpStatusNotifier }
     single<DailyRefreshScheduler> { NoOpDailyRefreshScheduler }
+    single<TimeFormat> { TwelveHourFormat }
 }

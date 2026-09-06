@@ -50,6 +50,9 @@ class SettingsViewModelTest {
     private lateinit var vm: SettingsViewModel
     private val scheduler = RecordingScheduler()
 
+    /** Flipped by the 24-hour tests before building the ViewModel. */
+    private var timeFormat = TimeFormat { false }
+
     /** Captures what the ViewModel books, so the tests assert scheduling without WorkManager. */
     private class RecordingScheduler : DailyRefreshScheduler {
         val scheduled = mutableListOf<LocalTime>()
@@ -78,7 +81,8 @@ class SettingsViewModelTest {
     private suspend fun awaitRecorded(timeoutMs: Long = 10_000, predicate: (SettingsUiState) -> Boolean): SettingsUiState =
         withContext(Dispatchers.Default) { withTimeout(timeoutMs) { recordedStates.first(predicate) } }
 
-    private suspend fun TestScope.vm(): SettingsViewModel {
+    private suspend fun TestScope.vm(is24Hour: Boolean = false): SettingsViewModel {
+        timeFormat = TimeFormat { is24Hour }
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val dir = kotlin.io.path.createTempDirectory("settingsvm").toString()
         settings = SettingsRepository(PreferenceDataStoreFactory.createWithPath(scope = backgroundScope) { "$dir/s.preferences_pb".toPath() })
@@ -91,7 +95,7 @@ class SettingsViewModelTest {
             settings,
         )
         repo = ParcelRepository(db.parcelDao(), registry, settings, FixedClock())
-        vm = SettingsViewModel(registry, settings, repo, NoOpCookieJar, scheduler, FixedClock())
+        vm = SettingsViewModel(registry, settings, repo, NoOpCookieJar, scheduler, FixedClock(), timeFormat)
         // Records every emission and keeps WhileSubscribed alive for the whole test.
         backgroundScope.launch { vm.state.collect { check(recordedStates.tryEmit(it)) } }
         // Prime the pipeline: the first combined emission requires settings.settings' initial load.
@@ -215,5 +219,15 @@ class SettingsViewModelTest {
 
         // Exact copy is NextUpdateToastTest's job — the system zone isn't pinned here.
         awaitRecorded { it.toast?.startsWith("Next scheduled update") == true }
+    }
+
+    @Test fun the_device_clock_convention_reaches_the_state() = runTest {
+        vm(is24Hour = true)
+        assertTrue(awaitState { it.uses24HourClock }.uses24HourClock)
+    }
+
+    @Test fun a_12_hour_device_reports_a_12_hour_clock() = runTest {
+        vm()
+        assertFalse(awaitState { it.carriers.isNotEmpty() }.uses24HourClock)
     }
 }

@@ -25,7 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.dgmltn.shiphappens.data.settings.RefreshFrequency
-import com.dgmltn.shiphappens.domain.design12h
+import com.dgmltn.shiphappens.domain.designTime
 import kotlinx.datetime.LocalTime
 import com.dgmltn.shiphappens.ui.components.ToastOverlay
 import com.dgmltn.shiphappens.design.*
@@ -95,6 +95,7 @@ fun SettingsContent(
                     enabled = state.dailyUpdateEnabled,
                     time = state.dailyUpdateTime,
                     blocked = state.dailyUpdateBlocked || permissionRevoked,
+                    is24Hour = state.uses24HourClock,
                     onEnabled = onDailyUpdate,
                     onTime = onDailyUpdateTime,
                 )
@@ -199,6 +200,7 @@ private fun DailyUpdateCard(
     enabled: Boolean,
     time: LocalTime,
     blocked: Boolean,
+    is24Hour: Boolean,
     onEnabled: (Boolean) -> Unit,
     onTime: (LocalTime) -> Unit,
 ) {
@@ -225,7 +227,7 @@ private fun DailyUpdateCard(
             ) {
                 Text("Check at", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ShipColors.ink,
                     modifier = Modifier.weight(1f))
-                Text(time.design12h(), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ShipColors.ink)
+                Text(time.designTime(is24Hour), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = ShipColors.ink)
             }
         }
         if (blocked) {
@@ -237,15 +239,20 @@ private fun DailyUpdateCard(
         }
     }
     if (picking) {
-        DailyTimePickerDialog(time, onDismiss = { picking = false }, onConfirm = { onTime(it); picking = false })
+        DailyTimePickerDialog(time, is24Hour, onDismiss = { picking = false }, onConfirm = { onTime(it); picking = false })
     }
 }
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
-private fun DailyTimePickerDialog(initial: LocalTime, onDismiss: () -> Unit, onConfirm: (LocalTime) -> Unit) {
+private fun DailyTimePickerDialog(
+    initial: LocalTime,
+    is24Hour: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (LocalTime) -> Unit,
+) {
     val pickerState = androidx.compose.material3.rememberTimePickerState(
-        initialHour = initial.hour, initialMinute = initial.minute, is24Hour = false,
+        initialHour = initial.hour, initialMinute = initial.minute, is24Hour = is24Hour,
     )
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,

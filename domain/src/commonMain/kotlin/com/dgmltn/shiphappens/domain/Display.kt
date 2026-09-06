@@ -31,16 +31,33 @@ private fun LocalTime.meridiem(): String = if (hour < 12) "AM" else "PM"
 
 fun LocalTime.design12h(): String = "${clock12()} ${meridiem()}"
 
+/** Zero-padded 24-hour clock: "07:00", "15:30", midnight as "00:00". */
+fun LocalTime.design24h(): String =
+    "${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}"
+
+/**
+ * A time in the convention the device is set to — every user-facing time goes through here, so
+ * a phone on a 24-hour clock never sees an AM/PM anywhere in the app. The flag comes from
+ * `TimeFormat` (in `data`), which reads the platform setting.
+ */
+fun LocalTime.designTime(is24Hour: Boolean): String = if (is24Hour) design24h() else design12h()
+
 /**
  * Renders an ETA delivery window.
  *
  * - both set   -> "3:00 – 5:00 PM" (meridiem collapsed when shared, else "11:30 AM – 1:30 PM")
- * - end only   -> "by 8:00 PM"
+ *                 or "15:00 – 17:00" on a 24-hour clock, where there's nothing to collapse
+ * - end only   -> "by 8:00 PM" / "by 20:00"
  * - no end     -> null (a start without an end is degenerate; no carrier produces it)
  */
-fun formatEtaWindow(start: LocalTime?, end: LocalTime?): String? {
+fun formatEtaWindow(start: LocalTime?, end: LocalTime?, is24Hour: Boolean): String? {
     if (end == null) return null
-    if (start == null) return "by ${end.design12h()}"
-    val startText = if (start.meridiem() == end.meridiem()) start.clock12() else start.design12h()
-    return "$startText – ${end.design12h()}"
+    if (start == null) return "by ${end.designTime(is24Hour)}"
+    // 12-hour only: "3:00 – 5:00 PM" reads better than repeating a shared meridiem.
+    val startText = when {
+        is24Hour -> start.design24h()
+        start.meridiem() == end.meridiem() -> start.clock12()
+        else -> start.design12h()
+    }
+    return "$startText – ${end.designTime(is24Hour)}"
 }

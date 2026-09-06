@@ -46,17 +46,21 @@ class DetailViewModelTest {
     private lateinit var db: ShipHappensDb
     private lateinit var vm: DetailViewModel
 
+    /** Flipped by the 24-hour tests before building the ViewModel. */
+    private var timeFormat = TimeFormat { false }
+
     private suspend fun awaitState(timeoutMs: Long = 10_000, predicate: (DetailUiState) -> Boolean): DetailUiState =
         withContext(Dispatchers.Default) { withTimeout(timeoutMs) { vm.state.first(predicate) } }
 
-    private fun TestScope.vm(parcel: Parcel): DetailViewModel {
+    private fun TestScope.vm(parcel: Parcel, is24Hour: Boolean = false): DetailViewModel {
+        timeFormat = TimeFormat { is24Hour }
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val dir = kotlin.io.path.createTempDirectory("detail").toString()
         val settings = SettingsRepository(PreferenceDataStoreFactory.createWithPath(scope = backgroundScope) { "$dir/s.preferences_pb".toPath() })
         db = Room.inMemoryDatabaseBuilder<ShipHappensDb>().setDriver(BundledSQLiteDriver()).build()
         val registry = SourceRegistry(listOf(com.dgmltn.shiphappens.source.ups.UpsWebSource(com.dgmltn.shiphappens.source.webview.NoWebScraper)), settings)
         val repo = ParcelRepository(db.parcelDao(), registry, settings, FixedClock())
-        val v = DetailViewModel(parcel.id, repo, FixedClock(), registry)
+        val v = DetailViewModel(parcel.id, repo, FixedClock(), registry, timeFormat)
         backgroundScope.launch { v.state.collect() }
         vm = v
         return v
@@ -119,6 +123,26 @@ class DetailViewModelTest {
         val s = awaitState { it.loaded }
         assertEquals("Estimated delivery", s.windowLabel)
         assertEquals("Sat, Jul 11 · 3:00 – 5:00 PM", s.windowText)
+    }
+
+    @Test fun a_24_hour_device_gets_24_hour_windows() = runTest {
+        val p = base(TrackingStatus.OUT_FOR_DELIVERY, LocalDate(2026, 7, 11))
+            .copy(etaWindowStart = LocalTime(15, 0), etaWindowEnd = LocalTime(17, 0))
+        vm(p, is24Hour = true)
+        db.parcelDao().upsertParcel(p.toEntity())
+        assertEquals("Sat, Jul 11 · 15:00 – 17:00", awaitState { it.loaded }.windowText)
+    }
+
+    @Test fun a_24_hour_device_gets_a_24_hour_delivery_stamp() = runTest {
+        val delivery = Instant.fromEpochMilliseconds(1_752_148_800_000)
+        val ev = TrackingEvent(delivery, "Delivered", "Portland, OR", TrackingStatus.DELIVERED)
+        val p = base(TrackingStatus.DELIVERED, LocalDate(2026, 7, 10)).copy(events = listOf(ev))
+        vm(p, is24Hour = true)
+        db.parcelDao().upsertParcel(p.toEntity())
+        db.parcelDao().replaceEvents(p.id, listOf(ev.toEntity(p.id)))
+        val ldt = delivery.toLocalDateTime(TimeZone.currentSystemDefault())
+        val expected = "${ldt.date.designFormat()} · ${ldt.time.design24h()}"
+        assertEquals(expected, awaitState { it.loaded && it.windowText == expected }.windowText)
     }
 
     @Test fun timeline_marks_done_current_todo() = runTest {
