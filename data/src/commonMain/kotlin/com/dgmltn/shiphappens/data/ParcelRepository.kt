@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Instant
 import kotlin.uuid.Uuid
 
 sealed interface AddResult {
@@ -165,6 +166,12 @@ class ParcelRepository(
             statusAfter = updated.status.toTrackingStatus(),
             etaBefore = row.parcel.etaDate?.let(LocalDate::parse),
             etaAfter = updated.etaDate?.let(LocalDate::parse),
+            // The two vantage points an unmoved ETA is judged from — an ETA grows imminent
+            // between checks without the snapshot changing at all. The epoch column is a DB
+            // boundary, so it converts here and travels no further.
+            checkedOn = clock.today(),
+            previouslyCheckedOn = row.parcel.lastRefreshedAt
+                ?.let { clock.dateOf(Instant.fromEpochMilliseconds(it)) },
             delayNoteBefore = row.parcel.delayNote,
             delayNoteAfter = updated.delayNote,
         )

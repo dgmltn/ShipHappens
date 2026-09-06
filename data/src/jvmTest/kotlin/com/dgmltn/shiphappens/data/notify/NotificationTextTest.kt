@@ -8,12 +8,15 @@ import kotlinx.datetime.LocalDate
 import kotlin.test.*
 
 class NotificationTextTest {
+    private val today = LocalDate(2026, 8, 12)  // a Wednesday, a week before the fixtures' ETAs
+
     private fun change(
         before: TrackingStatus = TrackingStatus.IN_TRANSIT,
         after: TrackingStatus = TrackingStatus.OUT_FOR_DELIVERY,
         etaBefore: LocalDate? = null,
         etaAfter: LocalDate? = null,
-    ) = ParcelChange("p1", "Nike shoes", before, after, etaBefore, etaAfter)
+        checkedOn: LocalDate = today,
+    ) = ParcelChange("p1", "Nike shoes", before, after, etaBefore, etaAfter, checkedOn)
 
     @Test fun title_is_the_parcel_name() {
         assertEquals("Nike shoes", NotificationText.title(change()))
@@ -23,9 +26,14 @@ class NotificationTextTest {
         assertEquals("Out for delivery", NotificationText.body(change()))
     }
 
-    @Test fun status_change_with_eta_appends_the_arrival_date() {
+    @Test fun status_change_with_a_far_eta_appends_the_arrival_date() {
         val c = change(etaBefore = LocalDate(2026, 8, 19), etaAfter = LocalDate(2026, 8, 19))
         assertEquals("Out for delivery · arriving Wed, Aug 19", NotificationText.body(c))
+    }
+
+    @Test fun status_change_with_a_near_eta_appends_it_relatively() {
+        val c = change(etaBefore = LocalDate(2026, 8, 12), etaAfter = LocalDate(2026, 8, 12))
+        assertEquals("Out for delivery · arriving today", NotificationText.body(c))
     }
 
     @Test fun delivered_reads_as_delivered() {
@@ -37,16 +45,47 @@ class NotificationTextTest {
             NotificationText.body(change(after = TrackingStatus.EXCEPTION)))
     }
 
+    @Test fun an_eta_that_has_become_tomorrow_says_so_without_a_was_clause() {
+        // The date never moved — only the calendar did — so "(was ...)" would name the same day.
+        val c = change(before = TrackingStatus.IN_TRANSIT, after = TrackingStatus.IN_TRANSIT,
+            etaBefore = LocalDate(2026, 8, 13), etaAfter = LocalDate(2026, 8, 13))
+        assertEquals("Arriving tomorrow", NotificationText.body(c))
+    }
+
+    @Test fun an_eta_that_has_become_today_says_so() {
+        val c = change(before = TrackingStatus.IN_TRANSIT, after = TrackingStatus.IN_TRANSIT,
+            etaBefore = LocalDate(2026, 8, 12), etaAfter = LocalDate(2026, 8, 12))
+        assertEquals("Arriving today", NotificationText.body(c))
+    }
+
+    @Test fun an_eta_inside_the_week_counts_days_and_names_the_weekday() {
+        val c = change(before = TrackingStatus.IN_TRANSIT, after = TrackingStatus.IN_TRANSIT,
+            etaBefore = LocalDate(2026, 8, 15), etaAfter = LocalDate(2026, 8, 15))
+        assertEquals("Arriving in 3 days, on Saturday", NotificationText.body(c))
+    }
+
+    @Test fun an_eta_gone_by_reads_as_late() {
+        val c = change(before = TrackingStatus.IN_TRANSIT, after = TrackingStatus.IN_TRANSIT,
+            etaBefore = LocalDate(2026, 8, 11), etaAfter = LocalDate(2026, 8, 11))
+        assertEquals("Late — was due Tue, Aug 11", NotificationText.body(c))
+    }
+
+    @Test fun a_moved_date_landing_near_keeps_both_the_relative_phrase_and_the_old_date() {
+        val c = change(before = TrackingStatus.IN_TRANSIT, after = TrackingStatus.IN_TRANSIT,
+            etaBefore = LocalDate(2026, 8, 19), etaAfter = LocalDate(2026, 8, 13))
+        assertEquals("Arriving tomorrow (was Wed, Aug 19)", NotificationText.body(c))
+    }
+
     @Test fun eta_only_change_reads_as_a_moved_date() {
         val c = change(before = TrackingStatus.IN_TRANSIT, after = TrackingStatus.IN_TRANSIT,
             etaBefore = LocalDate(2026, 8, 19), etaAfter = LocalDate(2026, 8, 21))
-        assertEquals("Now arriving Fri, Aug 21 (was Wed, Aug 19)", NotificationText.body(c))
+        assertEquals("Arriving Fri, Aug 21 (was Wed, Aug 19)", NotificationText.body(c))
     }
 
     @Test fun eta_appearing_for_the_first_time_omits_the_was_clause() {
         val c = change(before = TrackingStatus.IN_TRANSIT, after = TrackingStatus.IN_TRANSIT,
             etaBefore = null, etaAfter = LocalDate(2026, 8, 21))
-        assertEquals("Now arriving Fri, Aug 21", NotificationText.body(c))
+        assertEquals("Arriving Fri, Aug 21", NotificationText.body(c))
     }
 
     @Test fun sign_in_copy_names_the_source() {
@@ -72,7 +111,7 @@ class NotificationTextTest {
     @Test fun run_summary_body_lists_each_package_with_its_eta() {
         val today = LocalDate(2026, 9, 3)
         fun pkg(name: String, eta: LocalDate?, status: TrackingStatus = TrackingStatus.IN_TRANSIT) =
-            ParcelChange(name, name, status, status, eta, eta)
+            ParcelChange(name, name, status, status, eta, eta, today)
         val summary = RefreshSummary(
             attempted = 4, failed = 0,
             changes = listOf(
@@ -89,18 +128,17 @@ class NotificationTextTest {
             • Boots — 2 days
             • Desk — Sat, Sep 12
             """.trimIndent(),
-            NotificationText.runSummaryBody(summary, today),
+            NotificationText.runSummaryBody(summary),
         )
     }
 
     @Test fun run_summary_body_falls_back_to_the_status_when_there_is_no_eta() {
-        val today = LocalDate(2026, 9, 3)
         val summary = RefreshSummary(
             attempted = 1, failed = 0,
             changes = listOf(ParcelChange("p1", "Keyboard",
-                TrackingStatus.IN_TRANSIT, TrackingStatus.IN_TRANSIT, null, null)),
+                TrackingStatus.IN_TRANSIT, TrackingStatus.IN_TRANSIT, null, null, LocalDate(2026, 9, 3))),
         )
-        assertEquals("• Keyboard — In transit", NotificationText.runSummaryBody(summary, today))
+        assertEquals("• Keyboard — In transit", NotificationText.runSummaryBody(summary))
     }
 
     @Test fun run_summary_body_appends_a_failure_line() {
@@ -108,15 +146,15 @@ class NotificationTextTest {
         val summary = RefreshSummary(
             attempted = 2, failed = 1, firstFailureReason = FailureReason.NETWORK,
             changes = listOf(ParcelChange("p1", "Keyboard",
-                TrackingStatus.IN_TRANSIT, TrackingStatus.IN_TRANSIT, LocalDate(2026, 9, 3), LocalDate(2026, 9, 3))),
+                TrackingStatus.IN_TRANSIT, TrackingStatus.IN_TRANSIT, today, today, today)),
         )
         assertEquals("• Keyboard — today\n1 failed (NETWORK)",
-            NotificationText.runSummaryBody(summary, today))
+            NotificationText.runSummaryBody(summary))
     }
 
     @Test fun run_summary_with_nothing_to_check_says_so() {
         assertEquals("No packages needed checking",
-            NotificationText.runSummaryBody(RefreshSummary(attempted = 0, failed = 0), LocalDate(2026, 9, 3)))
+            NotificationText.runSummaryBody(RefreshSummary(attempted = 0, failed = 0)))
         assertEquals("No packages needed checking",
             NotificationText.runSummaryShort(RefreshSummary(attempted = 0, failed = 0)))
     }
@@ -126,6 +164,7 @@ class NotificationTextTest {
             parcelId = "p1", parcelName = "Boots",
             statusBefore = TrackingStatus.IN_TRANSIT, statusAfter = TrackingStatus.IN_TRANSIT,
             etaBefore = LocalDate(2026, 8, 28), etaAfter = LocalDate(2026, 8, 29),
+            checkedOn = today,
             delayNoteAfter = "Due to weather, your package is delayed by one business day.",
         ))
         // The carrier's own sentence is the most useful thing we have; lead with it.
@@ -137,6 +176,7 @@ class NotificationTextTest {
             parcelId = "p1", parcelName = "Boots",
             statusBefore = TrackingStatus.IN_TRANSIT, statusAfter = TrackingStatus.IN_TRANSIT,
             etaBefore = LocalDate(2026, 8, 28), etaAfter = LocalDate(2026, 8, 29),
+            checkedOn = today,
             delayNoteAfter = "On the Way: Delayed",
         ))
         assertEquals("Delayed — On the Way: Delayed", body)

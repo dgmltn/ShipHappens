@@ -20,7 +20,9 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 import kotlin.test.*
 
-class FixedClock(var instant: Instant = Instant.fromEpochMilliseconds(1_752_148_800_000), // 2026-07-10T12:00Z
+// The two must agree: dateOf() derives a date from an instant, so a mismatched pair would make
+// "how far out did this look last time" answer with the wrong year.
+class FixedClock(var instant: Instant = Instant.fromEpochMilliseconds(1_783_684_800_000), // 2026-07-10T12:00Z
                  var date: LocalDate = LocalDate(2026, 7, 10)) : AppClock {
     override fun now() = instant
     override fun today() = date

@@ -91,15 +91,19 @@ gitignored and recreated by `xcodegen generate`, while `app-ios/ShipHappens/Info
 ```
 
 Note `:ui`'s task is `testAndroidHostTest`, not `testDebugUnitTest` — the UI module's unit tests
-run on the Android-host test source set. Current suite: 444 tests across 11 modules (domain 15,
-data 92, api 2, ups 23, usps 29, fedex 35, amazon 55, amzl 21, dhlecs 27, webview 85, ui 60),
+run on the Android-host test source set. Current suite: 462 tests across 11 modules (domain 19,
+data 106, api 2, ups 23, usps 29, fedex 35, amazon 55, amzl 21, dhlecs 27, webview 85, ui 60),
 all passing.
 
 ## Daily update
 
 With "Daily update" enabled in Settings, the app refreshes every undelivered parcel once a day at
 the chosen local time (8:00 AM by default) and posts one notification per parcel whose status or
-delivery date changed. Every pass also posts, on a separate diagnostics channel, a live progress
+delivery date changed — or whose delivery simply drew near: an unmoved ETA that has become
+"tomorrow", "today", or a day past due since the previous check is news too, and is announced once
+per crossing (`Imminence`, in `domain`). Copy speaks relatively while the date is close ("Arriving
+tomorrow", "Arriving in 3 days, on Saturday") and falls back to the date beyond a week. Every pass
+also posts, on a separate diagnostics channel, a live progress
 notification while it runs and an unconditional per-parcel summary when it finishes (or a failure
 notification if the pass itself dies) — so a quiet pass is still visibly a pass that ran. The
 decision logic — candidate selection, change detection, notification

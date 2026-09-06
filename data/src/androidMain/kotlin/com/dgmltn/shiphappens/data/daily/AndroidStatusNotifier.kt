@@ -11,9 +11,6 @@ import androidx.core.app.NotificationManagerCompat
 import com.dgmltn.shiphappens.data.ParcelChange
 import com.dgmltn.shiphappens.data.RefreshSummary
 import com.dgmltn.shiphappens.data.notify.NotificationText
-import kotlin.time.Clock
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 
 /**
  * Posts the daily run's findings.
@@ -74,12 +71,11 @@ class AndroidStatusNotifier(private val context: Context) : StatusNotifier {
     override suspend fun notifyRunFinished(summary: RefreshSummary) {
         ensureChannels()
         manager.cancel(RUN_PROGRESS_ID)
-        val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
         val notification = NotificationCompat.Builder(context, CHANNEL_DIAGNOSTICS)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle(NotificationText.runSummaryTitle())
             .setContentText(NotificationText.runSummaryShort(summary))
-            .setStyle(NotificationCompat.BigTextStyle().bigText(NotificationText.runSummaryBody(summary, today)))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(NotificationText.runSummaryBody(summary)))
             .setShowWhen(true)
             .setAutoCancel(true)
             .build()

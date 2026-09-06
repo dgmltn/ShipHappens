@@ -6,6 +6,7 @@ import kotlinx.datetime.isoDayNumber
 import kotlinx.datetime.number
 
 private val WD = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+private val WD_FULL = listOf("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 private val MO = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
 /**
@@ -17,6 +18,9 @@ val TRACKING_STEP_LABELS = listOf("Label created", "Shipped", "In transit", "Out
 
 // kotlinx-datetime 0.8.0: monthNumber/dayOfMonth are deprecated in favor of month.number/day.
 fun LocalDate.designFormat(): String = "${WD[dayOfWeek.isoDayNumber - 1]}, ${MO[month.number - 1]} $day"
+
+/** Spelled-out weekday, for copy that names a nearby day instead of dating it ("on Thursday"). */
+fun LocalDate.weekdayName(): String = WD_FULL[dayOfWeek.isoDayNumber - 1]
 
 private fun LocalTime.clock12(): String {
     val h12 = when { hour == 0 -> 12; hour > 12 -> hour - 12; else -> hour }

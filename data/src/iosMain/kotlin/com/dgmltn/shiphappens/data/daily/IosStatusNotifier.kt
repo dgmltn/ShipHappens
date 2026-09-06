@@ -3,9 +3,6 @@ package com.dgmltn.shiphappens.data.daily
 import com.dgmltn.shiphappens.data.ParcelChange
 import com.dgmltn.shiphappens.data.RefreshSummary
 import com.dgmltn.shiphappens.data.notify.NotificationText
-import kotlin.time.Clock
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 import platform.Foundation.NSUUID
 import platform.UserNotifications.UNMutableNotificationContent
 import platform.UserNotifications.UNNotificationRequest
@@ -49,10 +46,9 @@ class IosStatusNotifier : StatusNotifier {
 
     override suspend fun notifyRunFinished(summary: RefreshSummary) {
         clearProgress()
-        val today = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
         post(
             title = NotificationText.runSummaryTitle(),
-            body = NotificationText.runSummaryBody(summary, today),
+            body = NotificationText.runSummaryBody(summary),
             thread = THREAD_DIAGNOSTICS,
             userInfo = emptyMap(),
             identifier = RUN_SUMMARY_ID,
