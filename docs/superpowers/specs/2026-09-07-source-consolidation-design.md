@@ -20,6 +20,16 @@ Carriers stay in their own modules. Each remains a distinct `:source:<carrier>` 
 seventh can be added the same way; they depend on a richer `:source:webview` toolkit instead of
 carrying their own copies of it.
 
+## Boundary rule
+
+`:source:webview` holds mechanisms and generic, carrier-neutral English. A phrase qualifies as
+shared when it would be understood as tracking wording on any carrier's page, regardless of
+which carrier's fixture it was first seen on; a phrase that only one carrier would ever print
+stays in that carrier's module as an extra. Every selector, URL, regex on carrier copy, API
+field name, and page-choreography hook stays in the carrier's module. A carrier-specific token
+mechanism may be shared (splitting CamelCase codes into words); the codes themselves are the
+carrier's.
+
 ## Non-goals
 
 - A declarative DOM-recipe compiler that turns selector lists into extraction JS. The two
@@ -190,10 +200,11 @@ shared or carrier not-found pattern matches `pageText`, null (routes to Unparsed
 persisted) when the headline names two or more stages, `Empty` when there is no headline, no
 event, and no promise, and otherwise `Tracking(assembleSnapshot(...))`.
 
-The shared not-found list is seeded with the phrases that appear in two or more carriers today
+The shared not-found list is seeded with the generic wordings in today's carrier regexes
 ("can't find … tracking number", "couldn't find", "unable to find", "invalid tracking",
-"no record of this tracking", "could not locate the tracking"). Each carrier keeps its
-remaining wordings as `notFound` extras, so the merged behavior on every existing fixture is
+"no record of this tracking", "could not locate the tracking"), per the boundary rule. Each
+carrier keeps its own wordings ("problem finding this order", "confirm the accuracy of your
+tracking number") as `notFound` extras, so the merged behavior on every existing fixture is
 unchanged.
 
 `parsePromiseDate(text, today)` is the default ETA chain: numeric M/D/Y, month-name with year,
@@ -414,9 +425,9 @@ writer. The router's hop-URL validation remains the one rule a provider cannot b
 - **Behavior drift while consolidating.** Mitigated by keeping every captured-page fixture and
   its expected result in the carrier tests, and by landing each increment only when the whole
   suite is green on JVM and iOS simulator.
-- **Shared not-found phrases matching a valid page.** The seed list is limited to phrases that
-  already live in two carriers and were validated live. New shared phrases need a fixture from
-  a live page before they are added.
+- **Shared not-found phrases matching a valid page.** The seed list is limited to generic
+  wordings already validated live on a carrier. New shared phrases need a fixture from a live
+  page before they are added.
 - **Kotlin/Native miscompile.** New shared code that scans a `List` of a sealed type with inline
   lambdas must not sit on the `track` path; the resolver and assembler return values rather than
   scan sealed lists, and the existing plain-loop helpers stay.
