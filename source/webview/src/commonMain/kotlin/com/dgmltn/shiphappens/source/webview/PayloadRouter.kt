@@ -1,5 +1,6 @@
 package com.dgmltn.shiphappens.source.webview
 
+import com.dgmltn.shiphappens.domain.TrackingSnapshot
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -12,7 +13,6 @@ data class BridgePayload(val kind: String, val url: String? = null, val body: St
 data class DomExtraction(
     val page: String,
     val url: String? = null,
-    val tracking: ScrapedTracking? = null,
     val raw: DomRaw? = null,
 )
 
@@ -69,10 +69,10 @@ data class DomRawEvent(
 )
 
 sealed interface RouteResult {
-    data class Tracking(val tracking: ScrapedTracking) : RouteResult
-    /** A validated one-hop navigation request from the extractor, optionally carrying a coarse
-     *  tracking fallback extracted from the page that requested the hop (design spec §1). */
-    data class Goto(val url: String, val tracking: ScrapedTracking?) : RouteResult
+    data class Tracking(val snapshot: TrackingSnapshot) : RouteResult
+    /** A validated one-hop navigation request, optionally carrying a coarse snapshot from the
+     *  page that requested the hop (design spec §1). */
+    data class Goto(val url: String, val coarse: TrackingSnapshot?) : RouteResult
     data object NotFound : RouteResult
     data object LoginWall : RouteResult
     data object Challenge : RouteResult
@@ -113,25 +113,29 @@ class PayloadRouter(private val spec: WebProviderSpec) {
     }
 
     private fun routeDom(dom: DomExtraction): RouteResult = when (dom.page) {
-        "ok" -> dom.tracking?.let { RouteResult.Tracking(it) } ?: RouteResult.Unparsed
-        "goto" ->
-            if (dom.url != null && isAllowedHopUrl(dom.url, spec.cookieDomain)) {
-                RouteResult.Goto(dom.url, dom.tracking)
-            } else {
-                // Bad hop target: salvage the coarse tracking if the extractor sent one.
-                dom.tracking?.let { RouteResult.Tracking(it) } ?: RouteResult.Unparsed
-            }
-        // Provider Kotlin decides the outcome, then that outcome routes by the same rules above —
-        // notably the hop-URL check, which a provider must not be able to opt out of. Re-entering
-        // 'raw' is refused so a hook can't loop.
-        "raw" -> dom.raw
-            ?.let { spec.parseRaw(it) }
-            ?.takeIf { it.page != "raw" }
-            ?.let { routeDom(it) }
-            ?: RouteResult.Unparsed
+        // The extractor may still ask for a bare hop; the coarse snapshot only ever comes from Kotlin.
+        "goto" -> dom.url?.takeIf { isAllowedHopUrl(it, spec.cookieDomain) }
+            ?.let { RouteResult.Goto(it, null) } ?: RouteResult.Unparsed
+        // Provider Kotlin decides the outcome; the hop-URL check applies to its Goto the same way.
+        "raw" -> dom.raw?.let { spec.parseRaw(it) }?.let { routeOutcome(it) } ?: RouteResult.Unparsed
         "notFound" -> RouteResult.NotFound
         "loginWall" -> RouteResult.LoginWall
         "challenge" -> RouteResult.Challenge
         else -> RouteResult.Unparsed
+    }
+
+    private fun routeOutcome(outcome: PageOutcome): RouteResult = when (outcome) {
+        is PageOutcome.Tracking -> RouteResult.Tracking(outcome.snapshot)
+        is PageOutcome.Goto ->
+            if (isAllowedHopUrl(outcome.url, spec.cookieDomain)) {
+                RouteResult.Goto(outcome.url, outcome.coarse)
+            } else {
+                // Bad hop target: salvage the coarse snapshot if the provider sent one.
+                outcome.coarse?.let { RouteResult.Tracking(it) } ?: RouteResult.Unparsed
+            }
+        PageOutcome.NotFound -> RouteResult.NotFound
+        PageOutcome.LoginWall -> RouteResult.LoginWall
+        PageOutcome.Challenge -> RouteResult.Challenge
+        PageOutcome.Empty -> RouteResult.Unparsed
     }
 }

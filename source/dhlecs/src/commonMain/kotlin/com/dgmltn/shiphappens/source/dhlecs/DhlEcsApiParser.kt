@@ -1,14 +1,15 @@
 package com.dgmltn.shiphappens.source.dhlecs
 
-import com.dgmltn.shiphappens.domain.TrackingStatus
-import com.dgmltn.shiphappens.source.webview.ScrapedEvent
-import com.dgmltn.shiphappens.source.webview.ScrapedTracking
-import com.dgmltn.shiphappens.source.webview.isDelayedWording
+import com.dgmltn.shiphappens.domain.TrackingEvent
+import com.dgmltn.shiphappens.domain.TrackingSnapshot
+import com.dgmltn.shiphappens.source.webview.assembleSnapshot
+import com.dgmltn.shiphappens.source.webview.eventAt
+import com.dgmltn.shiphappens.source.webview.headlineThenNewestEvent
+import com.dgmltn.shiphappens.source.webview.parseAnyDate
+import com.dgmltn.shiphappens.source.webview.zoneForAbbreviation
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toInstant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -30,7 +31,7 @@ import kotlinx.serialization.json.Json
 
 /**
  * Maps api.dhlecs.com/webtrack/v4/tracking JSON (the SPA's only data call, captured in-page) to
- * the canonical [ScrapedTracking]. Tolerant like the other API parsers: every field optional,
+ * the canonical [TrackingSnapshot]. Tolerant like the other API parsers: every field optional,
  * unknown vocabulary degrades to UNKNOWN, decode failure returns null. An unknown number is an
  * in-band `packages: []` on HTTP 200, so null routes it to the DOM fallback's NotFound.
  *
@@ -41,63 +42,29 @@ import kotlinx.serialization.json.Json
 object DhlEcsApiParser {
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun parse(body: String): ScrapedTracking? {
+    fun parse(body: String): TrackingSnapshot? {
         val response = runCatching { json.decodeFromString<DhlEcsResponse>(body) }.getOrNull() ?: return null
         val pkg = response.packages.firstOrNull() ?: return null
-
+        val device = TimeZone.currentSystemDefault()
         val events = pkg.events.mapNotNull { e ->
             val rawDescription = e.primaryEventDescription?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            val timestamp = toIsoInstant(e.date, e.time, e.timeZone) ?: return@mapNotNull null
-            ScrapedEvent(
-                timestamp = timestamp,
+            val date = e.date?.let { runCatching { LocalDate.parse(it) }.getOrNull() } ?: return@mapNotNull null
+            val time = e.time?.let { runCatching { LocalTime.parse(it) }.getOrNull() }
+            TrackingEvent(
+                timestamp = eventAt(date, time, zoneForAbbreviation(e.timeZone) ?: device),
                 description = describe(rawDescription),
                 location = e.location?.takeIf { it.isNotBlank() },
-                status = classifyDhlEcsStatus(rawDescription)?.name,
+                status = DHLECS_VOCABULARY.classify(rawDescription),
             )
-        }.sortedBy { it.timestamp }
-
-        val status = classifyDhlEcsStatus(pkg.status)
-            ?: events.lastOrNull { it.status != null }?.status?.let { TrackingStatus.valueOf(it) }
-            ?: TrackingStatus.UNKNOWN
-
-        return ScrapedTracking(
-            status = status.name,
-            etaDate = pkg.estimatedDeliveryDate?.take(10)
-                ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }?.toString(),
-            location = events.lastOrNull { it.location != null }?.location,
-            // Only the live status or the NEWEST event may assert a delay: delay events stay in
-            // the history for the life of the shipment, and non-null delayNote IS the delay flag —
-            // scanning older rows would keep a delivered package flagged as delayed forever. A
-            // still-live delay whose event was followed by a routine scan under-reports here; the
-            // carrier's status wording is expected to carry it in that window.
-            delayNote = pkg.status?.takeIf { isDelayedWording(it) }
-                ?: events.lastOrNull()?.description?.takeIf { isDelayedWording(it) },
+        }
+        return assembleSnapshot(
+            vocabulary = DHLECS_VOCABULARY,
+            headline = pkg.status,
             events = events,
+            etaDate = parseAnyDate(pkg.estimatedDeliveryDate),
+            // Only the live status or the NEWEST event may assert a delay — the shared rule.
+            delayNote = headlineThenNewestEvent(DHLECS_VOCABULARY, pkg.status, events),
         )
-    }
-
-    // The API stamps events with a US zone abbreviation ("ET"), not an offset; IANA zones keep
-    // the DST arithmetic right. An unknown abbreviation falls back to the device zone — the
-    // documented UPS/AMZL trade-off (only ordering and dates surface in UI).
-    private val ZONES = mapOf(
-        "ET" to "America/New_York", "EST" to "America/New_York", "EDT" to "America/New_York",
-        "CT" to "America/Chicago", "CST" to "America/Chicago", "CDT" to "America/Chicago",
-        "MT" to "America/Denver", "MST" to "America/Denver", "MDT" to "America/Denver",
-        "PT" to "America/Los_Angeles", "PST" to "America/Los_Angeles", "PDT" to "America/Los_Angeles",
-        "AKT" to "America/Anchorage", "AKST" to "America/Anchorage", "AKDT" to "America/Anchorage",
-        "HT" to "Pacific/Honolulu", "HST" to "Pacific/Honolulu",
-        // Puerto Rico scans; AST has no DST. (Arizona summer scans stamped "MST" read an hour
-        // off via America/Denver — accepted, same class of skew as the device-zone fallback.)
-        "AT" to "America/Puerto_Rico", "AST" to "America/Puerto_Rico",
-        "UTC" to "UTC", "GMT" to "UTC", "Z" to "UTC",
-    )
-
-    private fun toIsoInstant(date: String?, time: String?, zoneAbbreviation: String?): String? {
-        val localDate = runCatching { LocalDate.parse(date ?: return null) }.getOrNull() ?: return null
-        val localTime = time?.let { runCatching { LocalTime.parse(it) }.getOrNull() } ?: LocalTime(0, 0)
-        val zone = ZONES[zoneAbbreviation?.trim()?.uppercase()]?.let { TimeZone.of(it) }
-            ?: TimeZone.currentSystemDefault()
-        return LocalDateTime(localDate, localTime).toInstant(zone).toString()
     }
 
     // The API SCREAMS its prose ("ARRIVAL DHL ECOMMERCE FACILITY"); fold to sentence case,

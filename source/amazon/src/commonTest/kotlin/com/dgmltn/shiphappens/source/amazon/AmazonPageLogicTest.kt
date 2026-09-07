@@ -4,10 +4,14 @@ import com.dgmltn.shiphappens.domain.TrackingStatus
 import com.dgmltn.shiphappens.source.webview.DomCard
 import com.dgmltn.shiphappens.source.webview.DomRaw
 import com.dgmltn.shiphappens.source.webview.DomRawEvent
+import com.dgmltn.shiphappens.source.webview.PageOutcome
+import com.dgmltn.shiphappens.source.webview.snapshotOrNull
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -30,24 +34,24 @@ class AmazonPageLogicTest {
     )
 
     @Test fun replacement_card_is_not_a_shipping_status() {
-        assertNull(classifyAmazonStatus(replacementCard.head))
+        assertNull(AMAZON_VOCABULARY.classify(replacementCard.head))
     }
 
     @Test fun delivered_card_classifies_delivered() {
-        assertEquals(TrackingStatus.DELIVERED, classifyAmazonStatus(deliveredCard.head))
+        assertEquals(TrackingStatus.DELIVERED, AMAZON_VOCABULARY.classify(deliveredCard.head))
     }
 
     @Test fun returns_copy_on_a_delivered_order_stays_delivered() {
         // Every delivered order renders return-window copy; it must not outrank the delivery.
         assertEquals(
             TrackingStatus.DELIVERED,
-            classifyAmazonStatus("Delivered June 25 Return or replace items: Eligible through July 25"),
+            AMAZON_VOCABULARY.classify("Delivered June 25 Return or replace items: Eligible through July 25"),
         )
     }
 
     @Test fun return_phrasing_still_detects_a_real_delivery_exception() {
-        assertEquals(TrackingStatus.EXCEPTION, classifyAmazonStatus("Package is being returned to sender"))
-        assertEquals(TrackingStatus.EXCEPTION, classifyAmazonStatus("Undeliverable — returned to sender"))
+        assertEquals(TrackingStatus.EXCEPTION, AMAZON_VOCABULARY.classify("Package is being returned to sender"))
+        assertEquals(TrackingStatus.EXCEPTION, AMAZON_VOCABULARY.classify("Undeliverable — returned to sender"))
     }
 
     @Test fun picks_the_shipment_not_the_replacement_card() {
@@ -57,9 +61,9 @@ class AmazonPageLogicTest {
     @Test fun delivered_order_with_an_rma_card_hops_to_the_tracker() {
         // The regression, end to end: goto the delivered shipment's tracker, carrying DELIVERED.
         val result = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(deliveredCard, replacementCard)))
-        assertEquals("goto", result.page)
-        assertEquals(deliveredCard.href, result.url)
-        assertEquals(TrackingStatus.DELIVERED.name, result.tracking?.status)
+        val goto = assertIs<PageOutcome.Goto>(result)
+        assertEquals(deliveredCard.href, goto.url)
+        assertEquals(TrackingStatus.DELIVERED, goto.coarse?.status)
     }
 
     @Test fun still_prefers_an_in_flight_shipment_over_a_delivered_one() {
@@ -70,25 +74,26 @@ class AmazonPageLogicTest {
         val result = resolveAmazonCards(
             DomRaw(kind = "cards", cards = listOf(deliveredCard, arriving), todayIso = "2026-07-19"),
         )
-        assertEquals(arriving.href, result.url)
-        assertEquals(TrackingStatus.UNKNOWN.name, result.tracking?.status)
-        assertEquals("2026-07-19", result.tracking?.etaDate)
+        val goto = assertIs<PageOutcome.Goto>(result)
+        assertEquals(arriving.href, goto.url)
+        assertEquals(TrackingStatus.UNKNOWN, goto.coarse?.status)
+        assertEquals(LocalDate(2026, 7, 19), goto.coarse?.etaDate)
     }
 
     @Test fun arriving_is_an_eta_not_a_transit_status() {
-        assertNull(classifyAmazonStatus("Arriving tomorrow"))
-        assertNull(classifyAmazonStatus("Arriving Tue, Jul 22"))
+        assertNull(AMAZON_VOCABULARY.classify("Arriving tomorrow"))
+        assertNull(AMAZON_VOCABULARY.classify("Arriving Tue, Jul 22"))
     }
 
     @Test fun an_ordered_status_is_not_yet_shipped() {
         // The tracker page reports "Ordered" for a placed-but-unshipped order; that is label-created,
         // never in-transit.
-        assertEquals(TrackingStatus.LABEL_CREATED, classifyAmazonStatus("Ordered"))
+        assertEquals(TrackingStatus.LABEL_CREATED, AMAZON_VOCABULARY.classify("Ordered"))
     }
 
     @Test fun genuine_transit_phrasing_still_classifies_in_transit() {
-        assertEquals(TrackingStatus.IN_TRANSIT, classifyAmazonStatus("Package is on the way"))
-        assertEquals(TrackingStatus.IN_TRANSIT, classifyAmazonStatus("In transit to next facility"))
+        assertEquals(TrackingStatus.IN_TRANSIT, AMAZON_VOCABULARY.classify("Package is on the way"))
+        assertEquals(TrackingStatus.IN_TRANSIT, AMAZON_VOCABULARY.classify("In transit to next facility"))
     }
 
     @Test fun arriving_only_card_keeps_its_eta_with_unknown_status() {
@@ -96,26 +101,26 @@ class AmazonPageLogicTest {
         // status rather than inventing IN_TRANSIT or dropping the countdown.
         val arriving = DomCard(head = "Arriving tomorrow", href = null)
         val result = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(arriving), todayIso = "2026-07-20"))
-        assertEquals("ok", result.page)
-        assertEquals(TrackingStatus.UNKNOWN.name, result.tracking?.status)
-        assertEquals("2026-07-21", result.tracking?.etaDate)
+        val tracking = assertIs<PageOutcome.Tracking>(result)
+        assertEquals(TrackingStatus.UNKNOWN, tracking.snapshot.status)
+        assertEquals(LocalDate(2026, 7, 21), tracking.snapshot.etaDate)
     }
 
     @Test fun card_without_a_tracker_link_reports_its_coarse_status() {
         val old = DomCard(head = "Delivered June 25", href = null)
         val result = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(old)))
-        assertEquals("ok", result.page)
-        assertEquals(TrackingStatus.DELIVERED.name, result.tracking?.status)
+        val tracking = assertIs<PageOutcome.Tracking>(result)
+        assertEquals(TrackingStatus.DELIVERED, tracking.snapshot.status)
     }
 
     @Test fun unrecognizable_cards_fall_back_rather_than_vanish() {
         // No card qualifies as a shipment: still pick one so the caller reports empty, not silence.
         val result = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(replacementCard)))
-        assertEquals("empty", result.page)
+        assertIs<PageOutcome.Empty>(result)
     }
 
     @Test fun no_cards_is_empty() {
-        assertEquals("empty", resolveAmazonCards(DomRaw(kind = "cards")).page)
+        assertIs<PageOutcome.Empty>(resolveAmazonCards(DomRaw(kind = "cards")))
     }
 
     @Test fun tracker_classifies_status_line_and_events() {
@@ -130,10 +135,11 @@ class AmazonPageLogicTest {
                 ),
             ),
         )
-        assertEquals(TrackingStatus.DELIVERED.name, result.tracking?.status)
-        assertEquals("Tempe, AZ", result.tracking?.location)
-        assertEquals(TrackingStatus.SHIPPED.name, result.tracking?.events?.first()?.status)
-        assertEquals(TrackingStatus.DELIVERED.name, result.tracking?.events?.last()?.status)
+        val snapshot = result.snapshotOrNull()
+        assertEquals(TrackingStatus.DELIVERED, snapshot?.status)
+        assertEquals("Tempe, AZ", snapshot?.latestLocation)
+        assertEquals(TrackingStatus.SHIPPED, snapshot?.events?.first()?.status)
+        assertEquals(TrackingStatus.DELIVERED, snapshot?.events?.last()?.status)
     }
 
     @Test fun tracker_falls_back_to_newest_event_when_status_line_is_unreadable() {
@@ -144,11 +150,11 @@ class AmazonPageLogicTest {
                 events = listOf(DomRawEvent("2026-06-24T09:00:00Z", "Out for delivery", null)),
             ),
         )
-        assertEquals(TrackingStatus.OUT_FOR_DELIVERY.name, result.tracking?.status)
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, result.snapshotOrNull()?.status)
     }
 
     @Test fun tracker_with_nothing_readable_is_empty() {
-        assertEquals("empty", resolveAmazonTracker(DomRaw(kind = "tracker")).page)
+        assertIs<PageOutcome.Empty>(resolveAmazonTracker(DomRaw(kind = "tracker")))
     }
 
     @Test fun unknown_raw_kind_is_refused() {
@@ -173,8 +179,8 @@ class AmazonPageLogicTest {
         // The revised promise reports the delay, but asserts no stage: Amazon shows a promise
         // from the moment an order is placed, so a slipped one is equally valid on an order that
         // has not shipped yet (2026-08-28).
-        assertTrue(isAmazonDelayed("Now expected tomorrow by 8 AM"))
-        assertNull(classifyAmazonStatus("Now expected tomorrow by 8 AM"))
+        assertTrue(AMAZON_VOCABULARY.isDelayed("Now expected tomorrow by 8 AM"))
+        assertNull(AMAZON_VOCABULARY.classify("Now expected tomorrow by 8 AM"))
     }
 
     @Test fun arriving_phrasing_still_resolves() {
@@ -228,12 +234,13 @@ class AmazonPageLogicTest {
                 ),
             ),
         )
-        assertEquals("2026-08-19", result.tracking?.etaDate)
-        assertEquals("by 8 AM", result.tracking?.etaWindowText)
+        val snapshot = result.snapshotOrNull()
+        assertEquals(LocalDate(2026, 8, 19), snapshot?.etaDate)
+        assertEquals(LocalTime(8, 0), snapshot?.etaWindowEnd)
         // The status line names no stage, so the stage falls to the newest event that does —
         // "Package delayed in transit" — rather than the old blanket EXCEPTION (2026-08-28).
-        assertEquals(TrackingStatus.IN_TRANSIT.name, result.tracking?.status)
-        assertEquals("Now expected tomorrow by 8 AM", result.tracking?.delayNote)
+        assertEquals(TrackingStatus.IN_TRANSIT, snapshot?.status)
+        assertEquals("Now expected tomorrow by 8 AM", snapshot?.delayNote)
     }
 
     // --- Delay as a modifier (2026-08-28) ---
@@ -244,43 +251,43 @@ class AmazonPageLogicTest {
     @Test fun delay_wording_no_longer_hides_the_stage_the_shipment_is_at() {
         // The event row Amazon logs for a late shipment names its own stage; collapsing it to
         // EXCEPTION (stepIndex -1) stopped the timeline advancing past it.
-        assertEquals(TrackingStatus.IN_TRANSIT, classifyAmazonStatus("Package delayed in transit"))
+        assertEquals(TrackingStatus.IN_TRANSIT, AMAZON_VOCABULARY.classify("Package delayed in transit"))
     }
 
     @Test fun delay_wording_that_names_no_stage_asserts_no_stage() {
         // Not EXCEPTION and not IN_TRANSIT — a guess either way. Null leaves the stage to the
         // event rows or the stored status, which is what makes "not yet shipped, but late" a
         // representable state.
-        assertNull(classifyAmazonStatus("Now expected tomorrow by 8 AM"))
-        assertNull(classifyAmazonStatus("Running late"))
-        assertNull(classifyAmazonStatus("Delayed"))
+        assertNull(AMAZON_VOCABULARY.classify("Now expected tomorrow by 8 AM"))
+        assertNull(AMAZON_VOCABULARY.classify("Running late"))
+        assertNull(AMAZON_VOCABULARY.classify("Delayed"))
     }
 
     @Test fun a_real_exception_still_beats_delay_wording() {
-        assertEquals(TrackingStatus.EXCEPTION, classifyAmazonStatus("Delivery attempted, running late"))
-        assertEquals(TrackingStatus.EXCEPTION, classifyAmazonStatus("Undeliverable — delayed"))
+        assertEquals(TrackingStatus.EXCEPTION, AMAZON_VOCABULARY.classify("Delivery attempted, running late"))
+        assertEquals(TrackingStatus.EXCEPTION, AMAZON_VOCABULARY.classify("Undeliverable — delayed"))
     }
 
     @Test fun delivered_and_out_for_delivery_still_outrank_delay_wording() {
-        assertEquals(TrackingStatus.DELIVERED, classifyAmazonStatus("Delivered, was running late"))
-        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, classifyAmazonStatus("Out for delivery, delayed"))
+        assertEquals(TrackingStatus.DELIVERED, AMAZON_VOCABULARY.classify("Delivered, was running late"))
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, AMAZON_VOCABULARY.classify("Out for delivery, delayed"))
     }
 
     @Test fun delay_is_detected_independently_of_the_stage() {
-        assertTrue(isAmazonDelayed("Now expected tomorrow by 8 AM"))
-        assertTrue(isAmazonDelayed("Package delayed in transit"))
-        assertTrue(isAmazonDelayed("Running late"))
-        assertFalse(isAmazonDelayed("Arriving tomorrow"))
-        assertFalse(isAmazonDelayed("Out for delivery"))
-        assertFalse(isAmazonDelayed(""))
-        assertFalse(isAmazonDelayed(null))
+        assertTrue(AMAZON_VOCABULARY.isDelayed("Now expected tomorrow by 8 AM"))
+        assertTrue(AMAZON_VOCABULARY.isDelayed("Package delayed in transit"))
+        assertTrue(AMAZON_VOCABULARY.isDelayed("Running late"))
+        assertFalse(AMAZON_VOCABULARY.isDelayed("Arriving tomorrow"))
+        assertFalse(AMAZON_VOCABULARY.isDelayed("Out for delivery"))
+        assertFalse(AMAZON_VOCABULARY.isDelayed(""))
+        assertFalse(AMAZON_VOCABULARY.isDelayed(null))
     }
 
     @Test fun a_delayed_tracker_page_carries_the_wording_as_its_note() {
         val result = resolveAmazonTracker(
             DomRaw(kind = "tracker", statusText = "Now expected tomorrow by 8 AM", todayIso = "2026-08-18"),
         )
-        assertEquals("Now expected tomorrow by 8 AM", result.tracking?.delayNote)
+        assertEquals("Now expected tomorrow by 8 AM", result.snapshotOrNull()?.delayNote)
     }
 
     @Test fun a_tracker_whose_only_delay_signal_is_an_event_still_reports_it() {
@@ -297,14 +304,14 @@ class AmazonPageLogicTest {
                 ),
             ),
         )
-        assertEquals("Package delayed in transit", result.tracking?.delayNote)
+        assertEquals("Package delayed in transit", result.snapshotOrNull()?.delayNote)
     }
 
     @Test fun an_undelayed_tracker_page_has_no_note() {
         val result = resolveAmazonTracker(
             DomRaw(kind = "tracker", statusText = "Arriving tomorrow", todayIso = "2026-08-18"),
         )
-        assertNull(result.tracking?.delayNote)
+        assertNull(result.snapshotOrNull()?.delayNote)
     }
 
     @Test fun a_delayed_order_card_carries_its_note_into_the_hop() {
@@ -313,13 +320,15 @@ class AmazonPageLogicTest {
             href = "https://www.amazon.com/gp/your-account/ship-track?itemId=x&orderId=y",
         )
         val result = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(delayed), todayIso = "2026-08-18"))
-        assertEquals("Now expected tomorrow by 8 AM", result.tracking?.delayNote)
+        val goto = assertIs<PageOutcome.Goto>(result)
+        assertEquals("Now expected tomorrow by 8 AM", goto.coarse?.delayNote)
     }
 
     @Test fun an_undelayed_order_card_has_no_note() {
         val card = DomCard(head = "Arriving tomorrow", href = "https://www.amazon.com/gp/your-account/ship-track?x")
         val result = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(card), todayIso = "2026-08-18"))
-        assertNull(result.tracking?.delayNote)
+        val goto = assertIs<PageOutcome.Goto>(result)
+        assertNull(goto.coarse?.delayNote)
     }
 
     @Test fun tracker_prefers_the_promise_element_over_the_status_line() {
@@ -331,7 +340,7 @@ class AmazonPageLogicTest {
                 todayIso = "2026-08-18",
             ),
         )
-        assertEquals("2026-08-22", result.tracking?.etaDate)
+        assertEquals(LocalDate(2026, 8, 22), result.snapshotOrNull()?.etaDate)
     }
 
     @Test fun delayed_order_card_carries_the_revised_eta_into_the_hop() {
@@ -342,24 +351,22 @@ class AmazonPageLogicTest {
             href = "https://www.amazon.com/gp/your-account/ship-track?itemId=x&orderId=y",
         )
         val result = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(delayed), todayIso = "2026-08-18"))
-        assertEquals("goto", result.page)
-        assertEquals("2026-08-19", result.tracking?.etaDate)
+        val goto = assertIs<PageOutcome.Goto>(result)
+        assertEquals(LocalDate(2026, 8, 19), goto.coarse?.etaDate)
         // The card names no stage; the coarse fallback carries the ETA and the delay, and leaves
         // the stage UNKNOWN for the tracker hop (or the stored status) to supply.
-        assertEquals(TrackingStatus.UNKNOWN.name, result.tracking?.status)
-        assertEquals("Now expected tomorrow by 8 AM", result.tracking?.delayNote)
+        assertEquals(TrackingStatus.UNKNOWN, goto.coarse?.status)
+        assertEquals("Now expected tomorrow by 8 AM", goto.coarse?.delayNote)
     }
 
     @Test fun order_page_not_found_wording_routes_not_found_from_page_text() {
         // The wordings the JS blob used to decide on (moved to Kotlin 2026-08-20); scoped to the
         // cards page, matching the blob's original branch placement.
-        assertEquals(
-            "notFound",
-            parseAmazonRaw(DomRaw(kind = "cards", pageText = "We're having a problem finding this order"))?.page,
+        assertIs<PageOutcome.NotFound>(
+            parseAmazonRaw(DomRaw(kind = "cards", pageText = "We're having a problem finding this order")),
         )
-        assertEquals(
-            "notFound",
-            parseAmazonRaw(DomRaw(kind = "cards", pageText = "We can't find that order"))?.page,
+        assertIs<PageOutcome.NotFound>(
+            parseAmazonRaw(DomRaw(kind = "cards", pageText = "We can't find that order")),
         )
     }
 }

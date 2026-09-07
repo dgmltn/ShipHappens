@@ -1,5 +1,6 @@
 package com.dgmltn.shiphappens.source.dhlecs
 
+import com.dgmltn.shiphappens.domain.TrackingStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -32,7 +33,7 @@ class DhlEcsWebSpecTest {
 
     @Test fun parse_api_is_wired_to_the_parser() {
         val body = """{"total":1,"limit":10,"offset":0,"packages":[{"status":"Delivered","events":[]}]}"""
-        assertEquals("DELIVERED", DhlEcsWebSpec.parseApi(null, body)?.status)
+        assertEquals(TrackingStatus.DELIVERED, DhlEcsWebSpec.parseApi(null, body)?.status)
     }
 
     @Test fun login_is_never_reported() {

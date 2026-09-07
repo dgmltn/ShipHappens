@@ -64,7 +64,7 @@ class WebDetailViewModel(
         val routed = PayloadRouter(spec).route(json)
         if (routed !is RouteResult.Tracking) return null
         return viewModelScope.launch {
-            applyMutex.withLock { repository.applySnapshot(parcelId, routed.tracking.toSnapshot(), spec.sourceId) }
+            applyMutex.withLock { repository.applySnapshot(parcelId, routed.snapshot, spec.sourceId) }
         }
     }
 

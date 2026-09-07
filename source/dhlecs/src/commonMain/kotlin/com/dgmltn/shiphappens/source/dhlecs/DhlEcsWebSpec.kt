@@ -2,7 +2,11 @@ package com.dgmltn.shiphappens.source.dhlecs
 
 import com.dgmltn.shiphappens.domain.WellKnownCarriers
 import com.dgmltn.shiphappens.domain.normalizeTracking
+import com.dgmltn.shiphappens.source.webview.StatusKeywords
+import com.dgmltn.shiphappens.source.webview.StatusVocabulary
+import com.dgmltn.shiphappens.source.webview.TrackerPageRules
 import com.dgmltn.shiphappens.source.webview.WebProviderSpec
+import com.dgmltn.shiphappens.source.webview.resolveTrackerPage
 
 // webtrack.dhlecs.com is a React SPA (empty #root shell); its POST to
 // api.dhlecs.com/webtrack/v4/tracking is the primary data layer (captured via apiUrlPatterns,
@@ -40,6 +44,36 @@ function() {
 }
 """.trimIndent()
 
+// The wordings come from webtrack's en-US locale file (recon 2026-09-03), which enumerates
+// the full event vocabulary (`id_99`…`id_803`); the API's SCREAMING primaryEventDescription
+// values are the same strings uppercased, so one vocabulary serves both layers. The
+// "Undelivered" negation (event 636) is handled by the shared vocabulary's negated-delivered lane.
+internal val DHLECS_VOCABULARY = StatusVocabulary(
+    StatusKeywords(
+        labelCreated = listOf("electronic notification"),
+        shipped = listOf("pick up", "accepted", "received by carrier"),
+        inTransit = listOf(
+            "arrival", "en route", "processed", "departure", "forwarded", "sorted",
+            "tendered", "manifested", "transport", "customs clearance", "cleared customs",
+        ),
+        exception = listOf(
+            "refused", "undeliverable", "damage", "missent", "mis-shipped", "dead letter",
+            "no such number", "insufficient", "unclaimed", "vacant", "addressee unknown",
+            "not possible", "recalled",
+        ),
+    ),
+)
+
+// Coarse DOM fallback for when the API capture misses. A container grab that swallowed the
+// progress rail names every stage at once — the shared resolver refuses such a headline
+// (Unparsed, nothing persisted) rather than classify it; live QA 2026-09-03 saw the rail
+// overwrite a label-only package as DELIVERED through the scrape-on-view path. Not-found copy is
+// webtrack's en-US no_records string (locale recon 2026-09-03).
+internal val DHLECS_PAGE = TrackerPageRules(
+    vocabulary = DHLECS_VOCABULARY,
+    notFound = listOf("""no results? found|confirm the accuracy of your tracking number"""),
+)
+
 // The tracking API is anonymous (a plain cross-origin POST, no cookies or keys — recon
 // 2026-09-03); login is never required, so login state is a constant false and the loginUrl
 // below is vestigial framework plumbing.
@@ -57,5 +91,5 @@ val DhlEcsWebSpec = WebProviderSpec(
     challengeMarkers = listOf("Access Denied", "Reference #", "verify you are a human", "Request unsuccessful"),
     extractionJs = DHLECS_EXTRACTION_JS,
     parseApi = { _, body -> DhlEcsApiParser.parse(body) },
-    parseRaw = ::parseDhlEcsRaw,
+    parseRaw = { resolveTrackerPage(it, DHLECS_PAGE) },
 )

@@ -2,7 +2,11 @@ package com.dgmltn.shiphappens.source.amzl
 
 import com.dgmltn.shiphappens.domain.WellKnownCarriers
 import com.dgmltn.shiphappens.domain.normalizeTracking
+import com.dgmltn.shiphappens.source.webview.StatusKeywords
+import com.dgmltn.shiphappens.source.webview.StatusVocabulary
+import com.dgmltn.shiphappens.source.webview.TrackerPageRules
 import com.dgmltn.shiphappens.source.webview.WebProviderSpec
+import com.dgmltn.shiphappens.source.webview.resolveTrackerPage
 
 // The tracking page is a JS SPA (AmazonShippingRecipientApp); its /api/tracker/ XHR is the
 // primary data layer (captured via apiUrlPatterns, parsed in AmzlApiParser). This DOM extractor
@@ -35,6 +39,32 @@ function() {
 }
 """.trimIndent()
 
+// One AMZL vocabulary for both layers. The tracker page's headline is English ("Arriving
+// Wednesday", "We have your package details"); the API's codes are CamelCase or
+// SCREAMING_SNAKE ("CreationConfirmed", "READY_FOR_RECEIVE") and reach the same chain through
+// classifyToken, which reads them as words. Only CreationConfirmed/READY_FOR_RECEIVE were
+// observed live (2026-08-11); the rest derives from the SPA's milestone string ids
+// (swa_rex_intransit, swa_rex_ofd, …) and is confirmed during device QA.
+internal val AMZL_VOCABULARY = StatusVocabulary(
+    StatusKeywords(
+        outForDelivery = listOf("ofd"),
+        exception = listOf("undeliverable", "problem", "lost", "damaged", "reject"),
+        labelCreated = listOf("package details", "preparing", "creation confirmed", "ready for receive"),
+        shipped = listOf("pickup", "package received", "shipped"),
+        inTransit = listOf("arriving"),
+    ),
+)
+
+// Coarse DOM fallback for when the API capture misses. Not-found wording is verbatim from the
+// JS blob's original decision (moved to Kotlin 2026-08-20).
+internal val AMZL_PAGE = TrackerPageRules(
+    vocabulary = AMZL_VOCABULARY,
+    notFound = listOf("""no longer available"""),
+)
+
+// (The blob's other not-found phrases — "couldn't find", "can't find", "unable to find",
+// "invalid tracking" — are now the shared seeds.)
+
 // The tracker API is anonymous (accessType ANONYMOUS_PACKAGE_ACCESS); login is never required,
 // so login state is a constant false and the loginUrl below is vestigial framework plumbing.
 private const val AMZL_IS_LOGGED_IN_JS = "(function() { return false; })()"
@@ -61,5 +91,5 @@ val AmzlWebSpec = WebProviderSpec(
     ),
     extractionJs = AMZL_EXTRACTION_JS,
     parseApi = { _, body -> AmzlApiParser.parse(body) },
-    parseRaw = ::parseAmzlRaw,
+    parseRaw = { resolveTrackerPage(it, AMZL_PAGE) },
 )

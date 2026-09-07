@@ -1,6 +1,7 @@
 package com.dgmltn.shiphappens.source.webview
 
 import com.dgmltn.shiphappens.domain.Carrier
+import com.dgmltn.shiphappens.domain.TrackingSnapshot
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -12,8 +13,8 @@ import kotlin.time.Duration.Companion.seconds
  * JS fields are small, versioned-in-code scripts:
  *  - [isLoggedInJs]: expression evaluating to a boolean in page context.
  *  - [extractionJs]: a JS *function expression* `function(){...}` returning
- *    `{page: 'ok'|'goto'|'raw'|'notFound'|'loginWall'|'challenge'|'empty', tracking: <canonical
- *    ScrapedTracking>}`. Prefer `'raw'` + [parseRaw] over classifying in JS: commonTest has no JS
+ *    `{page: 'raw'|'goto'|'notFound'|'loginWall'|'challenge'|'empty', url?, raw?: <DomRaw>}`.
+ *    Prefer `'raw'` + [parseRaw] over classifying in JS: commonTest has no JS
  *    engine, so decisions made in the blob can only be checked by scraping on a device.
  *  - [apiUrlPatterns]: JS-compatible regex source strings matched against fetch/XHR URLs.
  */
@@ -27,7 +28,7 @@ class WebProviderSpec(
     val apiUrlPatterns: List<String>,
     val challengeMarkers: List<String>,
     val extractionJs: String,
-    val parseApi: (url: String?, body: String) -> ScrapedTracking?,
+    val parseApi: (url: String?, body: String) -> TrackingSnapshot? = { _, _ -> null },
     /**
      * Quiescence delay between onPageFinished and the extraction run. The default suits pages
      * that render server-side or hydrate quickly; a heavy SPA that client-routes after load
@@ -36,11 +37,12 @@ class WebProviderSpec(
      */
     val settle: Duration = 3.seconds,
     /**
-     * Turns a `page:'raw'` extraction's verbatim page text into an outcome, so status vocabulary
-     * and card-selection rules live in unit-testable Kotlin instead of [extractionJs] (see [DomRaw]).
-     * Returning null, or another `page:'raw'`, routes to Unparsed.
+     * Turns a `page:'raw'` extraction's verbatim page text into an outcome, so status
+     * vocabulary and card-selection rules live in unit-testable Kotlin instead of
+     * [extractionJs] (see [DomRaw]). Returning null, or [PageOutcome.Empty], routes to
+     * Unparsed.
      */
-    val parseRaw: (DomRaw) -> DomExtraction? = { null },
+    val parseRaw: (DomRaw) -> PageOutcome? = { null },
 ) {
     /** Origin rules for androidx.webkit's WebMessageListener / document-start script APIs. */
     fun allowedOriginRules(): List<String> = listOf("https://*.$cookieDomain", "https://$cookieDomain")

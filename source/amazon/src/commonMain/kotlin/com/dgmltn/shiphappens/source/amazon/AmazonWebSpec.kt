@@ -188,5 +188,4 @@ val AmazonWebSpec = WebProviderSpec(
         "automated access to Amazon data",
     ),
     extractionJs = AMAZON_EXTRACTION_JS,
-    parseApi = { _, _ -> null },
 )

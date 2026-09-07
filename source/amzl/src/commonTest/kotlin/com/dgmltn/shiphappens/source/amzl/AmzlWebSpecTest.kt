@@ -1,8 +1,13 @@
 package com.dgmltn.shiphappens.source.amzl
 
+import com.dgmltn.shiphappens.domain.TrackingStatus
 import com.dgmltn.shiphappens.source.webview.DomRaw
+import com.dgmltn.shiphappens.source.webview.PageOutcome
+import com.dgmltn.shiphappens.source.webview.resolveTrackerPage
+import com.dgmltn.shiphappens.source.webview.snapshotOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -17,7 +22,7 @@ class AmzlWebSpecTest {
 
     @Test fun origin_rules_are_confined_to_the_tracking_subdomain() {
         // cookieDomain must be track.amazon.com: bridge injection and goto hops stay off
-        // www.amazon.com, and clearForDomain can never touch the Amazon orders session.
+        // www.amazon.com, and clearForDomain can never touch the Amazon orders login.
         assertEquals("track.amazon.com", AmzlWebSpec.cookieDomain)
         assertEquals(
             listOf("https://*.track.amazon.com", "https://track.amazon.com"),
@@ -33,39 +38,50 @@ class AmzlWebSpecTest {
 
     @Test fun parse_api_is_wired_to_the_parser() {
         val body = """{"progressTracker": "{\"summary\": {\"status\": \"Delivered\", \"metadata\": {}}}"}"""
-        assertEquals("DELIVERED", AmzlWebSpec.parseApi(null, body)?.status)
+        assertEquals(TrackingStatus.DELIVERED, AmzlWebSpec.parseApi(null, body)?.status)
     }
 
     @Test fun raw_status_headlines_classify_in_kotlin() {
         fun statusOf(text: String) =
-            parseAmzlRaw(DomRaw(kind = "tracker", statusText = text))?.tracking?.status
-        assertEquals("OUT_FOR_DELIVERY", statusOf("Out for delivery"))
-        assertEquals("DELIVERED", statusOf("Delivered today"))
-        assertEquals("IN_TRANSIT", statusOf("Arriving Wednesday"))
-        assertEquals("IN_TRANSIT", statusOf("Package is in transit"))
-        assertEquals("LABEL_CREATED", statusOf("We have your package details"))
-        assertEquals("EXCEPTION", statusOf("Delivery attempted"))
-        assertEquals("UNKNOWN", statusOf("Some brand-new wording"))
+            resolveTrackerPage(DomRaw(kind = "tracker", statusText = text), AMZL_PAGE).snapshotOrNull()?.status
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, statusOf("Out for delivery"))
+        assertEquals(TrackingStatus.DELIVERED, statusOf("Delivered today"))
+        assertEquals(TrackingStatus.IN_TRANSIT, statusOf("Arriving Wednesday"))
+        assertEquals(TrackingStatus.IN_TRANSIT, statusOf("Package is in transit"))
+        assertEquals(TrackingStatus.LABEL_CREATED, statusOf("We have your package details"))
+        assertEquals(TrackingStatus.EXCEPTION, statusOf("Delivery attempted"))
+        assertEquals(TrackingStatus.UNKNOWN, statusOf("Some brand-new wording"))
+    }
+
+    @Test fun shipped_headline_now_names_its_own_stage() {
+        // The old DOM chain had no SHIPPED lane and read "Shipped" as IN_TRANSIT; the shared
+        // vocabulary has one.
+        assertEquals(TrackingStatus.SHIPPED, resolveTrackerPage(DomRaw(kind = "tracker", statusText = "Shipped"), AMZL_PAGE).snapshotOrNull()?.status)
     }
 
     @Test fun delay_wording_keeps_the_stage_and_reports_the_delay() {
-        fun trackingOf(text: String) = parseAmzlRaw(DomRaw(kind = "tracker", statusText = text))?.tracking
+        fun trackingOf(text: String) =
+            resolveTrackerPage(DomRaw(kind = "tracker", statusText = text), AMZL_PAGE).snapshotOrNull()
         // A delay is a modifier, not a stage (2026-08-28, matching UPS/Amazon).
-        assertEquals("IN_TRANSIT", trackingOf("Arriving Wednesday, delayed")?.status)
+        assertEquals(TrackingStatus.IN_TRANSIT, trackingOf("Arriving Wednesday, delayed")?.status)
         assertEquals("Arriving Wednesday, delayed", trackingOf("Arriving Wednesday, delayed")?.delayNote)
         // Stage-less delay wording asserts no stage; UNKNOWN leaves it to the stored status.
-        assertEquals("UNKNOWN", trackingOf("Delayed")?.status)
+        assertEquals(TrackingStatus.UNKNOWN, trackingOf("Delayed")?.status)
         assertEquals("Delayed", trackingOf("Delayed")?.delayNote)
         // A real problem still outranks a delay.
-        assertEquals("EXCEPTION", trackingOf("Delivery attempted, delayed")?.status)
+        assertEquals(TrackingStatus.EXCEPTION, trackingOf("Delivery attempted, delayed")?.status)
         assertNull(trackingOf("Out for delivery")?.delayNote)
     }
 
     @Test fun raw_without_status_text_routes_to_unparsed() {
-        assertNull(parseAmzlRaw(DomRaw(kind = "tracker")))
+        assertIs<PageOutcome.Empty>(resolveTrackerPage(DomRaw(kind = "tracker"), AMZL_PAGE))
         // The wordings the JS blob used to decide on (moved to Kotlin 2026-08-20).
-        assertEquals("notFound", parseAmzlRaw(DomRaw(kind = "tracker", pageText = "We couldn't find this tracking number"))?.page)
-        assertEquals("notFound", parseAmzlRaw(DomRaw(kind = "tracker", pageText = "This tracking information is no longer available"))?.page)
-        assertNull(parseAmzlRaw(DomRaw(kind = "cards")))
+        assertIs<PageOutcome.NotFound>(
+            resolveTrackerPage(DomRaw(kind = "tracker", pageText = "We couldn't find this tracking number"), AMZL_PAGE),
+        )
+        assertIs<PageOutcome.NotFound>(
+            resolveTrackerPage(DomRaw(kind = "tracker", pageText = "This tracking information is no longer available"), AMZL_PAGE),
+        )
+        assertNull(resolveTrackerPage(DomRaw(kind = "cards"), AMZL_PAGE))
     }
 }

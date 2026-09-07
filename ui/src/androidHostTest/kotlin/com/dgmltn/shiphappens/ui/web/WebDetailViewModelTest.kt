@@ -105,7 +105,11 @@ class WebDetailViewModelTest {
         buildVm()
         db.parcelDao().upsertParcel(parcel.toEntity())
         awaitState { it.loaded }
-        val job = vm.onPayload("""{"kind":"dom","body":"{\"page\":\"ok\",\"tracking\":{\"status\":\"OUT_FOR_DELIVERY\",\"location\":\"Memphis, TN\"}}"}""")
+        // "page":"ok" is no longer emitted by any JS or routed to Tracking (Task 5: PageOutcome
+        // replaces it) — go through the real UPS API-capture path instead, exactly as production does.
+        val job = vm.onPayload(
+            """{"kind":"api","url":"https://www.ups.com/track/api/Track/GetStatus","body":"{\"trackDetails\":[{\"packageStatusType\":\"O\",\"shipmentProgressActivities\":[{\"date\":\"07/12/2026\",\"time\":\"9:00 AM\",\"location\":\"Memphis, TN\",\"activityScan\":\"Out for Delivery\"}]}]}"}""",
+        )
         // Join the write coroutine before the test can return — otherwise it may still be
         // resuming onto Dispatchers.Main after tearDown's resetMain(), crashing a later test.
         withContext(Dispatchers.Default) { withTimeout(10_000) { assertNotNull(job).join() } }

@@ -1,6 +1,8 @@
 package com.dgmltn.shiphappens.source.fedex
 
+import com.dgmltn.shiphappens.domain.TrackingStatus
 import com.dgmltn.shiphappens.source.webview.DomRaw
+import com.dgmltn.shiphappens.source.webview.snapshotOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -35,7 +37,6 @@ class FedexWebSpecTest {
 
     @Test fun parse_raw_delegates_to_fedex_page_logic() {
         val result = FedexWebSpec.parseRaw(DomRaw(kind = "tracker", statusText = "On the way"))
-        assertEquals("ok", result?.page)
-        assertEquals("IN_TRANSIT", result?.tracking?.status)
+        assertEquals(TrackingStatus.IN_TRANSIT, result.snapshotOrNull()?.status)
     }
 }

@@ -208,7 +208,7 @@ tracking number") as `notFound` extras, so the merged behavior on every existing
 unchanged.
 
 `parsePromiseDate(text, today)` is the default ETA chain: numeric M/D/Y, month-name with year,
-relative day, weekday name, then month+day without year. It is safe only on text that is the
+relative day, month+day without year, then weekday name. It is safe only on text that is the
 promise element, which `DomRaw.etaText` is by contract. Amazon keeps its own `etaDate` hook
 because it reads promises out of status headlines and needs the "arriving"/"now expected" gate
 first. FedEx keeps a `location` hook for its "Currently in" prefix.

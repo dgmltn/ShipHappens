@@ -1,10 +1,14 @@
 package com.dgmltn.shiphappens.source.usps
 
+import com.dgmltn.shiphappens.domain.TrackingStatus
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 // PROVISIONAL fixture: tools.usps.com sits behind Akamai, so this shape could not be captured
 // off-device (see design spec §Decisions). Vocabulary mirrors USPS's tracking-API field names
@@ -30,30 +34,29 @@ class UspsApiParserTest {
 
     @Test fun parses_status_eta_location_and_events() {
         val t = assertNotNull(UspsApiParser.parse(FIXTURE))
-        assertEquals("IN_TRANSIT", t.status)
-        assertEquals("2026-07-16", t.etaDate)
-        assertEquals("20:00", t.etaWindowEnd)
-        assertEquals("SAN FRANCISCO, CA", t.location)  // newest event's city/state
+        assertEquals(TrackingStatus.IN_TRANSIT, t.status)
+        assertEquals(LocalDate(2026, 7, 16), t.etaDate)
+        assertEquals(LocalTime(20, 0), t.etaWindowEnd)
+        assertEquals("SAN FRANCISCO, CA", t.latestLocation)  // newest event's city/state
         assertEquals(4, t.events.size)
         // Events chronological ASCENDING (domain expectation); USPS sends newest-first.
         assertTrue(t.events.first().description.startsWith("Shipping Label Created"))
-        assertEquals("LABEL_CREATED", t.events.first().status)
-        assertEquals("SHIPPED", t.events[1].status)     // "Accepted at USPS Origin Facility"
-        assertEquals("IN_TRANSIT", t.events.last().status)
-        assertTrue(t.events.all { runCatching { kotlin.time.Instant.parse(it.timestamp) }.isSuccess })
+        assertEquals(TrackingStatus.LABEL_CREATED, t.events.first().status)
+        assertEquals(TrackingStatus.SHIPPED, t.events[1].status)     // "Accepted at USPS Origin Facility"
+        assertEquals(TrackingStatus.IN_TRANSIT, t.events.last().status)
     }
 
     @Test fun status_wordings_map_to_canonical() {
         fun withCategory(c: String) = """{"statusCategory":"$c"}"""
-        assertEquals("LABEL_CREATED", UspsApiParser.parse(withCategory("Pre-Shipment"))!!.status)
-        assertEquals("SHIPPED", UspsApiParser.parse(withCategory("Accepted"))!!.status)
-        assertEquals("IN_TRANSIT", UspsApiParser.parse(withCategory("Moving Through Network"))!!.status)
-        // Vocabulary is shared with the DOM layer (UspsPageLogic), so both learn new wordings at once.
-        assertEquals("IN_TRANSIT", UspsApiParser.parse(withCategory("On the Way"))!!.status)
-        assertEquals("OUT_FOR_DELIVERY", UspsApiParser.parse(withCategory("Out for Delivery"))!!.status)
-        assertEquals("DELIVERED", UspsApiParser.parse(withCategory("Delivered to Agent"))!!.status)
-        assertEquals("EXCEPTION", UspsApiParser.parse(withCategory("Alert"))!!.status)
-        assertEquals("UNKNOWN", UspsApiParser.parse(withCategory("Some New Wording"))!!.status)
+        assertEquals(TrackingStatus.LABEL_CREATED, UspsApiParser.parse(withCategory("Pre-Shipment"))!!.status)
+        assertEquals(TrackingStatus.SHIPPED, UspsApiParser.parse(withCategory("Accepted"))!!.status)
+        assertEquals(TrackingStatus.IN_TRANSIT, UspsApiParser.parse(withCategory("Moving Through Network"))!!.status)
+        // Vocabulary is shared with the DOM layer (USPS_VOCABULARY), so both learn new wordings at once.
+        assertEquals(TrackingStatus.IN_TRANSIT, UspsApiParser.parse(withCategory("On the Way"))!!.status)
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, UspsApiParser.parse(withCategory("Out for Delivery"))!!.status)
+        assertEquals(TrackingStatus.DELIVERED, UspsApiParser.parse(withCategory("Delivered to Agent"))!!.status)
+        assertEquals(TrackingStatus.EXCEPTION, UspsApiParser.parse(withCategory("Alert"))!!.status)
+        assertEquals(TrackingStatus.UNKNOWN, UspsApiParser.parse(withCategory("Some New Wording"))!!.status)
     }
 
     @Test fun overall_status_falls_back_to_newest_event() {
@@ -61,19 +64,19 @@ class UspsApiParserTest {
             """{"statusCategory":"Something Novel","trackingEvents":[
                  {"eventType":"Delivered, In/At Mailbox","eventTimestamp":"2026-07-14T13:02:00"}]}""",
         ))
-        assertEquals("DELIVERED", t.status)
+        assertEquals(TrackingStatus.DELIVERED, t.status)
     }
 
     @Test fun tolerates_alternate_date_time_formats() {
         val t = assertNotNull(UspsApiParser.parse(
             """{"statusCategory":"In Transit","expectedDeliveryDate":"Wednesday, July 16, 2026","expectedDeliveryTime":"8:00pm"}""",
         ))
-        assertEquals("2026-07-16", t.etaDate)
-        assertEquals("20:00", t.etaWindowEnd)
+        assertEquals(LocalDate(2026, 7, 16), t.etaDate)
+        assertEquals(LocalTime(20, 0), t.etaWindowEnd)
         val slash = assertNotNull(UspsApiParser.parse(
             """{"statusCategory":"In Transit","expectedDeliveryDate":"07/16/2026"}""",
         ))
-        assertEquals("2026-07-16", slash.etaDate)
+        assertEquals(LocalDate(2026, 7, 16), slash.etaDate)
     }
 
     @Test fun accepts_instant_event_timestamps() {
@@ -81,7 +84,7 @@ class UspsApiParserTest {
             """{"statusCategory":"In Transit","trackingEvents":[
                  {"eventType":"Arrived at USPS Facility","eventTimestamp":"2026-07-14T02:18:00Z"}]}""",
         ))
-        assertEquals("2026-07-14T02:18:00Z", t.events.single().timestamp)
+        assertEquals(Instant.parse("2026-07-14T02:18:00Z"), t.events.single().timestamp)
     }
 
     @Test fun rejects_non_tracking_json() {
@@ -97,15 +100,15 @@ class UspsApiParserTest {
                  {"eventType":"Accepted at USPS Origin Facility","eventTimestamp":"2026-07-13T15:47:00","eventCity":"SANTA ROSA","eventState":"CA"},
                  {"eventType":"Departed USPS Regional Facility","eventTimestamp":"2026-07-14T02:18:00","eventCity":"SAN FRANCISCO","eventState":"CA"}]}""",
         ))
-        assertEquals("SAN FRANCISCO, CA", t.location)
+        assertEquals("SAN FRANCISCO, CA", t.latestLocation)
     }
 
     @Test fun tolerates_missing_fields() {
         val t = assertNotNull(UspsApiParser.parse("""{"statusCategory":"Delivered"}"""))
-        assertEquals("DELIVERED", t.status)
+        assertEquals(TrackingStatus.DELIVERED, t.status)
         assertNull(t.etaDate)
         assertNull(t.etaWindowEnd)
-        assertNull(t.location)
+        assertNull(t.latestLocation)
         assertTrue(t.events.isEmpty())
     }
 }

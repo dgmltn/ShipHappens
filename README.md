@@ -91,8 +91,8 @@ gitignored and recreated by `xcodegen generate`, while `app-ios/ShipHappens/Info
 ```
 
 Note `:ui`'s task is `testAndroidHostTest`, not `testDebugUnitTest` — the UI module's unit tests
-run on the Android-host test source set. Current suite: 470 tests across 11 modules (domain 22,
-data 106, api 2, ups 23, usps 29, fedex 35, amazon 55, amzl 21, dhlecs 27, webview 85, ui 65),
+run on the Android-host test source set. Current suite: 505 tests across 11 modules (domain 22,
+data 106, api 2, ups 23, usps 29, fedex 35, amazon 55, amzl 22, dhlecs 28, webview 118, ui 65),
 all passing.
 
 ## Daily update
@@ -123,10 +123,10 @@ touches `domain` or `data`:
 1. **Implement `TrackingSource`** in a new `source/<name>` module (copy `source/usps` as a
    template: same `build.gradle.kts` shape — `api(projects.source.api)` +
    `api(projects.source.webview)` plus Koin). For a website-scraped carrier that means one
-   `WebProviderSpec` (URLs, capture patterns, a DOM-reader JS blob), a `<Name>PageLogic.kt` that
-   makes every scrape decision in testable Kotlin, an API parser for captured XHR JSON, and a
-   thin `WebViewBasedSource` subclass supplying `detectCarrier(trackingNumber)` for cheap local
-   format recognition.
+   `WebProviderSpec` with the carrier's `StatusVocabulary` and `TrackerPageRules`, an optional API
+   parser returning `TrackingSnapshot`, and the extraction JS; the shared resolver, assembler, and
+   date helpers live in `:source:webview`. Add a thin `WebViewBasedSource` subclass supplying
+   `detectCarrier(trackingNumber)` for cheap local format recognition.
 2. **Expose a Koin module** — one line, same pattern as every existing source:
    ```kotlin
    val myNewSourceModule: Module = module { single { MyNewSource(get()) } bind TrackingSource::class }

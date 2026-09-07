@@ -1,12 +1,15 @@
 package com.dgmltn.shiphappens.source.ups
 
-import com.dgmltn.shiphappens.source.webview.ScrapedEvent
-import com.dgmltn.shiphappens.source.webview.ScrapedTracking
-import kotlinx.datetime.LocalDate
-import kotlinx.datetime.LocalDateTime
-import kotlinx.datetime.LocalTime
+import com.dgmltn.shiphappens.domain.TrackingEvent
+import com.dgmltn.shiphappens.domain.TrackingSnapshot
+import com.dgmltn.shiphappens.domain.TrackingStatus
+import com.dgmltn.shiphappens.source.webview.EtaWindow
+import com.dgmltn.shiphappens.source.webview.assembleSnapshot
+import com.dgmltn.shiphappens.source.webview.eventAt
+import com.dgmltn.shiphappens.source.webview.parseCompactDate
+import com.dgmltn.shiphappens.source.webview.parseNumericMdyDate
+import com.dgmltn.shiphappens.source.webview.parseTimeOfDay
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toInstant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -36,89 +39,56 @@ import kotlinx.serialization.json.Json
 )
 
 /**
- * Maps ups.com's in-page tracking API JSON to the canonical [ScrapedTracking].
- * Field vocabulary is tolerant: every field optional, unknown wording degrades to UNKNOWN.
- * UPS reports local wall-clock times with no zone; we interpret them in the device zone —
- * imperfect for cross-zone shipments, but only event ordering and dates surface in the UI.
+ * Maps ups.com's in-page tracking API JSON to a [TrackingSnapshot]. Field vocabulary is
+ * tolerant: every field optional, unknown wording degrades to UNKNOWN. UPS reports local
+ * wall-clock times with no zone; we interpret them in the device zone — imperfect for
+ * cross-zone shipments, but only event ordering and dates surface in the UI.
  */
 object UpsApiParser {
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun parse(body: String): ScrapedTracking? {
+    fun parse(body: String): TrackingSnapshot? {
         val detail = runCatching { json.decodeFromString<UpsTrackResponse>(body) }
             .getOrNull()?.trackDetails?.firstOrNull() ?: return null
         val activities = detail.shipmentProgressActivities.orEmpty()
-        val tz = TimeZone.currentSystemDefault()
+        val zone = TimeZone.currentSystemDefault()
         val events = activities.mapNotNull { a ->
-            val date = parseUpsDate(a.date) ?: return@mapNotNull null
-            val time = parseUpsTime(a.time) ?: LocalTime(0, 0)
+            val date = parseNumericMdyDate(a.date) ?: return@mapNotNull null
             val scan = a.activityScan ?: return@mapNotNull null
-            ScrapedEvent(
-                timestamp = LocalDateTime(date, time).toInstant(tz).toString(),
+            TrackingEvent(
+                timestamp = eventAt(date, parseTimeOfDay(a.time), zone),
                 description = scan,
                 location = a.location,
-                status = classify(null, scan).takeIf { it != "UNKNOWN" },
+                status = UPS_VOCABULARY.classify(scan),
             )
-        }.reversed()  // UPS is newest-first; domain expects chronological ascending
-        return ScrapedTracking(
-            status = classify(detail.packageStatusType, detail.packageStatus ?: ""),
-            etaDate = (parseCompactDate(detail.sdd) ?: parseUpsDate(detail.scheduledDeliveryDate))?.toString(),
-            etaWindowStart = parseClockTime(detail.sdst)?.toString(),
-            etaWindowEnd = parseClockTime(detail.sdt)?.toString(),
-            location = activities.firstOrNull()?.location,
-            // Delay rides alongside the stage rather than replacing it: this package is
-            // "On the Way: Delayed" — genuinely in transit, and genuinely late. Prefer UPS's
-            // reason sentence; the headline itself is the fallback when there isn't one.
-            delayNote = detail.packageStatus
-                ?.takeIf { isUpsDelayed(it) }
-                ?.let { detail.simplifiedText?.takeIf(String::isNotBlank) ?: it },
+        }
+        return assembleSnapshot(
+            vocabulary = UPS_VOCABULARY,
+            // Status text takes precedence: live ups.com keeps packageStatusType "I" (a coarse
+            // in-transit bucket) even when the package is out for delivery — only the text is
+            // specific. The type code is the fallback for unrecognized or reworded statuses.
+            headline = detail.packageStatus,
             events = events,
+            etaDate = parseCompactDate(detail.sdd) ?: parseNumericMdyDate(detail.scheduledDeliveryDate),
+            etaWindow = EtaWindow(parseTimeOfDay(detail.sdst), parseTimeOfDay(detail.sdt)),
+            location = activities.firstOrNull()?.location,  // UPS lists newest first
+            // Delay rides alongside the stage rather than replacing it: "On the Way: Delayed" is
+            // genuinely in transit, and genuinely late. Prefer UPS's reason sentence; the
+            // headline itself is the fallback when there isn't one.
+            delayNote = detail.packageStatus
+                ?.takeIf { UPS_VOCABULARY.isDelayed(it) }
+                ?.let { detail.simplifiedText?.takeIf(String::isNotBlank) ?: it },
+            statusFallback = typeCodeStatus(detail.packageStatusType),
         )
     }
 
-    /** "07/15/2026" -> LocalDate. */
-    private fun parseUpsDate(raw: String?): LocalDate? {
-        val m = Regex("""(\d{2})/(\d{2})/(\d{4})""").find(raw ?: "") ?: return null
-        val (mm, dd, yyyy) = m.destructured
-        return runCatching { LocalDate(yyyy.toInt(), mm.toInt(), dd.toInt()) }.getOrNull()
-    }
-
-    /** "20260714" -> LocalDate. */
-    private fun parseCompactDate(raw: String?): LocalDate? {
-        val m = Regex("""(\d{4})(\d{2})(\d{2})""").matchEntire(raw?.trim() ?: "") ?: return null
-        val (yyyy, mm, dd) = m.destructured
-        return runCatching { LocalDate(yyyy.toInt(), mm.toInt(), dd.toInt()) }.getOrNull()
-    }
-
-    /** "14:30:00" (24-hour, a delivery-window bound) -> LocalTime. */
-    private fun parseClockTime(raw: String?): LocalTime? {
-        val m = Regex("""(\d{1,2}):(\d{2})""").find(raw ?: "") ?: return null
-        val (h, min) = m.destructured
-        return runCatching { LocalTime(h.toInt(), min.toInt()) }.getOrNull()
-    }
-
-    /** "8:15 A.M." / "12:07 P.M." -> LocalTime. */
-    private fun parseUpsTime(raw: String?): LocalTime? {
-        val m = Regex("""(\d{1,2}):(\d{2})\s*([AP])\.?M\.?""", RegexOption.IGNORE_CASE).find(raw ?: "") ?: return null
-        val (h, min, ap) = m.destructured
-        val hour24 = (h.toInt() % 12) + if (ap.uppercase() == "P") 12 else 0
-        return runCatching { LocalTime(hour24, min.toInt()) }.getOrNull()
-    }
-
-    // Status text takes precedence: live ups.com keeps packageStatusType "I" (a coarse
-    // in-transit bucket) even when the package is out for delivery — only the text is specific.
-    // The type code is the fallback for unrecognized or reworded statuses. Text vocabulary is
-    // shared with the DOM layer — one vocabulary, tested once (UpsPageLogic).
-    private fun classify(typeCode: String?, text: String): String {
-        classifyUpsStatus(text)?.let { return it.name }
-        return when (typeCode?.uppercase()) {
-            "M" -> "LABEL_CREATED"
-            "P" -> "SHIPPED"
-            "I" -> "IN_TRANSIT"
-            "O" -> "OUT_FOR_DELIVERY"
-            "D" -> "DELIVERED"
-            "X" -> "EXCEPTION"
-            else -> "UNKNOWN"
-        }
+    private fun typeCodeStatus(code: String?): TrackingStatus? = when (code?.uppercase()) {
+        "M" -> TrackingStatus.LABEL_CREATED
+        "P" -> TrackingStatus.SHIPPED
+        "I" -> TrackingStatus.IN_TRANSIT
+        "O" -> TrackingStatus.OUT_FOR_DELIVERY
+        "D" -> TrackingStatus.DELIVERED
+        "X" -> TrackingStatus.EXCEPTION
+        else -> null
     }
 }

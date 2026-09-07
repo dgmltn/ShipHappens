@@ -1,6 +1,7 @@
 package com.dgmltn.shiphappens.source.webview
 
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -116,5 +117,56 @@ class PageDatesTest {
         assertNull(parseWeekdayName("Arriving Thursday", null))
         assertNull(parseWeekdayName("by end of day", LocalDate(2026, 8, 19)))
         assertNull(parseWeekdayName(null, LocalDate(2026, 8, 19)))
+    }
+
+    @Test fun compact_date_parses_only_the_eight_digit_form() {
+        assertEquals(LocalDate(2026, 7, 14), parseCompactDate("20260714"))
+        assertEquals(LocalDate(2026, 7, 14), parseCompactDate(" 20260714 "))
+        assertNull(parseCompactDate("2026-07-14"))
+        assertNull(parseCompactDate("20261314"))
+        assertNull(parseCompactDate(null))
+    }
+
+    @Test fun any_date_accepts_iso_numeric_and_month_name_forms() {
+        assertEquals(LocalDate(2026, 7, 16), parseAnyDate("2026-07-16"))
+        assertEquals(LocalDate(2026, 7, 16), parseAnyDate("2026-07-16T00:00:00"))
+        assertEquals(LocalDate(2026, 7, 16), parseAnyDate("07/16/2026"))
+        assertEquals(LocalDate(2026, 7, 16), parseAnyDate("Wednesday, July 16, 2026"))
+        assertNull(parseAnyDate("pending"))
+        assertNull(parseAnyDate(null))
+    }
+
+    @Test fun promise_date_tries_explicit_forms_before_relative_and_weekday() {
+        val today = LocalDate(2026, 8, 18)
+        assertEquals(LocalDate(2026, 8, 20), parsePromiseDate("Thursday8/20/2026 Between 10:10 AM - 2:10 PM", today))
+        assertEquals(LocalDate(2026, 8, 22), parsePromiseDate("Saturday, August 22, 2026", today))
+        assertEquals(LocalDate(2026, 8, 19), parsePromiseDate("Arriving tomorrow by 8 AM", today))
+        assertEquals(LocalDate(2026, 8, 22), parsePromiseDate("Saturday, August 22", today))
+        assertEquals(LocalDate(2026, 8, 20), parsePromiseDate("Thursday Between 10:10 AM - 2:10 PM", today))
+        assertNull(parsePromiseDate("Estimated delivery Pending", today))
+        // Without the page date, only the yearful forms can resolve.
+        assertNull(parsePromiseDate("Arriving tomorrow", null))
+        assertNull(parsePromiseDate("Thursday Between 10:10 AM - 2:10 PM", null))
+        assertEquals(LocalDate(2026, 8, 20), parsePromiseDate("8/20/2026", null))
+    }
+
+    @Test fun time_of_day_accepts_seconds_and_narrow_spaces() {
+        assertEquals(LocalTime(22, 33, 20), parseTimeOfDay("Aug 10, 2026, 10:33:20 PM"))
+        assertEquals(LocalTime(3, 0, 0), parseTimeOfDay("Aug 13, 2026, 3:00:00 AM"))
+        assertEquals(LocalTime(3, 0), parseTimeOfDay("3:00 AM"))
+        assertEquals(LocalTime(14, 30, 0), parseTimeOfDay("14:30:00"))
+        // Narrow no-break space (U+202F) before AM/PM
+        assertEquals(LocalTime(3, 0), parseTimeOfDay("3:00\u202F AM"))
+        assertEquals(LocalTime(22, 33), parseTimeOfDay("10:33\u202F PM"))
+        // NBSP (U+00A0) between the seconds and AM/PM
+        assertEquals(LocalTime(3, 0, 0), parseTimeOfDay("Aug 13, 2026, 3:00:00\u00A0AM"))
+    }
+
+    @Test fun month_name_date_tolerates_narrow_spaces() {
+        assertEquals(LocalDate(2026, 8, 13), parseMonthNameDate("Aug 13, 2026"))
+        // NBSP (U+00A0) between month and day
+        assertEquals(LocalDate(2026, 8, 13), parseMonthNameDate("Aug\u00A0 13, 2026"))
+        // Narrow no-break space (U+202F) in date
+        assertEquals(LocalDate(2026, 8, 13), parseMonthNameDate("Aug\u202F 13, 2026"))
     }
 }

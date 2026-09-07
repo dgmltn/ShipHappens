@@ -2,13 +2,15 @@ package com.dgmltn.shiphappens.source.fedex
 
 import com.dgmltn.shiphappens.domain.WellKnownCarriers
 import com.dgmltn.shiphappens.source.webview.WebProviderSpec
+import com.dgmltn.shiphappens.source.webview.resolveTrackerPage
 import kotlin.time.Duration.Companion.seconds
 
 // DOM *reader* — the ONLY layer for FedEx, and deliberately so: injecting the fetch/XHR capture
 // hooks makes fedex.com's bot defense fail every tracking lookup onto its "system-error" page
 // (live QA 2026-08-19), so this spec declares no apiUrlPatterns and WebSessions skips the hooks
 // entirely. The reader finds elements and returns their text (page-state wording included, as
-// pageText); FedexPageLogic decides everything. Selectors were captured live 2026-08-19/21 from
+// pageText); FedexPageLogic holds only the vocabulary, not-found copy, and location hook — the
+// shared resolver (resolveTrackerPage) decides the rest. Selectors were captured live 2026-08-19/21 from
 // a FedEx Ground package across its in-transit, delivered, and travel-history states:
 //   .phase3-progress-bar__active-label        "On the way"            (absent once delivered)
 //   [data-test-id="delivery-date-header"]     "ESTIMATED DELIVERY DATE" / "DELIVERED"
@@ -111,8 +113,7 @@ val FedexWebSpec = WebProviderSpec(
     apiUrlPatterns = emptyList(),
     challengeMarkers = listOf("Access Denied", "Reference #", "verify you are a human", "unusual activity"),
     extractionJs = FEDEX_EXTRACTION_JS,
-    parseApi = { _, _ -> null },
-    parseRaw = ::parseFedexRaw,
+    parseRaw = { resolveTrackerPage(it, FEDEX_PAGE) },
     // Measured live: 3s after onPageFinished the SPA is still an app shell; ~10s in it has
     // rendered the tracking view. 12s is the validated capture point (plus 2s more in-extractor
     // after the details click).

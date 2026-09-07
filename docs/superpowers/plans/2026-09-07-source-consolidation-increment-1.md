@@ -1286,8 +1286,11 @@ class TrackerPageResolverTest {
             TrackingEvent(Instant.parse("2026-08-18T07:00:00Z"), "Package delayed in transit"),
         )
         assertEquals("Package delayed in transit", headlineThenNewestEvent(v, "Arriving tomorrow", delayedNewest))
+        // Delay is orthogonal to stage: a recognized headline never hides a delayed newest event.
+        assertEquals("Package delayed in transit", headlineThenNewestEvent(v, "In transit", delayedNewest))
         // A delay event older than the newest scan doesn't flag a package that moved on.
-        assertNull(headlineThenNewestEvent(v, "Delivered", delayedNewest.reversed()))
+        val movedOn = delayedNewest + TrackingEvent(Instant.parse("2026-08-19T10:00:00Z"), "Delivered")
+        assertNull(headlineThenNewestEvent(v, "Delivered", movedOn))
         assertNull(headlineThenNewestEvent(v, "On the way", emptyList()))
     }
 

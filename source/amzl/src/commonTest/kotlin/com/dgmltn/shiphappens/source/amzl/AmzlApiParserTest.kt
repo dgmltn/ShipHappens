@@ -1,5 +1,10 @@
 package com.dgmltn.shiphappens.source.amzl
 
+import com.dgmltn.shiphappens.domain.TrackingStatus
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -27,15 +32,19 @@ class AmzlApiParserTest {
 
     @Test fun parses_status_eta_and_events_from_live_fixture() {
         val t = assertNotNull(AmzlApiParser.parse(FIXTURE))
-        assertEquals("LABEL_CREATED", t.status)
-        assertEquals("2026-08-13", t.etaDate)     // date only — the 3:00 AM is not a delivery window
+        assertEquals(TrackingStatus.LABEL_CREATED, t.status)
+        assertEquals(LocalDate(2026, 8, 13), t.etaDate)     // date only — the 3:00 AM is not a delivery window
         assertNull(t.etaWindowStart)
         assertNull(t.etaWindowEnd)
         assertEquals(1, t.events.size)
         assertEquals("Label created", t.events.single().description)
-        assertEquals("LABEL_CREATED", t.events.single().status)
-        // Timestamps are ISO instants (parseable by the canonical layer).
-        assertTrue(t.events.all { runCatching { kotlin.time.Instant.parse(it.timestamp) }.isSuccess })
+        assertEquals(TrackingStatus.LABEL_CREATED, t.events.single().status)
+        // "Aug 10, 2026, 10:33:20 PM" — the parser builds the instant in the device zone, so
+        // converting back in the same zone is deterministic regardless of the host's zone.
+        assertEquals(
+            LocalDateTime(2026, 8, 10, 22, 33, 20),
+            t.events.single().timestamp.toLocalDateTime(TimeZone.currentSystemDefault()),
+        )
     }
 
     @Test fun not_found_error_body_returns_null() {
@@ -43,23 +52,23 @@ class AmzlApiParserTest {
     }
 
     @Test fun summary_status_vocabulary_maps_to_canonical() {
-        assertEquals("LABEL_CREATED", AmzlApiParser.parse(envelope("CreationConfirmed"))!!.status)
-        assertEquals("SHIPPED", AmzlApiParser.parse(envelope("PickupDone"))!!.status)
-        assertEquals("IN_TRANSIT", AmzlApiParser.parse(envelope("InTransit"))!!.status)
-        assertEquals("IN_TRANSIT", AmzlApiParser.parse(envelope("ArrivedAtDeliveryCenter"))!!.status)
-        assertEquals("OUT_FOR_DELIVERY", AmzlApiParser.parse(envelope("OutForDelivery"))!!.status)
-        assertEquals("DELIVERED", AmzlApiParser.parse(envelope("Delivered"))!!.status)
-        assertEquals("EXCEPTION", AmzlApiParser.parse(envelope("DeliveryAttempted"))!!.status)
-        assertEquals("EXCEPTION", AmzlApiParser.parse(envelope("Undeliverable"))!!.status)
-        assertEquals("EXCEPTION", AmzlApiParser.parse(envelope("ReturnedToSeller"))!!.status)
-        assertEquals("UNKNOWN", AmzlApiParser.parse(envelope("SomeNewWording"))!!.status)
+        assertEquals(TrackingStatus.LABEL_CREATED, AmzlApiParser.parse(envelope("CreationConfirmed"))!!.status)
+        assertEquals(TrackingStatus.SHIPPED, AmzlApiParser.parse(envelope("PickupDone"))!!.status)
+        assertEquals(TrackingStatus.IN_TRANSIT, AmzlApiParser.parse(envelope("InTransit"))!!.status)
+        assertEquals(TrackingStatus.IN_TRANSIT, AmzlApiParser.parse(envelope("ArrivedAtDeliveryCenter"))!!.status)
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, AmzlApiParser.parse(envelope("OutForDelivery"))!!.status)
+        assertEquals(TrackingStatus.DELIVERED, AmzlApiParser.parse(envelope("Delivered"))!!.status)
+        assertEquals(TrackingStatus.EXCEPTION, AmzlApiParser.parse(envelope("DeliveryAttempted"))!!.status)
+        assertEquals(TrackingStatus.EXCEPTION, AmzlApiParser.parse(envelope("Undeliverable"))!!.status)
+        assertEquals(TrackingStatus.EXCEPTION, AmzlApiParser.parse(envelope("ReturnedToSeller"))!!.status)
+        assertEquals(TrackingStatus.UNKNOWN, AmzlApiParser.parse(envelope("SomeNewWording"))!!.status)
     }
 
     @Test fun delay_tokens_keep_the_stage_and_report_the_delay() {
         // "InTransitDelayed" names its stage; a bare delay token asserts none.
-        assertEquals("IN_TRANSIT", AmzlApiParser.parse(envelope("InTransitDelayed"))!!.status)
-        assertEquals("UNKNOWN", AmzlApiParser.parse(envelope("Delayed"))!!.status)
-        assertEquals("UNKNOWN", AmzlApiParser.parse(envelope("DeliveryDelayed"))!!.status)
+        assertEquals(TrackingStatus.IN_TRANSIT, AmzlApiParser.parse(envelope("InTransitDelayed"))!!.status)
+        assertEquals(TrackingStatus.UNKNOWN, AmzlApiParser.parse(envelope("Delayed"))!!.status)
+        assertEquals(TrackingStatus.UNKNOWN, AmzlApiParser.parse(envelope("DeliveryDelayed"))!!.status)
     }
 
     @Test fun a_delay_token_becomes_a_readable_note() {
@@ -74,16 +83,16 @@ class AmzlApiParserTest {
     }
 
     @Test fun tracking_status_is_the_fallback_when_summary_status_is_missing() {
-        assertEquals("LABEL_CREATED", AmzlApiParser.parse(envelope(null, "READY_FOR_RECEIVE"))!!.status)
-        assertEquals("OUT_FOR_DELIVERY", AmzlApiParser.parse(envelope(null, "OUT_FOR_DELIVERY"))!!.status)
-        assertEquals("DELIVERED", AmzlApiParser.parse(envelope(null, "DELIVERED"))!!.status)
+        assertEquals(TrackingStatus.LABEL_CREATED, AmzlApiParser.parse(envelope(null, "READY_FOR_RECEIVE"))!!.status)
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, AmzlApiParser.parse(envelope(null, "OUT_FOR_DELIVERY"))!!.status)
+        assertEquals(TrackingStatus.DELIVERED, AmzlApiParser.parse(envelope(null, "DELIVERED"))!!.status)
     }
 
     @Test fun parses_dates_with_narrow_spaces() {
         // Newer JDK/ICU date formatting inserts U+202F before AM/PM; Amazon may follow.
         val nnbsp = '\u202F'
         val body = """{"progressTracker": "{\"summary\": {\"status\": \"InTransit\", \"metadata\": {\"promisedDeliveryDate\": {\"date\": \"Aug 13, 2026, 3:00:00${nnbsp}AM\"}}}}"}"""
-        assertEquals("2026-08-13", AmzlApiParser.parse(body)!!.etaDate)
+        assertEquals(LocalDate(2026, 8, 13), AmzlApiParser.parse(body)!!.etaDate)
     }
 
     @Test fun unknown_event_codes_fall_back_to_split_camel_case() {
@@ -100,7 +109,7 @@ class AmzlApiParserTest {
 
     @Test fun tolerates_missing_fields() {
         val t = assertNotNull(AmzlApiParser.parse(envelope("Delivered")))
-        assertEquals("DELIVERED", t.status)
+        assertEquals(TrackingStatus.DELIVERED, t.status)
         assertNull(t.etaDate)
         assertTrue(t.events.isEmpty())
     }

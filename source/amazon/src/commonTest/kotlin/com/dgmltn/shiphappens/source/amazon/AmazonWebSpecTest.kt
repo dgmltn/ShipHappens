@@ -2,9 +2,11 @@ package com.dgmltn.shiphappens.source.amazon
 
 import com.dgmltn.shiphappens.source.webview.DomCard
 import com.dgmltn.shiphappens.source.webview.DomRaw
+import com.dgmltn.shiphappens.source.webview.PageOutcome
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -57,7 +59,7 @@ class AmazonWebSpecTest {
             kind = "cards",
             cards = listOf(DomCard(head = "Arriving today", href = "https://www.amazon.com/progress-tracker/p")),
         )
-        assertEquals("goto", AmazonWebSpec.parseRaw(cards)?.page)
+        assertIs<PageOutcome.Goto>(AmazonWebSpec.parseRaw(cards))
     }
 
     @Test fun extraction_js_targets_the_data_component_order_details_layout() {

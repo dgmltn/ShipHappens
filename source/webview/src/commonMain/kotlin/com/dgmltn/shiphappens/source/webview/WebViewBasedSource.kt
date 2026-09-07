@@ -46,8 +46,8 @@ abstract class WebViewBasedSource(
                 // also backfills a rich result that landed on an impoverished tracker page (UNKNOWN,
                 // no ETA), so that page can't blank an ETA the order page already knew.
                 val coarse = routed.firstCoarseTracking()
-                routed.firstRichTracking()?.let { return SourceResult.Success(it.backfilledFrom(coarse).toSnapshot()) }
-                coarse?.let { return SourceResult.Success(it.toSnapshot()) }
+                routed.firstRichTracking()?.let { return SourceResult.Success(it.backfilledFrom(coarse)) }
+                coarse?.let { return SourceResult.Success(it) }
                 when {
                     routed.has<RouteResult.LoginWall>() ->
                         SourceResult.Failure(FailureReason.AUTH, "Sign in to $name in Settings, then refresh")
@@ -69,20 +69,20 @@ abstract class WebViewBasedSource(
  * These three read like `firstNotNullOfOrNull { (it as? T)?.tracking }` and `any { it is T }` written
  * the long way, and that is deliberate. Kotlin/Native 2.4.0 miscompiles those inline-lambda forms when
  * they scan this list inside `track`: the "found nothing" path yields an uninitialized reference rather
- * than null, the null check passes, and `toSnapshot()` then segfaults on a garbage pointer
+ * than null, the null check passes, and dereferencing it then segfaults on a garbage pointer
  * (failure_taxonomy_mapping, iosSimulatorArm64 only — the JVM target is fine). Plain iterator loops
  * compile correctly. Revisit when the Kotlin version is bumped; see WebViewBasedSourceTest.
  */
 
-private fun List<RouteResult>.firstRichTracking(): ScrapedTracking? {
-    for (r in this) if (r is RouteResult.Tracking) return r.tracking
+private fun List<RouteResult>.firstRichTracking(): TrackingSnapshot? {
+    for (r in this) if (r is RouteResult.Tracking) return r.snapshot
     return null
 }
 
-private fun List<RouteResult>.firstCoarseTracking(): ScrapedTracking? {
+private fun List<RouteResult>.firstCoarseTracking(): TrackingSnapshot? {
     for (r in this) {
         if (r is RouteResult.Goto) {
-            val t = r.tracking
+            val t = r.coarse
             if (t != null) return t
         }
     }

@@ -1,8 +1,11 @@
 package com.dgmltn.shiphappens.source.dhlecs
 
+import com.dgmltn.shiphappens.domain.TrackingStatus
+import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.time.Instant
 
 // All tracking values in these fixtures are fabricated; only the JSON shape mirrors the live
 // api.dhlecs.com/webtrack/v4/tracking response (recon 2026-09-03).
@@ -31,9 +34,9 @@ class DhlEcsApiParserTest {
 
     @Test fun parses_status_eta_and_events_from_the_live_shape() {
         val tracking = DhlEcsApiParser.parse(envelope(enRoutePackage))!!
-        assertEquals("IN_TRANSIT", tracking.status)
-        assertEquals("2026-09-08", tracking.etaDate)
-        assertEquals("Whitestown, IN, US", tracking.location)
+        assertEquals(TrackingStatus.IN_TRANSIT, tracking.status)
+        assertEquals(LocalDate(2026, 9, 8), tracking.etaDate)
+        assertEquals("Whitestown, IN, US", tracking.latestLocation)
         assertNull(tracking.delayNote)
         assertEquals(2, tracking.events.size)
     }
@@ -42,13 +45,13 @@ class DhlEcsApiParserTest {
         // API lists newest first; canonical order is ascending. ET in September is EDT (UTC-4),
         // CT is CDT (UTC-5).
         val events = DhlEcsApiParser.parse(envelope(enRoutePackage))!!.events
-        assertEquals("2026-09-03T13:49:13Z", events[0].timestamp)
+        assertEquals(Instant.parse("2026-09-03T13:49:13Z"), events[0].timestamp)
         assertEquals("Label created", events[0].description)
         assertEquals("Hebron, KY, US", events[0].location)
-        assertEquals("LABEL_CREATED", events[0].status)
-        assertEquals("2026-09-04T23:05:00Z", events[1].timestamp)
+        assertEquals(TrackingStatus.LABEL_CREATED, events[0].status)
+        assertEquals(Instant.parse("2026-09-04T23:05:00Z"), events[1].timestamp)
         assertEquals("Arrival DHL eCommerce facility", events[1].description)
-        assertEquals("IN_TRANSIT", events[1].status)
+        assertEquals(TrackingStatus.IN_TRANSIT, events[1].status)
     }
 
     @Test fun pacific_and_winter_zone_abbreviations_resolve() {
@@ -57,7 +60,7 @@ class DhlEcsApiParserTest {
                 {"primaryEventId":540,"date":"2026-01-15","time":"08:00:00","timeZone":"PT",
                  "primaryEventDescription":"PROCESSED THROUGH SORT FACILITY","location":"Compton, CA, US"}]}"""
         )
-        assertEquals("2026-01-15T16:00:00Z", DhlEcsApiParser.parse(body)!!.events.single().timestamp)
+        assertEquals(Instant.parse("2026-01-15T16:00:00Z"), DhlEcsApiParser.parse(body)!!.events.single().timestamp)
     }
 
     @Test fun unknown_zone_abbreviation_keeps_the_event() {
@@ -71,12 +74,12 @@ class DhlEcsApiParserTest {
 
     @Test fun electronic_notification_is_label_created() {
         val body = envelope("""{"status":"Electronic Notification","events":[]}""")
-        assertEquals("LABEL_CREATED", DhlEcsApiParser.parse(body)!!.status)
+        assertEquals(TrackingStatus.LABEL_CREATED, DhlEcsApiParser.parse(body)!!.status)
     }
 
     @Test fun delivered_status_classifies() {
         val body = envelope("""{"status":"Delivered","events":[]}""")
-        assertEquals("DELIVERED", DhlEcsApiParser.parse(body)!!.status)
+        assertEquals(TrackingStatus.DELIVERED, DhlEcsApiParser.parse(body)!!.status)
     }
 
     @Test fun unreadable_status_falls_back_to_the_newest_classifiable_event() {
@@ -85,7 +88,7 @@ class DhlEcsApiParserTest {
                 {"primaryEventId":597,"date":"2026-09-05","time":"07:30:00","timeZone":"ET",
                  "primaryEventDescription":"OUT FOR DELIVERY","location":"Carlsbad, CA, US"}]}"""
         )
-        assertEquals("OUT_FOR_DELIVERY", DhlEcsApiParser.parse(body)!!.status)
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, DhlEcsApiParser.parse(body)!!.status)
     }
 
     @Test fun delay_event_reports_a_note_but_not_a_stage() {
@@ -99,7 +102,7 @@ class DhlEcsApiParserTest {
                  "primaryEventDescription":"PROCESSED THROUGH SORT FACILITY","location":"Whitestown, IN, US"}]}"""
         )
         val tracking = DhlEcsApiParser.parse(body)!!
-        assertEquals("IN_TRANSIT", tracking.status)
+        assertEquals(TrackingStatus.IN_TRANSIT, tracking.status)
         assertEquals("Possible delivery delay - adverse weather", tracking.delayNote)
         assertNull(tracking.events.last().status)  // stage-less wording asserts no stage
     }
@@ -115,7 +118,7 @@ class DhlEcsApiParserTest {
                  "primaryEventDescription":"POSSIBLE DELIVERY DELAY - ADVERSE WEATHER"}]}"""
         )
         val tracking = DhlEcsApiParser.parse(body)!!
-        assertEquals("DELIVERED", tracking.status)
+        assertEquals(TrackingStatus.DELIVERED, tracking.status)
         assertNull(tracking.delayNote)
     }
 
@@ -126,7 +129,7 @@ class DhlEcsApiParserTest {
                 {"primaryEventId":540,"date":"2026-07-10","time":"10:00:00","timeZone":"AST",
                  "primaryEventDescription":"PROCESSED THROUGH SORT FACILITY","location":"San Juan, PR, US"}]}"""
         )
-        assertEquals("2026-07-10T14:00:00Z", DhlEcsApiParser.parse(body)!!.events.single().timestamp)
+        assertEquals(Instant.parse("2026-07-10T14:00:00Z"), DhlEcsApiParser.parse(body)!!.events.single().timestamp)
     }
 
     @Test fun undelivered_wording_is_an_exception_not_a_delivery() {
@@ -135,12 +138,12 @@ class DhlEcsApiParserTest {
                 {"primaryEventId":636,"date":"2026-09-05","time":"11:00:00","timeZone":"ET",
                  "primaryEventDescription":"UNDELIVERED - PROCESSES FOR LOCAL DISPOSAL"}]}"""
         )
-        assertEquals("EXCEPTION", DhlEcsApiParser.parse(body)!!.events.single().status)
+        assertEquals(TrackingStatus.EXCEPTION, DhlEcsApiParser.parse(body)!!.events.single().status)
     }
 
     @Test fun eta_with_a_time_component_still_yields_the_date() {
         val body = envelope("""{"status":"En Route","estimatedDeliveryDate":"2026-09-08T00:00:00Z","events":[]}""")
-        assertEquals("2026-09-08", DhlEcsApiParser.parse(body)!!.etaDate)
+        assertEquals(LocalDate(2026, 9, 8), DhlEcsApiParser.parse(body)!!.etaDate)
     }
 
     @Test fun no_packages_returns_null_for_the_dom_fallback_to_own_not_found() {

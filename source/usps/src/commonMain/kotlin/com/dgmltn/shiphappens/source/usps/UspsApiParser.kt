@@ -1,12 +1,12 @@
 package com.dgmltn.shiphappens.source.usps
 
-import com.dgmltn.shiphappens.source.webview.ScrapedEvent
-import com.dgmltn.shiphappens.source.webview.ScrapedTracking
-import com.dgmltn.shiphappens.source.webview.parseMonthNameDate
-import com.dgmltn.shiphappens.source.webview.parseNumericMdyDate
-import kotlinx.datetime.LocalDate
+import com.dgmltn.shiphappens.domain.TrackingEvent
+import com.dgmltn.shiphappens.domain.TrackingSnapshot
+import com.dgmltn.shiphappens.source.webview.EtaWindow
+import com.dgmltn.shiphappens.source.webview.assembleSnapshot
+import com.dgmltn.shiphappens.source.webview.parseAnyDate
+import com.dgmltn.shiphappens.source.webview.parseTimeOfDay
 import kotlinx.datetime.LocalDateTime
-import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.serialization.Serializable
@@ -32,36 +32,29 @@ import kotlin.time.Instant
 )
 
 /**
- * Maps tools.usps.com's in-page tracking API JSON to the canonical [ScrapedTracking].
- * Same contract as UpsApiParser: every field optional, unknown wording degrades to UNKNOWN,
- * null for bodies that aren't tracking JSON at all. Event timestamps without a zone are
- * interpreted in the device zone (same documented tradeoff as UPS).
+ * Maps tools.usps.com's in-page tracking API JSON to a [TrackingSnapshot]. Same contract as
+ * UpsApiParser: every field optional, unknown wording degrades to UNKNOWN, null for bodies
+ * that aren't tracking JSON at all. Event timestamps without a zone are interpreted in the
+ * device zone (same documented tradeoff as UPS).
  */
 object UspsApiParser {
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun parse(body: String): ScrapedTracking? {
+    fun parse(body: String): TrackingSnapshot? {
         val r = runCatching { json.decodeFromString<UspsTrackResponse>(body) }.getOrNull() ?: return null
         if (r.statusCategory == null && r.trackingEvents.isNullOrEmpty()) return null  // foreign JSON
-        val tz = TimeZone.currentSystemDefault()
+        val zone = TimeZone.currentSystemDefault()
         val events = r.trackingEvents.orEmpty().mapNotNull { e ->
             val type = e.eventType ?: return@mapNotNull null
-            val ts = parseTimestamp(e.eventTimestamp, tz) ?: return@mapNotNull null
-            ts to ScrapedEvent(
-                timestamp = ts.toString(),
-                description = type,
-                location = locationOf(e),
-                status = classify(type).takeIf { it != "UNKNOWN" },
-            )
-        }.sortedBy { it.first }.map { it.second }  // USPS is newest-first; domain expects ascending
-        val overall = classify(r.statusCategory ?: r.statusSummary ?: "").takeIf { it != "UNKNOWN" }
-            ?: events.lastOrNull()?.status ?: "UNKNOWN"
-        return ScrapedTracking(
-            status = overall,
-            etaDate = parseDate(r.expectedDeliveryDate)?.toString(),
-            etaWindowEnd = parseTime(r.expectedDeliveryTime)?.toString(),
-            location = events.lastOrNull { it.location != null }?.location,
+            val at = parseTimestamp(e.eventTimestamp, zone) ?: return@mapNotNull null
+            TrackingEvent(timestamp = at, description = type, location = locationOf(e), status = USPS_VOCABULARY.classify(type))
+        }
+        return assembleSnapshot(
+            vocabulary = USPS_VOCABULARY,
+            headline = r.statusCategory ?: r.statusSummary,
             events = events,
+            etaDate = parseAnyDate(r.expectedDeliveryDate),
+            etaWindow = EtaWindow(null, parseTimeOfDay(r.expectedDeliveryTime)),
         )
     }
 
@@ -70,33 +63,9 @@ object UspsApiParser {
             .joinToString(", ").takeIf { it.isNotEmpty() }
 
     /** ISO instant ("...Z") or zoneless ISO local datetime, device zone. */
-    private fun parseTimestamp(raw: String?, tz: TimeZone): Instant? {
+    private fun parseTimestamp(raw: String?, zone: TimeZone): Instant? {
         val s = raw?.trim().takeUnless { it.isNullOrEmpty() } ?: return null
         runCatching { Instant.parse(s) }.getOrNull()?.let { return it }
-        return runCatching { LocalDateTime.parse(s).toInstant(tz) }.getOrNull()
+        return runCatching { LocalDateTime.parse(s).toInstant(zone) }.getOrNull()
     }
-
-    /** "2026-07-16", "07/16/2026", or "Wednesday, July 16, 2026". */
-    private fun parseDate(raw: String?): LocalDate? {
-        val s = raw?.trim() ?: return null
-        return runCatching { LocalDate.parse(s) }.getOrNull()
-            ?: parseNumericMdyDate(s)
-            ?: parseMonthNameDate(s)
-    }
-
-    /** "20:00:00" (24h) or "8:00pm". */
-    private fun parseTime(raw: String?): LocalTime? {
-        val s = raw?.trim() ?: return null
-        Regex("""^(\d{1,2}):(\d{2})\s*([ap])\.?m\.?$""", RegexOption.IGNORE_CASE).find(s)?.let { m ->
-            val (h, min, ap) = m.destructured
-            val hour24 = (h.toInt() % 12) + if (ap.lowercase() == "p") 12 else 0
-            return runCatching { LocalTime(hour24, min.toInt()) }.getOrNull()
-        }
-        val m = Regex("""^(\d{1,2}):(\d{2})""").find(s) ?: return null
-        val (h, min) = m.destructured
-        return runCatching { LocalTime(h.toInt(), min.toInt()) }.getOrNull()
-    }
-
-    /** Keyword classification shared with the DOM layer — one vocabulary, tested once (UspsPageLogic). */
-    private fun classify(text: String): String = classifyUspsStatus(text)?.name ?: "UNKNOWN"
 }

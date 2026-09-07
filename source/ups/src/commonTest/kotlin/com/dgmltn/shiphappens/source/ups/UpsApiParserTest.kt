@@ -1,5 +1,8 @@
 package com.dgmltn.shiphappens.source.ups
 
+import com.dgmltn.shiphappens.domain.TrackingStatus
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -87,31 +90,29 @@ class UpsApiParserTest {
     @Test fun out_for_delivery_text_wins_over_coarse_type_code() {
         // Live ups.com reports type "I" for OFD packages; the status text must take precedence.
         val t = assertNotNull(UpsApiParser.parse(OFD_FIXTURE))
-        assertEquals("OUT_FOR_DELIVERY", t.status)
-        assertEquals("2026-07-15", t.etaDate)
-        assertEquals("OUT_FOR_DELIVERY", t.events.last().status)
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, t.status)
+        assertEquals(LocalDate(2026, 7, 15), t.etaDate)
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, t.events.last().status)
     }
 
     @Test fun parses_status_eta_and_events() {
         val t = assertNotNull(UpsApiParser.parse(FIXTURE))
-        assertEquals("IN_TRANSIT", t.status)
-        assertEquals("2026-07-14", t.etaDate)  // from "sdd":"20260714"
-        assertEquals("14:30", t.etaWindowEnd)   // from "sdt":"14:30:00" (end of delivery window)
-        assertEquals("11:30", t.etaWindowStart) // from "sdst":"11:30:00" (start of delivery window)
-        assertEquals("Riverside, CA, United States", t.location)  // newest activity's location
+        assertEquals(TrackingStatus.IN_TRANSIT, t.status)
+        assertEquals(LocalDate(2026, 7, 14), t.etaDate)  // from "sdd":"20260714"
+        assertEquals(LocalTime(14, 30), t.etaWindowEnd)   // from "sdt":"14:30:00" (end of delivery window)
+        assertEquals(LocalTime(11, 30), t.etaWindowStart) // from "sdst":"11:30:00" (start of delivery window)
+        assertEquals("Riverside, CA, United States", t.latestLocation)  // newest activity's location
         assertEquals(4, t.events.size)
         // Events must be chronological ASCENDING (domain expectation); UPS sends newest-first.
         assertTrue(t.events.first().description.startsWith("Shipper created a label"))
-        assertEquals("LABEL_CREATED", t.events.first().status)
-        assertEquals("IN_TRANSIT", t.events.last().status)
-        // Timestamps are ISO instants (parseable by the canonical layer).
-        assertTrue(t.events.all { runCatching { kotlin.time.Instant.parse(it.timestamp) }.isSuccess })
+        assertEquals(TrackingStatus.LABEL_CREATED, t.events.first().status)
+        assertEquals(TrackingStatus.IN_TRANSIT, t.events.last().status)
     }
 
     @Test fun a_delayed_package_keeps_the_stage_it_is_actually_at() {
         // packageStatusType "X" would say EXCEPTION; the text says the package is still moving.
         val t = assertNotNull(UpsApiParser.parse(DELAYED_FIXTURE))
-        assertEquals("IN_TRANSIT", t.status)
+        assertEquals(TrackingStatus.IN_TRANSIT, t.status)
     }
 
     @Test fun a_delayed_package_carries_the_carriers_own_reason() {
@@ -121,9 +122,9 @@ class UpsApiParserTest {
 
     @Test fun a_delayed_package_keeps_its_revised_eta_and_window() {
         val t = assertNotNull(UpsApiParser.parse(DELAYED_FIXTURE))
-        assertEquals("2026-08-29", t.etaDate)
-        assertEquals("14:00", t.etaWindowStart)
-        assertEquals("18:00", t.etaWindowEnd)
+        assertEquals(LocalDate(2026, 8, 29), t.etaDate)
+        assertEquals(LocalTime(14, 0), t.etaWindowStart)
+        assertEquals(LocalTime(18, 0), t.etaWindowEnd)
     }
 
     @Test fun a_delay_with_no_reason_sentence_falls_back_to_the_status_headline() {
@@ -143,19 +144,19 @@ class UpsApiParserTest {
         val t = assertNotNull(UpsApiParser.parse(
             """{"trackDetails":[{"packageStatusType":"I","scheduledDeliveryDate":"07/15/2026"}]}""",
         ))
-        assertEquals("2026-07-15", t.etaDate)
+        assertEquals(LocalDate(2026, 7, 15), t.etaDate)
         assertNull(t.etaWindowEnd)
     }
 
     @Test fun status_type_codes_map_to_canonical() {
         fun withType(type: String, text: String = "x") = """{"trackDetails":[{"packageStatus":"$text","packageStatusType":"$type"}]}"""
-        assertEquals("LABEL_CREATED", UpsApiParser.parse(withType("M"))!!.status)
-        assertEquals("IN_TRANSIT", UpsApiParser.parse(withType("I"))!!.status)
-        assertEquals("OUT_FOR_DELIVERY", UpsApiParser.parse(withType("O"))!!.status)
-        assertEquals("DELIVERED", UpsApiParser.parse(withType("D"))!!.status)
-        assertEquals("EXCEPTION", UpsApiParser.parse(withType("X"))!!.status)
-        assertEquals("OUT_FOR_DELIVERY", UpsApiParser.parse(withType("", "Out for Delivery Today"))!!.status)
-        assertEquals("UNKNOWN", UpsApiParser.parse(withType("", "Some New Wording"))!!.status)
+        assertEquals(TrackingStatus.LABEL_CREATED, UpsApiParser.parse(withType("M"))!!.status)
+        assertEquals(TrackingStatus.IN_TRANSIT, UpsApiParser.parse(withType("I"))!!.status)
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, UpsApiParser.parse(withType("O"))!!.status)
+        assertEquals(TrackingStatus.DELIVERED, UpsApiParser.parse(withType("D"))!!.status)
+        assertEquals(TrackingStatus.EXCEPTION, UpsApiParser.parse(withType("X"))!!.status)
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, UpsApiParser.parse(withType("", "Out for Delivery Today"))!!.status)
+        assertEquals(TrackingStatus.UNKNOWN, UpsApiParser.parse(withType("", "Some New Wording"))!!.status)
     }
 
     @Test fun rejects_non_tracking_json() {
@@ -166,7 +167,7 @@ class UpsApiParserTest {
 
     @Test fun tolerates_missing_fields() {
         val t = assertNotNull(UpsApiParser.parse("""{"trackDetails":[{"packageStatusType":"D"}]}"""))
-        assertEquals("DELIVERED", t.status)
+        assertEquals(TrackingStatus.DELIVERED, t.status)
         assertNull(t.etaDate)
         assertTrue(t.events.isEmpty())
     }

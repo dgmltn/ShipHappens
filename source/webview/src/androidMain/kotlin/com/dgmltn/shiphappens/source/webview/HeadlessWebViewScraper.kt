@@ -58,7 +58,7 @@ class HeadlessWebViewScraper(
             val routed = result.payloads.map { router.route(it) }
             // A Goto with embedded coarse tracking is a genuine result (WebViewBasedSource will
             // surface it), so it gets the same politeness caching as a rich extraction.
-            if (routed.any { it is RouteResult.Tracking || (it is RouteResult.Goto && it.tracking != null) }) {
+            if (routed.any { it is RouteResult.Tracking || (it is RouteResult.Goto && it.coarse != null) }) {
                 throttle.record(url, result)
                 "${result.payloads.size} payload(s), TRACKING found — cached"
             } else {

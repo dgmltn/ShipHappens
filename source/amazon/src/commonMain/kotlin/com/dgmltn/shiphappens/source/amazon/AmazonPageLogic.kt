@@ -1,99 +1,60 @@
 package com.dgmltn.shiphappens.source.amazon
 
+import com.dgmltn.shiphappens.domain.TrackingSnapshot
 import com.dgmltn.shiphappens.domain.TrackingStatus
+import com.dgmltn.shiphappens.source.webview.BaseKeywords
 import com.dgmltn.shiphappens.source.webview.DomCard
-import com.dgmltn.shiphappens.source.webview.DomExtraction
 import com.dgmltn.shiphappens.source.webview.DomRaw
-import com.dgmltn.shiphappens.source.webview.ScrapedEvent
-import com.dgmltn.shiphappens.source.webview.ScrapedTracking
+import com.dgmltn.shiphappens.source.webview.PageOutcome
+import com.dgmltn.shiphappens.source.webview.StatusKeywords
+import com.dgmltn.shiphappens.source.webview.StatusVocabulary
+import com.dgmltn.shiphappens.source.webview.assembleSnapshot
+import com.dgmltn.shiphappens.source.webview.headlineThenNewestEvent
 import com.dgmltn.shiphappens.source.webview.parseDayWithoutYear
 import com.dgmltn.shiphappens.source.webview.parseRelativeDay
+import com.dgmltn.shiphappens.source.webview.today
+import com.dgmltn.shiphappens.source.webview.toTrackingEvent
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 
 /**
  * Everything the Amazon scrape *decides*, kept out of AMAZON_EXTRACTION_JS so it can be tested
  * against real captured page strings (see AmazonPageLogicTest). The JS only reads text now.
  */
 
-// Ordered longest-intent-first: a delivered order still shows returns copy and a still-open return
-// window, so "delivered" has to win before any return phrasing is considered.
-private val EXCEPTION_PHRASES = listOf(
-    "undeliverable",
-    "delivery attempted",
-    "returned to sender",
-    "return to sender",
-    "being returned",
-    "package was lost",
-    "lost in transit",
+/**
+ * Amazon's vocabulary starts from NO shared phrases (BaseKeywords.None): an order page mixes
+ * shipment cards with RMA/returns copy, so the carrier base's bare "return" and "attempt"
+ * would misclassify — "Replacement complete — We've received your return" was promoted to
+ * EXCEPTION on 2026-07-19. Return phrasing is therefore matched only as a delivery outcome.
+ *
+ * "Arriving <day>" is deliberately NOT an in-transit phrase: Amazon shows it as the delivery
+ * promise the moment an order is placed, so it says nothing about the shipment's state — it
+ * only carries the ETA (see [amazonEtaFromStatus]). Real movement is signaled by the tracker
+ * page's events and status line.
+ *
+ * Delay phrases include the revised-promise wording ("Now expected tomorrow by 8 AM"), used only
+ * when the original promise slipped (captured 2026-08-18). They are modifiers, never stages:
+ * "Package delayed in transit" reports the IN_TRANSIT its own wording names, while a stage-less
+ * "Now expected tomorrow" answers null rather than guessing — a slipped promise is a valid state
+ * for an order that has not shipped yet.
+ */
+internal val AMAZON_VOCABULARY = StatusVocabulary(
+    StatusKeywords(
+        outForDelivery = listOf("out for delivery"),
+        delivered = listOf("delivered"),
+        // Longest-intent-first: a delivered order still shows returns copy and an open return window.
+        exception = listOf(
+            "undeliverable", "delivery attempted", "returned to sender", "return to sender",
+            "being returned", "package was lost", "lost in transit",
+        ),
+        labelCreated = listOf("not yet shipped", "not shipped", "ordered", "order placed", "preparing for shipment"),
+        shipped = listOf("shipped", "dispatched", "picked up"),
+        inTransit = listOf("in transit", "on the way", "on its way", "at carrier"),
+        delayed = listOf("delayed", "running late", "now expected"),
+    ),
+    base = BaseKeywords.None,
 )
-private val LABEL_CREATED_PHRASES = listOf("not yet shipped", "not shipped", "ordered", "order placed", "preparing for shipment")
-private val SHIPPED_PHRASES = listOf("shipped", "dispatched", "picked up")
-// "Arriving <day>" is deliberately NOT here: Amazon shows it as the delivery-date promise the moment
-// an order is placed, before anything ships, so it says nothing about the shipment's transit state —
-// it only carries the ETA (parsed separately in AmazonWebSpec's etaFromArriving). Conflating the two
-// made a not-yet-shipped "Arriving tomorrow" order report IN_TRANSIT. Real movement is signaled by
-// the tracker page's events/status line, which classify below.
-private val IN_TRANSIT_PHRASES = listOf("in transit", "on the way", "on its way", "at carrier")
-
-/**
- * Delay wordings, including Amazon's revised-promise phrasing ("Now expected tomorrow by 8 AM"),
- * which it uses only when the original promise slipped. Captured 2026-08-18 on a shipment whose
- * only other delay signal was an event row — hence [delayNoteFor]'s event fallback.
- *
- * These are NOT status phrases at all: a delay is a modifier on the stage, never a stage itself
- * (2026-08-28, matching UPS). [classifyAmazonStatus] has no delay branch, so "Package delayed in
- * transit" reports the IN_TRANSIT its own wording names, while a stage-less "Now expected
- * tomorrow by 8 AM" answers null rather than guessing. That null matters here specifically:
- * Amazon shows a delivery promise from the moment an order is placed, so a slipped promise is a
- * perfectly valid state for an order that has not shipped yet, and calling it IN_TRANSIT would
- * repeat the bug the IN_TRANSIT_PHRASES note above describes.
- */
-private val DELAY_PHRASES = listOf("delayed", "running late", "now expected")
-
-/**
- * Maps an Amazon status headline to a status, or null when the text isn't a shipping status at all.
- *
- * Null is a real answer, not a failure: an order page also carries cards like "Replacement complete
- * — We've received your return", which describe an RMA rather than a shipment. The 2026-07-19 QA
- * bug was a bare `'return'` substring match promoting exactly that card to EXCEPTION, so return
- * phrasing is matched only as a delivery outcome ("returned to sender"), never as a bare word.
- */
-internal fun classifyAmazonStatus(raw: String?): TrackingStatus? {
-    val t = raw?.lowercase()?.replace(Regex("\\s+"), " ")?.trim().orEmpty()
-    if (t.isEmpty()) return null
-    fun any(phrases: List<String>) = phrases.any { it in t }
-    return when {
-        "out for delivery" in t -> TrackingStatus.OUT_FOR_DELIVERY
-        "delivered" in t -> TrackingStatus.DELIVERED
-        any(EXCEPTION_PHRASES) -> TrackingStatus.EXCEPTION
-        any(LABEL_CREATED_PHRASES) -> TrackingStatus.LABEL_CREATED
-        any(SHIPPED_PHRASES) -> TrackingStatus.SHIPPED
-        any(IN_TRANSIT_PHRASES) -> TrackingStatus.IN_TRANSIT
-        // No delay branch, deliberately — see DELAY_PHRASES.
-        else -> null
-    }
-}
-
-
-/**
- * Whether a wording reports a delay, asked independently of [classifyAmazonStatus] because the
- * two are orthogonal. Amazon has no reason-sentence field (no UPS `simplifiedText` equivalent),
- * so the matched wording itself is what surfaces as the note — see [delayNoteFor].
- */
-internal fun isAmazonDelayed(raw: String?): Boolean {
-    val t = raw?.lowercase()?.replace(Regex("\\s+"), " ")?.trim().orEmpty()
-    if (t.isEmpty()) return false
-    return DELAY_PHRASES.any { it in t }
-}
-
-/**
- * The delay note for a page: its headline when that is what reports the delay, else the newest
- * event row that does. The fallback is the 2026-08-18 capture's lesson — a tracker whose status
- * line had not yet been rewritten still had "Package delayed in transit" in its rows.
- */
-private fun delayNoteFor(headline: String?, eventDescriptions: List<String> = emptyList()): String? =
-    headline?.takeIf { isAmazonDelayed(it) }
-        ?: eventDescriptions.lastOrNull { isAmazonDelayed(it) }
 
 // --- Delivery-day parsing -----------------------------------------------------------------
 //
@@ -134,8 +95,6 @@ internal fun amazonEtaFromStatus(text: String?, today: LocalDate?): LocalDate? {
     return parseAmazonDay(after, today)
 }
 
-private fun DomRaw.today(): LocalDate? = todayIso?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-
 /**
  * Picks the card the parcel should track: the first shipment still in flight, else the last one
  * (design spec §Decisions).
@@ -148,9 +107,9 @@ private fun DomRaw.today(): LocalDate? = todayIso?.let { runCatching { LocalDate
  */
 internal fun pickShipmentCard(cards: List<DomCard>): DomCard? {
     if (cards.isEmpty()) return null
-    val shipments = cards.filter { it.href != null || classifyAmazonStatus(it.head) != null }
+    val shipments = cards.filter { it.href != null || AMAZON_VOCABULARY.classify(it.head) != null }
     val pool = shipments.ifEmpty { cards }
-    return pool.firstOrNull { classifyAmazonStatus(it.head) != TrackingStatus.DELIVERED } ?: pool.last()
+    return pool.firstOrNull { AMAZON_VOCABULARY.classify(it.head) != TrackingStatus.DELIVERED } ?: pool.last()
 }
 
 // Verbatim from the JS blob's original decision (moved to Kotlin 2026-08-20); order-page copy,
@@ -161,61 +120,52 @@ private val AMAZON_NOT_FOUND = Regex(
 )
 
 /** Order-details page: choose a shipment and either hop to its tracker or report its coarse state. */
-internal fun resolveAmazonCards(raw: DomRaw): DomExtraction {
-    if (raw.pageText?.let { AMAZON_NOT_FOUND.containsMatchIn(it) } == true) return DomExtraction(page = "notFound")
-    val pick = pickShipmentCard(raw.cards) ?: return DomExtraction(page = "empty")
+internal fun resolveAmazonCards(raw: DomRaw): PageOutcome {
+    if (raw.pageText?.let { AMAZON_NOT_FOUND.containsMatchIn(it) } == true) return PageOutcome.NotFound
+    val pick = pickShipmentCard(raw.cards) ?: return PageOutcome.Empty
     val eta = amazonEtaFromStatus(pick.head, raw.today())
-    // The headline's "Arriving <day>" carries the ETA but not a transit state (see IN_TRANSIT_PHRASES),
-    // so a card can have a delivery date with no classifiable status. Keep the ETA regardless — a
-    // shipment with no tracker link still yields a countdown — and leave status UNKNOWN until a real
+    // The headline's "Arriving <day>" carries the ETA but not a transit state, so a card can
+    // have a delivery date with no classifiable status. Keep the ETA regardless — a shipment
+    // with no tracker link still yields a countdown — and leave status UNKNOWN until a real
     // signal (the tracker hop, or delivered/shipped/exception phrasing) supplies one.
-    val status = classifyAmazonStatus(pick.head)
+    val status = AMAZON_VOCABULARY.classify(pick.head)
     val coarse = if (status != null || eta != null) {
-        ScrapedTracking(
-            status = (status ?: TrackingStatus.UNKNOWN).name,
-            etaDate = eta?.toString(),
-            delayNote = delayNoteFor(pick.head),
+        TrackingSnapshot(
+            status = status ?: TrackingStatus.UNKNOWN,
+            etaDate = eta,
+            delayNote = pick.head.takeIf { AMAZON_VOCABULARY.isDelayed(it) },
         )
     } else null
+    val href = pick.href
     return when {
-        pick.href != null -> DomExtraction(page = "goto", url = pick.href, tracking = coarse)
-        coarse != null -> DomExtraction(page = "ok", tracking = coarse)
-        else -> DomExtraction(page = "empty")
+        href != null -> PageOutcome.Goto(href, coarse)
+        coarse != null -> PageOutcome.Tracking(coarse)
+        else -> PageOutcome.Empty
     }
 }
 
-/** Tracker page: classify the status line and each event row, newest location wins. */
-internal fun resolveAmazonTracker(raw: DomRaw): DomExtraction {
-    val events = raw.events.map {
-        ScrapedEvent(
-            timestamp = it.timestamp,
-            description = it.description,
-            location = it.location,
-            status = classifyAmazonStatus(it.description)?.name,
-        )
-    }
-    if (raw.statusText.isNullOrBlank() && events.isEmpty()) return DomExtraction(page = "empty")
-    // Events arrive oldest-first; the newest one that names a place is the current location.
-    val status = classifyAmazonStatus(raw.statusText)
-        ?: classifyAmazonStatus(events.lastOrNull()?.description)
-        ?: TrackingStatus.UNKNOWN
-    return DomExtraction(
-        page = "ok",
-        tracking = ScrapedTracking(
-            status = status.name,
-            etaDate = (parseAmazonDay(raw.etaText, raw.today())
-                ?: amazonEtaFromStatus(raw.statusText, raw.today()))?.toString()
-                ?: raw.etaDate,
-            etaWindowText = raw.etaWindowText,
-            location = events.lastOrNull { it.location != null }?.location,
-            delayNote = delayNoteFor(raw.statusText, events.map { it.description }),
+/** Tracker page: the shared ladder, with Amazon's promise-phrase gate on the status line. */
+internal fun resolveAmazonTracker(raw: DomRaw, zone: TimeZone = TimeZone.currentSystemDefault()): PageOutcome {
+    val today = raw.today()
+    val events = raw.events.mapNotNull { it.toTrackingEvent(AMAZON_VOCABULARY, zone, today) }
+    val headline = raw.statusText?.takeIf { it.isNotBlank() }
+    if (headline == null && events.isEmpty()) return PageOutcome.Empty
+    return PageOutcome.Tracking(
+        assembleSnapshot(
+            vocabulary = AMAZON_VOCABULARY,
+            headline = headline,
             events = events,
+            etaDate = parseAmazonDay(raw.etaText, today)
+                ?: amazonEtaFromStatus(headline, today)
+                ?: raw.etaDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
+            etaWindowText = raw.etaWindowText,
+            delayNote = headlineThenNewestEvent(AMAZON_VOCABULARY, headline, events),
         ),
     )
 }
 
 /** Dispatches a raw extraction by the page that produced it. */
-internal fun parseAmazonRaw(raw: DomRaw): DomExtraction? = when (raw.kind) {
+internal fun parseAmazonRaw(raw: DomRaw): PageOutcome? = when (raw.kind) {
     "cards" -> resolveAmazonCards(raw)
     "tracker" -> resolveAmazonTracker(raw)
     else -> null

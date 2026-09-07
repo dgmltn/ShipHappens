@@ -14,8 +14,14 @@ import kotlinx.datetime.plus
  * four ways — month-name with a year, numeric M/D/YYYY, relative words, and a year-less
  * month+day — and each helper owns exactly one of them so providers compose the subset their
  * pages actually use. Yearful parsers should be tried before [parseDayWithoutYear], which
- * ignores any year in the text and infers its own.
+ * ignores any year in the text and infers its own. [parseCompactDate] and [parseAnyDate] cover
+ * API date fields rather than page prose. [parsePromiseDate] is the default chain every carrier
+ * uses for its delivery-promise element.
  */
+
+/** Newer date formatters insert U+202F (narrow no-break space) before AM/PM and NBSP inside
+ *  dates; every parser here reads plain spaces. */
+private fun String.plainSpaces(): String = replace('\u00A0', ' ').replace('\u202F', ' ')
 
 private const val MONTH_NAMES =
     "January|February|March|April|May|June|July|August|September|October|November|December|" +
@@ -41,14 +47,16 @@ private fun dateOf(year: String, monthName: String, day: String): LocalDate? {
 /** "Monday, July 28, 2026", "28 July 2026", "Aug 13, 2026" — a month-name date WITH a year. */
 fun parseMonthNameDate(text: String?): LocalDate? {
     if (text.isNullOrBlank()) return null
-    DAY_MONTH_YEAR.find(text)?.destructured?.let { (d, m, y) -> return dateOf(y, m, d) }
-    MONTH_DAY_YEAR.find(text)?.destructured?.let { (m, d, y) -> return dateOf(y, m, d) }
+    val s = text.plainSpaces()
+    DAY_MONTH_YEAR.find(s)?.destructured?.let { (d, m, y) -> return dateOf(y, m, d) }
+    MONTH_DAY_YEAR.find(s)?.destructured?.let { (m, d, y) -> return dateOf(y, m, d) }
     return null
 }
 
 /** "8/19/2026", "07/16/2026", "Thursday8/20/2026", "8/18/26" — numeric month/day/year. */
 fun parseNumericMdyDate(text: String?): LocalDate? {
-    val m = NUMERIC_MDY.find(text ?: return null) ?: return null
+    val s = text?.plainSpaces() ?: return null
+    val m = NUMERIC_MDY.find(s) ?: return null
     val (mm, dd, yy) = m.destructured
     val year = yy.toInt().let { if (it < 100) it + 2000 else it }
     return runCatching { LocalDate(year, mm.toInt(), dd.toInt()) }.getOrNull()
@@ -62,7 +70,7 @@ fun parseNumericMdyDate(text: String?): LocalDate? {
  */
 fun parseRelativeDay(text: String?, today: LocalDate?): LocalDate? {
     if (text.isNullOrBlank() || today == null) return null
-    val t = text.lowercase()
+    val t = text.plainSpaces().lowercase()
     return when {
         "today" in t -> today
         "tomorrow" in t || "overnight" in t -> today.plus(1, DateTimeUnit.DAY)
@@ -83,21 +91,22 @@ private val WEEKDAY = Regex("""\b($WEEKDAY_NAMES)\b""", RegexOption.IGNORE_CASE)
  * counting [today] itself. Only safe on text known to be a promise: on arbitrary text a past
  * weekday ("Delivered Thursday") would resolve forward.
  */
-private val TIME_12H = Regex("""(\d{1,2}):(\d{2})\s*([ap])\.?m\.?""", RegexOption.IGNORE_CASE)
-private val TIME_24H = Regex("""\b(\d{1,2}):(\d{2})(?::\d{2})?\b""")
+private val TIME_12H = Regex("""(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([ap])\.?m\.?""", RegexOption.IGNORE_CASE)
+private val TIME_24H = Regex("""\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b""")
 
-/** "3:06 AM", "1:48 pm", "12:07 A.M.", or 24-hour "14:33[:00]" — the first clock phrase found.
- *  A bare date ("08/19/2026") has no colon pair and parses to nothing. */
+/** "3:06 AM", "1:48 pm", "12:07 A.M.", or 24-hour "14:33[:00]" — the first clock phrase found,
+ *  seconds kept when present (defaulting to 0 otherwise). A bare date ("08/19/2026") has no
+ *  colon pair and parses to nothing. */
 fun parseTimeOfDay(text: String?): LocalTime? {
-    val s = text ?: return null
+    val s = text?.plainSpaces() ?: return null
     TIME_12H.find(s)?.let { m ->
-        val (h, min, ap) = m.destructured
+        val (h, min, sec, ap) = m.destructured
         val hour24 = (h.toInt() % 12) + if (ap.lowercase() == "p") 12 else 0
-        return runCatching { LocalTime(hour24, min.toInt()) }.getOrNull()
+        return runCatching { LocalTime(hour24, min.toInt(), sec.toIntOrNull() ?: 0) }.getOrNull()
     }
     val m = TIME_24H.find(s) ?: return null
-    val (h, min) = m.destructured
-    return runCatching { LocalTime(h.toInt(), min.toInt()) }.getOrNull()
+    val (h, min, sec) = m.destructured
+    return runCatching { LocalTime(h.toInt(), min.toInt(), sec.toIntOrNull() ?: 0) }.getOrNull()
 }
 
 fun parseWeekdayName(text: String?, today: LocalDate?): LocalDate? {
@@ -116,8 +125,9 @@ fun parseWeekdayName(text: String?, today: LocalDate?): LocalDate? {
  */
 fun parseDayWithoutYear(text: String?, today: LocalDate?): LocalDate? {
     if (text.isNullOrBlank() || today == null) return null
-    val (monthName, day) = MONTH_DAY.find(text)?.destructured?.let { (m, d) -> m to d }
-        ?: DAY_MONTH.find(text)?.destructured?.let { (d, m) -> m to d }
+    val s = text.plainSpaces()
+    val (monthName, day) = MONTH_DAY.find(s)?.destructured?.let { (m, d) -> m to d }
+        ?: DAY_MONTH.find(s)?.destructured?.let { (d, m) -> m to d }
         ?: return null
     val candidate = dateOf(today.year.toString(), monthName, day) ?: return null
     return if (candidate > today.plus(45, DateTimeUnit.DAY)) {
@@ -126,3 +136,35 @@ fun parseDayWithoutYear(text: String?, today: LocalDate?): LocalDate? {
         candidate
     }
 }
+
+private val COMPACT_YMD = Regex("""(\d{4})(\d{2})(\d{2})""")
+
+/** "20260714" — an eight-digit year-month-day with no separators (UPS's `sdd` field). */
+fun parseCompactDate(text: String?): LocalDate? {
+    val m = COMPACT_YMD.matchEntire(text?.trim() ?: return null) ?: return null
+    val (y, mo, d) = m.destructured
+    return runCatching { LocalDate(y.toInt(), mo.toInt(), d.toInt()) }.getOrNull()
+}
+
+/** An API date field in any of its common shapes: ISO ("2026-07-16", with or without a time
+ *  suffix), numeric M/D/YYYY, or a month-name date with a year. */
+fun parseAnyDate(text: String?): LocalDate? {
+    val s = text?.plainSpaces()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    return runCatching { LocalDate.parse(s.take(10)) }.getOrNull()
+        ?: parseNumericMdyDate(s)
+        ?: parseMonthNameDate(s)
+}
+
+/**
+ * The default chain for a page's delivery-promise element: explicit dates first (numeric,
+ * month-name with year), then the forms that need [today] (relative words, a year-less
+ * month+day, a bare weekday). Safe only on text that IS the promise — [DomRaw.etaText] by
+ * contract — because [parseWeekdayName] resolves any weekday forward. A null [today] disables
+ * the relative, year-less, and weekday forms rather than guessing.
+ */
+fun parsePromiseDate(text: String?, today: LocalDate?): LocalDate? =
+    parseNumericMdyDate(text)
+        ?: parseMonthNameDate(text)
+        ?: parseRelativeDay(text, today)
+        ?: parseDayWithoutYear(text, today)
+        ?: parseWeekdayName(text, today)
