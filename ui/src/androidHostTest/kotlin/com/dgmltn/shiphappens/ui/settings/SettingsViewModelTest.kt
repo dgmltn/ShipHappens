@@ -9,11 +9,12 @@ import com.dgmltn.shiphappens.data.settings.RefreshFrequency
 import com.dgmltn.shiphappens.data.settings.SettingsRepository
 import com.dgmltn.shiphappens.data.daily.DailyRefreshScheduler
 import com.dgmltn.shiphappens.data.source.SourceRegistry
-import com.dgmltn.shiphappens.source.amazon.AmazonWebSource
-import com.dgmltn.shiphappens.source.ups.UpsWebSource
-import com.dgmltn.shiphappens.source.usps.UspsWebSource
+import com.dgmltn.shiphappens.source.amazon.AmazonWebSpec
+import com.dgmltn.shiphappens.source.ups.UpsWebSpec
+import com.dgmltn.shiphappens.source.usps.UspsWebSpec
 import com.dgmltn.shiphappens.source.webview.NoOpCookieJar
 import com.dgmltn.shiphappens.source.webview.NoWebScraper
+import com.dgmltn.shiphappens.source.webview.WebSource
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -91,7 +92,7 @@ class SettingsViewModelTest {
         // any more (Task 3), and none are `implemented` without a real scraper, so every card
         // shows "Coming soon" once enabled — exactly what production shows on iOS/JVM.
         val registry = SourceRegistry(
-            listOf(UpsWebSource(NoWebScraper), UspsWebSource(NoWebScraper), AmazonWebSource(NoWebScraper)),
+            listOf(WebSource(UpsWebSpec, NoWebScraper), WebSource(UspsWebSpec, NoWebScraper), WebSource(AmazonWebSpec, NoWebScraper)),
             settings,
         )
         repo = ParcelRepository(db.parcelDao(), registry, settings, FixedClock())
@@ -131,7 +132,7 @@ class SettingsViewModelTest {
         val vm = vm()
         vm.onToggle("ups")
         val s = awaitState { it.carriers.firstOrNull { c -> c.id == "ups" }?.enabled == true }
-        // NoWebScraper => WebViewBasedSource.descriptor.implemented == false for every web source.
+        // NoWebScraper => WebSource.descriptor.implemented == false for every web source.
         assertEquals("Coming soon", s.carriers.first { it.id == "ups" }.statusText)
     }
 

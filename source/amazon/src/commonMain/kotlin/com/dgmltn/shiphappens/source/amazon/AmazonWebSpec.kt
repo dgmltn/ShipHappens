@@ -1,7 +1,10 @@
 package com.dgmltn.shiphappens.source.amazon
 
 import com.dgmltn.shiphappens.domain.WellKnownCarriers
+import com.dgmltn.shiphappens.source.webview.LoginRecipe
 import com.dgmltn.shiphappens.source.webview.WebProviderSpec
+import com.dgmltn.shiphappens.source.webview.webSourceModule
+import org.koin.core.module.Module
 
 // DOM *reader* for BOTH Amazon pages a scrape can visit (design spec §3). It finds elements and
 // returns their text; it decides nothing. Both branches emit {page:'raw'} and AmazonPageLogic.kt
@@ -163,7 +166,6 @@ private val AMAZON_IS_LOGGED_IN_JS = """
 """.trimIndent()
 
 val AmazonWebSpec = WebProviderSpec(
-    sourceId = "amazon",
     carrier = WellKnownCarriers.AMAZON,
     cookieDomain = "amazon.com",
     trackingUrl = { raw ->
@@ -175,13 +177,12 @@ val AmazonWebSpec = WebProviderSpec(
         } else raw
         "https://www.amazon.com/gp/your-account/order-details?orderID=$orderId"
     },
-    loginUrl = "https://www.amazon.com/gp/sign-in.html",
-    isLoggedInJs = AMAZON_IS_LOGGED_IN_JS,
+    login = LoginRecipe("https://www.amazon.com/gp/sign-in.html", AMAZON_IS_LOGGED_IN_JS),
     // DOM-only in v1 (design spec §Decisions): no stable public tracking-JSON vocabulary to
     // target blind. Live-QA ScrapeTracer captures can justify API patterns later.
     apiUrlPatterns = emptyList(),
     parseRaw = ::parseAmazonRaw,
-    challengeMarkers = listOf(
+    extraChallengeMarkers = listOf(
         "Enter the characters you see",
         "Type the characters you see",
         "not a robot",
@@ -189,3 +190,5 @@ val AmazonWebSpec = WebProviderSpec(
     ),
     extractionJs = AMAZON_EXTRACTION_JS,
 )
+
+val amazonSourceModule: Module = webSourceModule(AmazonWebSpec)

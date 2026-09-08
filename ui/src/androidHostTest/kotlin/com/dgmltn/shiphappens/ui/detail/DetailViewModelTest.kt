@@ -58,7 +58,7 @@ class DetailViewModelTest {
         val dir = kotlin.io.path.createTempDirectory("detail").toString()
         val settings = SettingsRepository(PreferenceDataStoreFactory.createWithPath(scope = backgroundScope) { "$dir/s.preferences_pb".toPath() })
         db = Room.inMemoryDatabaseBuilder<ShipHappensDb>().setDriver(BundledSQLiteDriver()).build()
-        val registry = SourceRegistry(listOf(com.dgmltn.shiphappens.source.ups.UpsWebSource(com.dgmltn.shiphappens.source.webview.NoWebScraper)), settings)
+        val registry = SourceRegistry(listOf(com.dgmltn.shiphappens.source.webview.WebSource(com.dgmltn.shiphappens.source.ups.UpsWebSpec, com.dgmltn.shiphappens.source.webview.NoWebScraper)), settings)
         val repo = ParcelRepository(db.parcelDao(), registry, settings, FixedClock())
         val v = DetailViewModel(parcel.id, repo, FixedClock(), registry, timeFormat)
         backgroundScope.launch { v.state.collect() }

@@ -1,11 +1,15 @@
 package com.dgmltn.shiphappens.source.usps
 
 import com.dgmltn.shiphappens.domain.WellKnownCarriers
+import com.dgmltn.shiphappens.source.webview.BridgeScripts
+import com.dgmltn.shiphappens.source.webview.LoginRecipe
 import com.dgmltn.shiphappens.source.webview.StatusKeywords
 import com.dgmltn.shiphappens.source.webview.StatusVocabulary
 import com.dgmltn.shiphappens.source.webview.TrackerPageRules
 import com.dgmltn.shiphappens.source.webview.WebProviderSpec
 import com.dgmltn.shiphappens.source.webview.resolveTrackerPage
+import com.dgmltn.shiphappens.source.webview.webSourceModule
+import org.koin.core.module.Module
 
 // USPS wordings on top of the shared vocabulary: tracker-banner phrasing like "moving through
 // our network" and acceptance-scan wording. Bare "processed" ("Processed Through Facility") is
@@ -85,28 +89,25 @@ function() {
 }
 """.trimIndent()
 
-// Greeting/sign-out markers on usps.com chrome — validated in live QA like the selectors above.
-private val USPS_IS_LOGGED_IN_JS = """
-(function() {
-  try {
-    if (document.querySelector('a[href*="logout"], a[href*="LogOutAction"], [class*="sign-out"]')) return true;
-    return /sign out|welcome,/i.test((document.body && document.body.innerText) || '');
-  } catch (e) { return false; }
-})()
-""".trimIndent()
-
 val UspsWebSpec = WebProviderSpec(
-    sourceId = "usps",
     carrier = WellKnownCarriers.USPS,
     cookieDomain = "usps.com",
     trackingUrl = { "https://tools.usps.com/tracking/$it" },
-    loginUrl = "https://reg.usps.com/entreg/LoginAction_input",
-    isLoggedInJs = USPS_IS_LOGGED_IN_JS,
+    // Greeting/sign-out markers on usps.com chrome — validated in live QA like the selectors above.
+    login = LoginRecipe(
+        "https://reg.usps.com/entreg/LoginAction_input",
+        BridgeScripts.loggedInProbe(
+            listOf("a[href*=\"logout\"]", "a[href*=\"LogOutAction\"]", "[class*=\"sign-out\"]"),
+            "sign out|welcome,",
+        ),
+    ),
     // Deliberately broad (Akamai blocked off-device endpoint capture); non-tracking captures
     // are rejected by UspsApiParser returning null. Tightened during live QA.
     apiUrlPatterns = listOf(""".*tools\.usps\.com/.*[Tt]rack.*"""),
-    challengeMarkers = listOf("Access Denied", "Reference #", "verify you are a human", "unusual activity"),
+    extraChallengeMarkers = listOf("Reference #", "unusual activity"),
     extractionJs = USPS_EXTRACTION_JS,
     parseApi = { _, body -> UspsApiParser.parse(body) },
     parseRaw = { resolveTrackerPage(it, USPS_PAGE) },
 )
+
+val uspsSourceModule: Module = webSourceModule(UspsWebSpec)

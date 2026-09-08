@@ -69,8 +69,8 @@ class SettingsViewModel(
                 id = d.id, name = d.displayName,
                 accentHex = d.accentColorHex ?: Carrier(d.id, d.displayName).accentHex(),
                 enabled = cfg.enabled, statusText = statusText, statusColorHex = statusColor,
-                webCapable = webSpec != null,
-                signedIn = webSpec != null && cfg.values["loggedIn"] == "true",
+                webCapable = webSpec?.login != null,
+                signedIn = webSpec?.login != null && cfg.values["loggedIn"] == "true",
             )
         }
         SettingsUiState(

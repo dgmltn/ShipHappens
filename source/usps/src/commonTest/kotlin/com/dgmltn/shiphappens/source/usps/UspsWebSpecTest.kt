@@ -29,19 +29,6 @@ class UspsWebSpecTest {
         assertFalse(re.containsMatchIn("https://webapis.ups.com/track/api/Track/GetStatus"))
     }
 
-    @Test fun spec_identity_and_origins() {
-        assertEquals("usps", UspsWebSpec.sourceId)
-        assertEquals("usps.com", UspsWebSpec.cookieDomain)
-        assertEquals(listOf("https://*.usps.com", "https://usps.com"), UspsWebSpec.allowedOriginRules())
-        assertTrue(UspsWebSpec.challengeMarkers.isNotEmpty())
-    }
-
-    @Test fun parse_api_delegates_to_usps_parser() {
-        val t = UspsWebSpec.parseApi(null, """{"statusCategory":"Delivered"}""")
-        assertEquals(TrackingStatus.DELIVERED, t?.status)
-        assertEquals(null, UspsWebSpec.parseApi(null, """{"unrelated":true}"""))
-    }
-
     @Test fun parse_raw_delegates_to_usps_page_logic() {
         val result = UspsWebSpec.parseRaw(DomRaw(kind = "tracker", statusText = "On the Way"))
         assertEquals(TrackingStatus.IN_TRANSIT, result.snapshotOrNull()?.status)

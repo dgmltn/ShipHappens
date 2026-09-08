@@ -3,6 +3,7 @@ package com.dgmltn.shiphappens.data.source
 import com.dgmltn.shiphappens.data.settings.SettingsRepository
 import com.dgmltn.shiphappens.domain.Carrier
 import com.dgmltn.shiphappens.domain.Parcel
+import com.dgmltn.shiphappens.domain.WellKnownCarriers
 import com.dgmltn.shiphappens.source.api.SourceConfig
 import com.dgmltn.shiphappens.source.api.TrackingSource
 import kotlinx.coroutines.flow.first
@@ -31,6 +32,6 @@ class SourceRegistry(
     }
 
     suspend fun detectCarrier(trackingNumber: String): Carrier? =
-        BuiltInCarrierDetection.detect(trackingNumber)
+        WellKnownCarriers.detect(trackingNumber)
             ?: enabled().firstNotNullOfOrNull { it.detectCarrier(trackingNumber) }
 }

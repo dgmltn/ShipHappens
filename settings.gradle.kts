@@ -2,6 +2,7 @@ rootProject.name = "ShipHappens"
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {
+    includeBuild("build-logic")
     repositories {
         google { mavenContent { includeGroupAndSubgroups("androidx"); includeGroupAndSubgroups("com.android"); includeGroupAndSubgroups("com.google") } }
         mavenCentral()
@@ -20,6 +21,7 @@ include(":data")
 include(":design")
 include(":source:api")
 include(":source:webview")
+include(":source:webview-testing")
 include(":source:ups")
 include(":source:usps")
 include(":source:amazon")

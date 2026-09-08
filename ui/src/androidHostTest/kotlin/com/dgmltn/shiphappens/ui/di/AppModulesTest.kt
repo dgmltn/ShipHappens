@@ -11,9 +11,11 @@ import com.dgmltn.shiphappens.data.daily.NoOpDailyRefreshScheduler
 import com.dgmltn.shiphappens.data.daily.NoOpStatusNotifier
 import com.dgmltn.shiphappens.data.daily.StatusNotifier
 import com.dgmltn.shiphappens.data.db.ShipHappensDb
+import com.dgmltn.shiphappens.source.api.TrackingSource
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -80,8 +82,14 @@ class AppModulesTest {
         // order); swap both for host-test-safe modules and keep the rest of the real graph as-is.
         val realModulesMinusPlatform = appModules().drop(2)
 
-        koinApplication {
+        val app = koinApplication {
             modules(listOf(testPlatformDataModule(), testWebModule()) + realModulesMinusPlatform)
-        }.checkModules()
+        }
+        // Six carriers registered under qualified singles must all surface through the
+        // unqualified collection SourceRegistry is built from. Checked before checkModules(),
+        // whose (deprecated) implementation closes the Koin instance afterward and clears the
+        // instance registry, which would make any getAll() called after it return empty.
+        assertEquals(6, app.koin.getAll<TrackingSource>().size)
+        app.checkModules()
     }
 }

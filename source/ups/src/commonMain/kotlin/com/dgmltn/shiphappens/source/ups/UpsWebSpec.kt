@@ -1,11 +1,15 @@
 package com.dgmltn.shiphappens.source.ups
 
 import com.dgmltn.shiphappens.domain.WellKnownCarriers
+import com.dgmltn.shiphappens.source.webview.BridgeScripts
+import com.dgmltn.shiphappens.source.webview.LoginRecipe
 import com.dgmltn.shiphappens.source.webview.StatusKeywords
 import com.dgmltn.shiphappens.source.webview.StatusVocabulary
 import com.dgmltn.shiphappens.source.webview.TrackerPageRules
 import com.dgmltn.shiphappens.source.webview.WebProviderSpec
 import com.dgmltn.shiphappens.source.webview.resolveTrackerPage
+import com.dgmltn.shiphappens.source.webview.webSourceModule
+import org.koin.core.module.Module
 
 // UPS wordings on top of the shared vocabulary. "action" is deliberately bare — the old JS
 // matched it bare ("Action Needed"), the API says "action required"; bare covers both.
@@ -43,25 +47,23 @@ function() {
 }
 """.trimIndent()
 
-private val UPS_IS_LOGGED_IN_JS = """
-(function() {
-  try {
-    if (document.querySelector('#ups-header a[href*="logout"], [data-testid*="account"], .ups-header_avatar')) return true;
-    return /welcome,|my profile|sign out/i.test((document.body && document.body.innerText) || '');
-  } catch (e) { return false; }
-})()
-""".trimIndent()
-
 val UpsWebSpec = WebProviderSpec(
-    sourceId = "ups",
     carrier = WellKnownCarriers.UPS,
     cookieDomain = "ups.com",
     trackingUrl = { "https://www.ups.com/track?loc=en_US&tracknum=$it" },
-    loginUrl = "https://www.ups.com/lasso/signin?loc=en_US",
-    isLoggedInJs = UPS_IS_LOGGED_IN_JS,
+    // Greeting/sign-out markers on ups.com chrome — validated in live QA.
+    login = LoginRecipe(
+        "https://www.ups.com/lasso/signin?loc=en_US",
+        BridgeScripts.loggedInProbe(
+            listOf("#ups-header a[href*=\"logout\"]", "[data-testid*=\"account\"]", ".ups-header_avatar"),
+            "welcome,|my profile|sign out",
+        ),
+    ),
     apiUrlPatterns = listOf(""".*ups\.com/track/api/Track/GetStatus.*"""),
-    challengeMarkers = listOf("verify you are a human", "unusual activity", "Pardon Our Interruption", "Access Denied"),
+    extraChallengeMarkers = listOf("unusual activity", "Pardon Our Interruption"),
     extractionJs = UPS_EXTRACTION_JS,
     parseApi = { _, body -> UpsApiParser.parse(body) },
     parseRaw = { resolveTrackerPage(it, UPS_PAGE) },
 )
+
+val upsSourceModule: Module = webSourceModule(UpsWebSpec)

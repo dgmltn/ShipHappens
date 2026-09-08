@@ -27,13 +27,6 @@ class AmazonWebSpecTest {
         )
     }
 
-    @Test fun spec_identity_and_origins() {
-        assertEquals("amazon", AmazonWebSpec.sourceId)
-        assertEquals("amazon.com", AmazonWebSpec.cookieDomain)
-        assertEquals(listOf("https://*.amazon.com", "https://amazon.com"), AmazonWebSpec.allowedOriginRules())
-        assertTrue(AmazonWebSpec.challengeMarkers.isNotEmpty())
-    }
-
     @Test fun api_capture_is_disabled_in_v1() {
         assertTrue(AmazonWebSpec.apiUrlPatterns.isEmpty())
         assertNull(AmazonWebSpec.parseApi("https://www.amazon.com/x", """{"anything":true}"""))

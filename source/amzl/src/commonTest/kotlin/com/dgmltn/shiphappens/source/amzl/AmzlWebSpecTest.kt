@@ -9,7 +9,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 class AmzlWebSpecTest {
 
@@ -24,21 +23,6 @@ class AmzlWebSpecTest {
         // cookieDomain must be track.amazon.com: bridge injection and goto hops stay off
         // www.amazon.com, and clearForDomain can never touch the Amazon orders login.
         assertEquals("track.amazon.com", AmzlWebSpec.cookieDomain)
-        assertEquals(
-            listOf("https://*.track.amazon.com", "https://track.amazon.com"),
-            AmzlWebSpec.allowedOriginRules(),
-        )
-    }
-
-    @Test fun api_pattern_matches_the_tracker_endpoint() {
-        val pattern = Regex(AmzlWebSpec.apiUrlPatterns.single())
-        assertTrue(pattern.matches("https://track.amazon.com/api/tracker/TBA333593378975"))
-        assertTrue(!pattern.matches("https://www.amazon.com/gp/your-account/order-details"))
-    }
-
-    @Test fun parse_api_is_wired_to_the_parser() {
-        val body = """{"progressTracker": "{\"summary\": {\"status\": \"Delivered\", \"metadata\": {}}}"}"""
-        assertEquals(TrackingStatus.DELIVERED, AmzlWebSpec.parseApi(null, body)?.status)
     }
 
     @Test fun raw_status_headlines_classify_in_kotlin() {

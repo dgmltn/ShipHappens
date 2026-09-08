@@ -1,8 +1,12 @@
 package com.dgmltn.shiphappens.source.fedex
 
 import com.dgmltn.shiphappens.domain.WellKnownCarriers
+import com.dgmltn.shiphappens.source.webview.BridgeScripts
+import com.dgmltn.shiphappens.source.webview.LoginRecipe
 import com.dgmltn.shiphappens.source.webview.WebProviderSpec
 import com.dgmltn.shiphappens.source.webview.resolveTrackerPage
+import com.dgmltn.shiphappens.source.webview.webSourceModule
+import org.koin.core.module.Module
 import kotlin.time.Duration.Companion.seconds
 
 // DOM *reader* — the ONLY layer for FedEx, and deliberately so: injecting the fetch/XHR capture
@@ -90,28 +94,23 @@ function(finish) {
 }
 """.trimIndent()
 
-// Greeting/sign-out markers on fedex.com chrome — the logged-out page shows "Sign Up or Log In"
-// (QA 2026-08-19); sign-out wording is best-effort until a logged-in QA pass.
-private val FEDEX_IS_LOGGED_IN_JS = """
-(function() {
-  try {
-    if (document.querySelector('a[href*="logout"], a[href*="signout"], [data-test-id*="logout" i]')) return true;
-    return /sign out|log out\b/i.test((document.body && document.body.innerText) || '');
-  } catch (e) { return false; }
-})()
-""".trimIndent()
-
 val FedexWebSpec = WebProviderSpec(
-    sourceId = "fedex",
     carrier = WellKnownCarriers.FEDEX,
     cookieDomain = "fedex.com",
     // The SPA client-routes this through /wtrk/track/ and back to /fedextrack/?trknbr=...&trkqual=...
     trackingUrl = { "https://www.fedex.com/fedextrack/?trknbr=$it" },
-    loginUrl = "https://www.fedex.com/secure-login/en-us/",
-    isLoggedInJs = FEDEX_IS_LOGGED_IN_JS,
+    // Greeting/sign-out markers on fedex.com chrome — the logged-out page shows "Sign Up or Log In"
+    // (QA 2026-08-19); sign-out wording is best-effort until a logged-in QA pass.
+    login = LoginRecipe(
+        "https://www.fedex.com/secure-login/en-us/",
+        BridgeScripts.loggedInProbe(
+            listOf("a[href*=\"logout\"]", "a[href*=\"signout\"]", "[data-test-id*=\"logout\" i]"),
+            "sign out|log out\\b",
+        ),
+    ),
     // Empty is load-bearing: no patterns => WebSessions injects no fetch/XHR hooks (see header).
     apiUrlPatterns = emptyList(),
-    challengeMarkers = listOf("Access Denied", "Reference #", "verify you are a human", "unusual activity"),
+    extraChallengeMarkers = listOf("Reference #", "unusual activity"),
     extractionJs = FEDEX_EXTRACTION_JS,
     parseRaw = { resolveTrackerPage(it, FEDEX_PAGE) },
     // Measured live: 3s after onPageFinished the SPA is still an app shell; ~10s in it has
@@ -119,3 +118,5 @@ val FedexWebSpec = WebProviderSpec(
     // after the details click).
     settle = 12.seconds,
 )
+
+val fedexSourceModule: Module = webSourceModule(FedexWebSpec)

@@ -56,7 +56,7 @@ class HeadlessWebViewScraper(
         val summary = if (result is ScrapeResult.Payloads) {
             val router = PayloadRouter(spec)
             val routed = result.payloads.map { router.route(it) }
-            // A Goto with embedded coarse tracking is a genuine result (WebViewBasedSource will
+            // A Goto with embedded coarse tracking is a genuine result (WebSource will
             // surface it), so it gets the same politeness caching as a rich extraction.
             if (routed.any { it is RouteResult.Tracking || (it is RouteResult.Goto && it.coarse != null) }) {
                 throttle.record(url, result)

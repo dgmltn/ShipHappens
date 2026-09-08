@@ -28,13 +28,6 @@ class FedexWebSpecTest {
         assertEquals(12.seconds, FedexWebSpec.settle)
     }
 
-    @Test fun spec_identity_and_origins() {
-        assertEquals("fedex", FedexWebSpec.sourceId)
-        assertEquals("fedex.com", FedexWebSpec.cookieDomain)
-        assertEquals(listOf("https://*.fedex.com", "https://fedex.com"), FedexWebSpec.allowedOriginRules())
-        assertTrue(FedexWebSpec.challengeMarkers.isNotEmpty())
-    }
-
     @Test fun parse_raw_delegates_to_fedex_page_logic() {
         val result = FedexWebSpec.parseRaw(DomRaw(kind = "tracker", statusText = "On the way"))
         assertEquals(TrackingStatus.IN_TRANSIT, result.snapshotOrNull()?.status)

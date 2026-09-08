@@ -1,9 +1,7 @@
 package com.dgmltn.shiphappens.source.webview
 
-import com.dgmltn.shiphappens.domain.Carrier
 import com.dgmltn.shiphappens.domain.TrackingSnapshot
 import com.dgmltn.shiphappens.domain.TrackingStatus
-import com.dgmltn.shiphappens.domain.WellKnownCarriers
 import com.dgmltn.shiphappens.source.api.FailureReason
 import com.dgmltn.shiphappens.source.api.SourceResult
 import kotlinx.coroutines.test.runTest
@@ -12,16 +10,12 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private class FakeScraper(private val result: ScrapeResult) : WebScraper {
     override val isAvailable = true
     override suspend fun scrape(spec: WebProviderSpec, trackingNumber: String) = result
-}
-
-private class TestWebSource(scraper: WebScraper, spec: WebProviderSpec = testSpec()) :
-    WebViewBasedSource(spec, scraper) {
-    override fun detectCarrier(trackingNumber: String): Carrier? = WellKnownCarriers.UPS
 }
 
 private fun dom(page: String) = """{"kind":"dom","body":"{\"page\":\"$page\"}"}"""
@@ -43,18 +37,25 @@ private fun outcomeSpec() = testSpec(parseRaw = { r ->
     }
 })
 
-class WebViewBasedSourceTest {
+class WebSourceTest {
+
+    @Test fun detects_by_the_carriers_number_pattern() {
+        val spec = testSpec()   // same Carrier instance for the source and the expectation: Regex compares by identity
+        val src = WebSource(spec, NoWebScraper)
+        assertEquals(spec.carrier, src.detectCarrier("T 123 456"))
+        assertNull(src.detectCarrier("1Z999AA10123456784"))
+    }
 
     @Test fun descriptor_derives_from_spec_and_scraper() {
-        val available = TestWebSource(FakeScraper(ScrapeResult.Unavailable))
+        val available = WebSource(testSpec(), FakeScraper(ScrapeResult.Unavailable))
         assertTrue(available.descriptor.implemented)
         assertEquals("test", available.descriptor.id)
-        assertFalse(TestWebSource(NoWebScraper).descriptor.implemented)
+        assertFalse(WebSource(testSpec(), NoWebScraper).descriptor.implemented)
     }
 
     @Test fun tracking_payload_becomes_success() = runTest {
         val spec = testSpec(parseApi = { _, _ -> TrackingSnapshot(TrackingStatus.IN_TRANSIT, latestLocation = "Louisville, KY") })
-        val src = TestWebSource(FakeScraper(ScrapeResult.Payloads(listOf("""{"kind":"api","url":"u","body":"b"}"""))), spec)
+        val src = WebSource(spec, FakeScraper(ScrapeResult.Payloads(listOf("""{"kind":"api","url":"u","body":"b"}"""))))
         val result = assertIs<SourceResult.Success<TrackingSnapshot>>(src.track("1Z1", null))
         assertEquals(TrackingStatus.IN_TRANSIT, result.value.status)
         assertEquals("Louisville, KY", result.value.latestLocation)
@@ -62,7 +63,7 @@ class WebViewBasedSourceTest {
 
     @Test fun failure_taxonomy_mapping() = runTest {
         suspend fun reasonFor(r: ScrapeResult): FailureReason =
-            assertIs<SourceResult.Failure>(TestWebSource(FakeScraper(r)).track("1Z1", null)).reason
+            assertIs<SourceResult.Failure>(WebSource(testSpec(), FakeScraper(r)).track("1Z1", null)).reason
         assertEquals(FailureReason.AUTH, reasonFor(ScrapeResult.Payloads(listOf(dom("loginWall")))))
         assertEquals(FailureReason.RATE_LIMITED, reasonFor(ScrapeResult.Payloads(listOf(dom("challenge")))))
         assertEquals(FailureReason.NOT_FOUND, reasonFor(ScrapeResult.Payloads(listOf(dom("notFound")))))
@@ -73,24 +74,24 @@ class WebViewBasedSourceTest {
     }
 
     @Test fun unavailable_scraper_fails_without_scraping() = runTest {
-        val src = TestWebSource(NoWebScraper)
+        val src = WebSource(testSpec(), NoWebScraper)
         assertEquals(FailureReason.UNKNOWN, assertIs<SourceResult.Failure>(src.track("1Z1", null)).reason)
     }
 
     @Test fun first_tracking_payload_wins() = runTest {
-        val src = TestWebSource(FakeScraper(ScrapeResult.Payloads(listOf(dom("loginWall"), raw("DELIVERED")))), outcomeSpec())
+        val src = WebSource(outcomeSpec(), FakeScraper(ScrapeResult.Payloads(listOf(dom("loginWall"), raw("DELIVERED")))))
         val result = assertIs<SourceResult.Success<TrackingSnapshot>>(src.track("1Z1", null))
         assertEquals(TrackingStatus.DELIVERED, result.value.status)
     }
 
     @Test fun goto_coarse_tracking_is_the_fallback_result() = runTest {
-        val src = TestWebSource(FakeScraper(ScrapeResult.Payloads(listOf(raw("goto"), raw("empty")))), outcomeSpec())
+        val src = WebSource(outcomeSpec(), FakeScraper(ScrapeResult.Payloads(listOf(raw("goto"), raw("empty")))))
         val result = assertIs<SourceResult.Success<TrackingSnapshot>>(src.track("113", null))
         assertEquals(TrackingStatus.IN_TRANSIT, result.value.status)
     }
 
     @Test fun rich_tracking_beats_goto_coarse() = runTest {
-        val src = TestWebSource(FakeScraper(ScrapeResult.Payloads(listOf(raw("goto"), raw("DELIVERED")))), outcomeSpec())
+        val src = WebSource(outcomeSpec(), FakeScraper(ScrapeResult.Payloads(listOf(raw("goto"), raw("DELIVERED")))))
         val result = assertIs<SourceResult.Success<TrackingSnapshot>>(src.track("113", null))
         assertEquals(TrackingStatus.DELIVERED, result.value.status)
     }
@@ -98,28 +99,28 @@ class WebViewBasedSourceTest {
     @Test fun goto_coarse_beats_error_signals() = runTest {
         // The order page proved we're logged in and produced a status; a confused post-hop page
         // must not turn that into an AUTH failure.
-        val src = TestWebSource(FakeScraper(ScrapeResult.Payloads(listOf(raw("goto"), dom("loginWall")))), outcomeSpec())
+        val src = WebSource(outcomeSpec(), FakeScraper(ScrapeResult.Payloads(listOf(raw("goto"), dom("loginWall")))))
         assertIs<SourceResult.Success<TrackingSnapshot>>(src.track("113", null))
     }
 
     @Test fun rich_result_backfills_missing_eta_and_status_from_coarse() = runTest {
         // Order page knew "Arriving tomorrow" (IN_TRANSIT + ETA); the ship-track hop landed on a
         // page that read UNKNOWN with no ETA. The impoverished rich result must not blank the ETA.
-        val src = TestWebSource(FakeScraper(ScrapeResult.Payloads(listOf(raw("goto"), raw("UNKNOWN")))), outcomeSpec())
+        val src = WebSource(outcomeSpec(), FakeScraper(ScrapeResult.Payloads(listOf(raw("goto"), raw("UNKNOWN")))))
         val result = assertIs<SourceResult.Success<TrackingSnapshot>>(src.track("113", null))
         assertEquals(TrackingStatus.IN_TRANSIT, result.value.status)
         assertEquals(LocalDate(2026, 7, 21), result.value.etaDate)
     }
 
     @Test fun rich_result_keeps_its_own_eta_and_status_over_coarse() = runTest {
-        val src = TestWebSource(FakeScraper(ScrapeResult.Payloads(listOf(raw("goto"), raw("OUT_FOR_DELIVERY")))), outcomeSpec())
+        val src = WebSource(outcomeSpec(), FakeScraper(ScrapeResult.Payloads(listOf(raw("goto"), raw("OUT_FOR_DELIVERY")))))
         val result = assertIs<SourceResult.Success<TrackingSnapshot>>(src.track("113", null))
         assertEquals(TrackingStatus.OUT_FOR_DELIVERY, result.value.status)
         assertEquals(LocalDate(2026, 7, 20), result.value.etaDate)
     }
 
     @Test fun goto_without_tracking_alone_is_unknown_failure() = runTest {
-        val src = TestWebSource(FakeScraper(ScrapeResult.Payloads(listOf(raw("gotoBare")))), outcomeSpec())
+        val src = WebSource(outcomeSpec(), FakeScraper(ScrapeResult.Payloads(listOf(raw("gotoBare")))))
         assertEquals(FailureReason.UNKNOWN, assertIs<SourceResult.Failure>(src.track("113", null)).reason)
     }
 }

@@ -1,5 +1,6 @@
 package com.dgmltn.shiphappens.source.webview
 
+import com.dgmltn.shiphappens.domain.Carrier
 import com.dgmltn.shiphappens.domain.TrackingSnapshot
 import com.dgmltn.shiphappens.domain.TrackingStatus
 import com.dgmltn.shiphappens.domain.WellKnownCarriers
@@ -16,17 +17,14 @@ internal fun testSpec(
     parseApi: (String?, String) -> TrackingSnapshot? = { _, _ -> null },
     parseRaw: (DomRaw) -> PageOutcome? = { null },
 ) = WebProviderSpec(
-    sourceId = "test",
-    carrier = WellKnownCarriers.UPS,
+    carrier = Carrier("test", "Test", numberPattern = Regex("^T\\d{6}$")),
     cookieDomain = "example.com",
     trackingUrl = { "https://www.example.com/track?n=$it" },
-    loginUrl = "https://www.example.com/login",
-    isLoggedInJs = "(function(){return false})()",
-    apiUrlPatterns = listOf(".*example\\.com/api/track.*"),
-    challengeMarkers = listOf("verify you are a human"),
     extractionJs = "function(){return {page:'empty'}}",
+    apiUrlPatterns = listOf(".*example\\.com/api/track.*"),
     parseApi = parseApi,
     parseRaw = parseRaw,
+    sourceId = "test",
 )
 
 class PayloadRouterTest {
@@ -107,6 +105,17 @@ class PayloadRouterTest {
     @Test fun goto_with_disallowed_or_missing_url_and_no_snapshot_is_unparsed() {
         assertIs<RouteResult.Unparsed>(PayloadRouter(testSpec(parseRaw = { PageOutcome.Goto("https://evil.com/x", null) })).route(rawPayload()))
         assertIs<RouteResult.Unparsed>(PayloadRouter(testSpec()).route(domPayload("""{"page":"goto"}""")))
+    }
+
+    @Test fun spec_defaults_derive_from_the_carrier_and_the_shared_markers() {
+        val spec = WebProviderSpec(carrier = WellKnownCarriers.UPS, cookieDomain = "ups.com", trackingUrl = { it }, extractionJs = "function(){}")
+        assertEquals("ups", spec.sourceId)
+        assertEquals(NEVER_LOGGED_IN_JS, spec.isLoggedInJs)
+        assertEquals(DEFAULT_CHALLENGE_MARKERS, spec.challengeMarkers)
+        val withExtras = WebProviderSpec(carrier = WellKnownCarriers.UPS, cookieDomain = "ups.com", trackingUrl = { it }, extractionJs = "function(){}",
+            login = LoginRecipe("https://www.ups.com/signin", "(function(){return true})()"), extraChallengeMarkers = listOf("Pardon Our Interruption"))
+        assertEquals("(function(){return true})()", withExtras.isLoggedInJs)
+        assertEquals(DEFAULT_CHALLENGE_MARKERS + "Pardon Our Interruption", withExtras.challengeMarkers)
     }
 
     @Test fun hop_url_allowlist_semantics() {

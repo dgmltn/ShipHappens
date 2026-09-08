@@ -39,4 +39,12 @@ class BridgeScriptsTest {
         assertContains(js, "asyncTimeout")           // backstop outcome is diagnosable in traces
         assertContains(js, "!== undefined")          // sync return path preserved
     }
+
+    @Test fun logged_in_probe_embeds_selectors_and_text_pattern() {
+        val js = BridgeScripts.loggedInProbe(listOf("a[href*=\"logout\"]", "[class*=\"sign-out\"]"), "sign out|welcome,")
+        assertTrue(js.trimStart().startsWith("(function()"))
+        assertTrue(js.contains("""document.querySelector("a[href*=\"logout\"], [class*=\"sign-out\"]")"""))
+        assertTrue(js.contains("""new RegExp("sign out|welcome,", 'i')"""))
+        assertTrue(js.contains("catch (e) { return false; }"))
+    }
 }

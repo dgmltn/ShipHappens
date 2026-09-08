@@ -4,10 +4,11 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.lifecycle.viewModelScope
 import com.dgmltn.shiphappens.data.settings.SettingsRepository
 import com.dgmltn.shiphappens.data.source.SourceRegistry
-import com.dgmltn.shiphappens.source.ups.UpsWebSource
+import com.dgmltn.shiphappens.source.ups.UpsWebSpec
 import com.dgmltn.shiphappens.source.webview.NoOpCookieJar
 import com.dgmltn.shiphappens.source.webview.NoWebScraper
 import com.dgmltn.shiphappens.source.webview.PageEvent
+import com.dgmltn.shiphappens.source.webview.WebSource
 import kotlin.io.path.createTempDirectory
 import kotlin.test.*
 import kotlinx.coroutines.Dispatchers
@@ -28,7 +29,7 @@ class WebLoginViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val dir = createTempDirectory("weblogin").toString()
         settings = SettingsRepository(PreferenceDataStoreFactory.createWithPath(scope = backgroundScope) { "$dir/s.preferences_pb".toPath() })
-        val registry = SourceRegistry(listOf(UpsWebSource(NoWebScraper)), settings)
+        val registry = SourceRegistry(listOf(WebSource(UpsWebSpec, NoWebScraper)), settings)
         val v = WebLoginViewModel("ups", registry, settings, NoOpCookieJar)
         backgroundScope.launch { v.state.collect() }
         vm = v

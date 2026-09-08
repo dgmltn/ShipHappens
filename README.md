@@ -19,17 +19,18 @@ reference.
 ## Module map
 
 ```
-domain/        Domain types: Parcel, Carrier, TrackingStatus/Event/Snapshot. No dependencies.
+domain/        Domain types: Parcel, Carrier, TrackingStatus/Event/Snapshot, carrier detection.
+               No dependencies.
 data/          Room 3 database, ParcelRepository, SettingsRepository (DataStore), clipboard
-               import manager, carrier detection, SourceRegistry, DailyRefreshRunner (the 8am
-               background pass, with WorkManager/BGTaskScheduler and notifier actuals per
-               platform), Koin DI wiring.
+               import manager, SourceRegistry, DailyRefreshRunner (the 8am background pass, with
+               WorkManager/BGTaskScheduler and notifier actuals per platform), Koin DI wiring.
 design/        Design system: ShipTheme, ShipColors, font resources (Hanken + mono), and the
                canonical HTML visual spec (Parcels.dc.html).
 source/
   api/         The plugin contract: TrackingSource, SourceConfig, SourceResult.
                Every source module depends only on this.
   webview/     Shared WebView scraping machinery: WebProviderSpec, PayloadRouter, ScrapeTracer.
+  webview-testing/   Testing contracts: WebSpecContract, WebSourceContract.
   ups/         UPS carrier source (ups.com in a WebView).
   usps/        USPS carrier source (tools.usps.com in a WebView).
   fedex/       FedEx carrier source (fedex.com/fedextrack in a WebView).
@@ -41,6 +42,7 @@ ui/            Compose Multiplatform screens (list, detail, settings), Navigatio
 app-android/   Android application shell: MainActivity, Koin bootstrap with androidContext.
 app-ios/       iOS application shell (SwiftUI entry point hosting the shared Compose UI),
                generated via XcodeGen from app-ios/project.yml.
+build-logic/   Gradle convention plugin `shiphappens.source-module` for the carrier modules.
 ```
 
 Dependency direction is one-way: `source/*` depends on `source/api` (and `domain` for domain
@@ -91,8 +93,8 @@ gitignored and recreated by `xcodegen generate`, while `app-ios/ShipHappens/Info
 ```
 
 Note `:ui`'s task is `testAndroidHostTest`, not `testDebugUnitTest` — the UI module's unit tests
-run on the Android-host test source set. Current suite: 505 tests across 11 modules (domain 22,
-data 106, api 2, ups 23, usps 29, fedex 35, amazon 55, amzl 22, dhlecs 28, webview 118, ui 65),
+run on the Android-host test source set. Current suite: 499 tests across 11 modules (domain 31,
+data 99, api 2, ups 23, usps 27, fedex 33, amazon 53, amzl 20, dhlecs 26, webview 120, ui 65),
 all passing.
 
 ## Daily update
@@ -117,28 +119,24 @@ toggle off rather than creating a setting that silently does nothing.
 
 ## How to add a tracking source
 
-The plugin boundary is `TrackingSource` in `source/api`. Adding a new carrier or aggregator never
-touches `domain` or `data`:
+The plugin boundary is `TrackingSource` in `source/api`. A website-scraped carrier never touches
+`domain` (beyond its `Carrier` entry), `data`, or the scraping machinery:
 
-1. **Implement `TrackingSource`** in a new `source/<name>` module (copy `source/usps` as a
-   template: same `build.gradle.kts` shape — `api(projects.source.api)` +
-   `api(projects.source.webview)` plus Koin). For a website-scraped carrier that means one
-   `WebProviderSpec` with the carrier's `StatusVocabulary` and `TrackerPageRules`, an optional API
-   parser returning `TrackingSnapshot`, and the extraction JS; the shared resolver, assembler, and
-   date helpers live in `:source:webview`. Add a thin `WebViewBasedSource` subclass supplying
-   `detectCarrier(trackingNumber)` for cheap local format recognition.
-2. **Expose a Koin module** — one line, same pattern as every existing source:
-   ```kotlin
-   val myNewSourceModule: Module = module { single { MyNewSource(get()) } bind TrackingSource::class }
-   ```
-3. **Register it** in `appModules()` in
-   `ui/src/commonMain/kotlin/com/dgmltn/shiphappens/ui/di/AppModules.kt` — add the module to the list
-   returned there. `SourceRegistry` (in `data`) picks up every bound `TrackingSource`
-   automatically; nothing in `data` needs to change.
-
-Add `:source:<name>` to `settings.gradle.kts`, add the module to `ui/build.gradle.kts`
-dependencies, and give it the same `kotlinMultiplatform` +
-`android.kotlin.multiplatform.library` shape as its siblings.
+1. **Declare the carrier** in `WellKnownCarriers` (`domain`): code, display name, accent, and the
+   regex that claims its tracking-number shape. Detection everywhere derives from that pattern.
+2. **Write the spec** in a new `source/<name>` module whose `build.gradle.kts` is just
+   `plugins { id("shiphappens.source-module") }`. One `WebProviderSpec` holds the carrier's
+   `StatusVocabulary` and `TrackerPageRules`, its extraction JS, an optional `LoginRecipe`
+   (`BridgeScripts.loggedInProbe` covers the usual logout-link-or-sign-out-text check), any
+   extra challenge markers, and an optional API parser returning `TrackingSnapshot`. End the file
+   with `val <name>SourceModule: Module = webSourceModule(<Name>WebSpec)`.
+3. **Test it** with a `<Name>ContractTest` that calls `WebSpecContract.verify` and
+   `WebSourceContract.verify` from `:source:webview-testing` with the carrier's sample numbers
+   and not-found wording, plus a vocabulary test over captured page strings.
+4. **Register it**: `include(":source:<name>")` in `settings.gradle.kts`, the module in
+   `ui/build.gradle.kts`, and `<name>SourceModule` in `appModules()`
+   (`ui/src/commonMain/kotlin/com/dgmltn/shiphappens/ui/di/AppModules.kt`). `SourceRegistry`
+   picks up every bound `TrackingSource` automatically.
 
 ## Settings & API keys
 

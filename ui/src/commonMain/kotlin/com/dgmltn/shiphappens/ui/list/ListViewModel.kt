@@ -6,7 +6,6 @@ import com.dgmltn.shiphappens.data.*
 import com.dgmltn.shiphappens.data.clipboard.ClipboardImportManager
 import com.dgmltn.shiphappens.data.clipboard.PendingImport
 import com.dgmltn.shiphappens.data.settings.SettingsRepository
-import com.dgmltn.shiphappens.data.source.BuiltInCarrierDetection
 import com.dgmltn.shiphappens.data.source.SourceRegistry
 import com.dgmltn.shiphappens.domain.*
 import com.dgmltn.shiphappens.source.api.FailureReason
@@ -132,7 +131,7 @@ class ListViewModel(
     private fun ManualAddUi.withEffective(
         tracking: String = this.tracking, picked: String? = this.pickedCarrierCode, closePicker: Boolean = false,
     ): ManualAddUi {
-        val effective = picked?.let { WellKnownCarriers.byCode(it) } ?: BuiltInCarrierDetection.detect(tracking)
+        val effective = picked?.let { WellKnownCarriers.byCode(it) } ?: WellKnownCarriers.detect(tracking)
         return copy(
             tracking = tracking, pickedCarrierCode = picked,
             pickerOpen = if (closePicker) false else pickerOpen,

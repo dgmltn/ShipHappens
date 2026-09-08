@@ -100,4 +100,18 @@ object BridgeScripts {
 
     /** How long an async extractor may defer before the runner reports empty. */
     private const val ASYNC_BACKSTOP_MS = 8_000
+
+    /**
+     * The common "is this session signed in?" probe: any of [selectors] present (a logout link,
+     * an avatar), or [textPattern] (a case-insensitive JS regex source) found in the page text.
+     * Carriers whose chrome needs more than that (Amazon's account menu) write their own.
+     */
+    fun loggedInProbe(selectors: List<String>, textPattern: String): String = """
+(function() {
+  try {
+    if (document.querySelector(${jsString(selectors.joinToString(", "))})) return true;
+    return new RegExp(${jsString(textPattern)}, 'i').test((document.body && document.body.innerText) || '');
+  } catch (e) { return false; }
+})()
+""".trimIndent()
 }

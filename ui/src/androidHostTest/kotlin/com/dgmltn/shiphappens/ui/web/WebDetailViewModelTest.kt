@@ -9,10 +9,11 @@ import com.dgmltn.shiphappens.data.db.toEntity
 import com.dgmltn.shiphappens.data.settings.SettingsRepository
 import com.dgmltn.shiphappens.data.source.SourceRegistry
 import com.dgmltn.shiphappens.domain.*
-import com.dgmltn.shiphappens.source.ups.UpsWebSource
+import com.dgmltn.shiphappens.source.ups.UpsWebSpec
 import com.dgmltn.shiphappens.source.webview.NoWebScraper
 import com.dgmltn.shiphappens.source.webview.PageEvent
 import com.dgmltn.shiphappens.source.webview.WebCookieJar
+import com.dgmltn.shiphappens.source.webview.WebSource
 import androidx.lifecycle.viewModelScope
 import kotlin.io.path.createTempDirectory
 import kotlin.test.*
@@ -58,7 +59,7 @@ class WebDetailViewModelTest {
         val dir = createTempDirectory("webdetail").toString()
         settings = SettingsRepository(PreferenceDataStoreFactory.createWithPath(scope = backgroundScope) { "$dir/s.preferences_pb".toPath() })
         db = Room.inMemoryDatabaseBuilder<ShipHappensDb>().setDriver(BundledSQLiteDriver()).build()
-        val registry = SourceRegistry(listOf(UpsWebSource(NoWebScraper)), settings)
+        val registry = SourceRegistry(listOf(WebSource(UpsWebSpec, NoWebScraper)), settings)
         repo = ParcelRepository(db.parcelDao(), registry, settings, FixedClock())
         cookieJar = FakeWebCookieJar()
         val v = WebDetailViewModel(parcel.id, repo, registry, settings, cookieJar)

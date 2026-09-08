@@ -84,7 +84,7 @@ sealed interface RouteResult {
  * a 'goto' hop may navigate to. Plain string parsing (commonMain has no platform URL class);
  * an authority containing userinfo ('@') is rejected outright rather than parsed around.
  */
-internal fun isAllowedHopUrl(url: String, domain: String): Boolean {
+fun isAllowedHopUrl(url: String, domain: String): Boolean {
     if (!url.startsWith("https://")) return false
     val authority = url.removePrefix("https://").takeWhile { it != '/' && it != '?' && it != '#' }
     if ('@' in authority) return false

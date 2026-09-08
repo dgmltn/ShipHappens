@@ -7,6 +7,8 @@ import com.dgmltn.shiphappens.source.webview.StatusVocabulary
 import com.dgmltn.shiphappens.source.webview.TrackerPageRules
 import com.dgmltn.shiphappens.source.webview.WebProviderSpec
 import com.dgmltn.shiphappens.source.webview.resolveTrackerPage
+import com.dgmltn.shiphappens.source.webview.webSourceModule
+import org.koin.core.module.Module
 
 // The tracking page is a JS SPA (AmazonShippingRecipientApp); its /api/tracker/ XHR is the
 // primary data layer (captured via apiUrlPatterns, parsed in AmzlApiParser). This DOM extractor
@@ -66,11 +68,8 @@ internal val AMZL_PAGE = TrackerPageRules(
 // "invalid tracking" — are now the shared seeds.)
 
 // The tracker API is anonymous (accessType ANONYMOUS_PACKAGE_ACCESS); login is never required,
-// so login state is a constant false and the loginUrl below is vestigial framework plumbing.
-private const val AMZL_IS_LOGGED_IN_JS = "(function() { return false; })()"
-
+// so login is null and the probe falls back to NEVER_LOGGED_IN_JS.
 val AmzlWebSpec = WebProviderSpec(
-    sourceId = "amzl",
     carrier = WellKnownCarriers.AMAZON_LOGISTICS,
     // track.amazon.com, NOT amazon.com: Android's CookieManager is app-global (an existing
     // amazon.com session reaches this subdomain regardless), and scoping the spec here keeps
@@ -80,10 +79,8 @@ val AmzlWebSpec = WebProviderSpec(
         val tba = normalizeTracking(raw)
         "https://track.amazon.com/tracking/$tba?trackingId=$tba"
     },
-    loginUrl = "https://www.amazon.com/gp/sign-in.html",
-    isLoggedInJs = AMZL_IS_LOGGED_IN_JS,
     apiUrlPatterns = listOf(""".*track\.amazon\.com/api/tracker/.*"""),
-    challengeMarkers = listOf(
+    extraChallengeMarkers = listOf(
         "Enter the characters you see",
         "Type the characters you see",
         "not a robot",
@@ -93,3 +90,5 @@ val AmzlWebSpec = WebProviderSpec(
     parseApi = { _, body -> AmzlApiParser.parse(body) },
     parseRaw = { resolveTrackerPage(it, AMZL_PAGE) },
 )
+
+val amzlSourceModule: Module = webSourceModule(AmzlWebSpec)

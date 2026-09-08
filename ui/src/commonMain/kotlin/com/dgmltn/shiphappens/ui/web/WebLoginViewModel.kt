@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dgmltn.shiphappens.data.settings.SettingsRepository
 import com.dgmltn.shiphappens.data.source.SourceRegistry
+import com.dgmltn.shiphappens.source.webview.LoginRecipe
 import com.dgmltn.shiphappens.source.webview.PageEvent
 import com.dgmltn.shiphappens.source.webview.WebCapableSource
 import com.dgmltn.shiphappens.source.webview.WebCookieJar
@@ -30,16 +31,18 @@ class WebLoginViewModel(
     private val cookieJar: WebCookieJar,
 ) : ViewModel() {
 
-    private val spec: WebProviderSpec? =
-        registry.all().filterIsInstance<WebCapableSource>().firstOrNull { it.webSpec.sourceId == sourceId }?.webSpec
+    private val target: Pair<WebProviderSpec, LoginRecipe>? =
+        registry.all().filterIsInstance<WebCapableSource>()
+            .firstOrNull { it.webSpec.sourceId == sourceId }?.webSpec
+            ?.let { spec -> spec.login?.let { spec to it } }
 
     private val done = MutableStateFlow(false)
 
     val state: StateFlow<WebLoginUiState> = done.map { d ->
-        spec?.let {
+        target?.let { (spec, login) ->
             WebLoginUiState(
-                url = it.loginUrl, name = it.carrier.displayName,
-                accentHex = it.carrier.accentColorHex ?: "#17150F", spec = it, done = d,
+                url = login.url, name = spec.carrier.displayName,
+                accentHex = spec.carrier.accentColorHex ?: "#17150F", spec = spec, done = d,
             )
         } ?: WebLoginUiState(done = d)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), WebLoginUiState())

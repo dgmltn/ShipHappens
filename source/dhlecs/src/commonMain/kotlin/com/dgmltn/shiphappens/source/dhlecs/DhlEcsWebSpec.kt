@@ -7,6 +7,8 @@ import com.dgmltn.shiphappens.source.webview.StatusVocabulary
 import com.dgmltn.shiphappens.source.webview.TrackerPageRules
 import com.dgmltn.shiphappens.source.webview.WebProviderSpec
 import com.dgmltn.shiphappens.source.webview.resolveTrackerPage
+import com.dgmltn.shiphappens.source.webview.webSourceModule
+import org.koin.core.module.Module
 
 // webtrack.dhlecs.com is a React SPA (empty #root shell); its POST to
 // api.dhlecs.com/webtrack/v4/tracking is the primary data layer (captured via apiUrlPatterns,
@@ -75,21 +77,18 @@ internal val DHLECS_PAGE = TrackerPageRules(
 )
 
 // The tracking API is anonymous (a plain cross-origin POST, no cookies or keys — recon
-// 2026-09-03); login is never required, so login state is a constant false and the loginUrl
-// below is vestigial framework plumbing.
-private const val DHLECS_IS_LOGGED_IN_JS = "(function() { return false; })()"
-
+// 2026-09-03); login is never required, so login is null and the probe falls back to
+// NEVER_LOGGED_IN_JS.
 val DhlEcsWebSpec = WebProviderSpec(
-    sourceId = "dhlecs",
     carrier = WellKnownCarriers.DHL_ECOMMERCE,
     cookieDomain = "webtrack.dhlecs.com",
     trackingUrl = { "https://webtrack.dhlecs.com/orders?trackingNumber=${normalizeTracking(it)}" },
-    loginUrl = "https://webtrack.dhlecs.com/",
-    isLoggedInJs = DHLECS_IS_LOGGED_IN_JS,
     // The SPA calls api.dhlecs.com cross-host; the in-page fetch hook still sees it.
     apiUrlPatterns = listOf(""".*api\.dhlecs\.com/webtrack/v4/tracking.*"""),
-    challengeMarkers = listOf("Access Denied", "Reference #", "verify you are a human", "Request unsuccessful"),
+    extraChallengeMarkers = listOf("Reference #", "Request unsuccessful"),
     extractionJs = DHLECS_EXTRACTION_JS,
     parseApi = { _, body -> DhlEcsApiParser.parse(body) },
     parseRaw = { resolveTrackerPage(it, DHLECS_PAGE) },
 )
+
+val dhlEcsSourceModule: Module = webSourceModule(DhlEcsWebSpec)
