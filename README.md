@@ -119,6 +119,10 @@ toggle off rather than creating a setting that silently does nothing.
 
 ## How to add a tracking source
 
+**[SOURCE.md](SOURCE.md) is the full recipe**: the scrape pipeline, the shared resolver ladder,
+what the extraction JS may and may not do, the API-parser shape, the three tests, and device QA.
+The outline:
+
 The plugin boundary is `TrackingSource` in `source/api`. A website-scraped carrier never touches
 `domain` (beyond its `Carrier` entry), `data`, or the scraping machinery:
 
