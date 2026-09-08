@@ -59,11 +59,16 @@ private val CARRIER_BASE = StatusKeywords(
 
 /**
  * Wordings that contain "delivered" and negate it. Evaluated on every vocabulary, whatever
- * its base: they suppress the DELIVERED lane and classify EXCEPTION. Before this lane existed,
- * DHL eCommerce guarded "Undelivered - Processes for Local Disposal" from outside the chain and
- * AMZL reordered its own copy of the chain for the same reason.
+ * its base: they suppress the DELIVERED lane and classify EXCEPTION — see [NOT_SHIPPED] for the
+ * equivalent guard on SHIPPED. Before this lane existed, DHL eCommerce guarded "Undelivered -
+ * Processes for Local Disposal" from outside the chain and AMZL reordered its own copy of the
+ * chain for the same reason.
  */
 private val NOT_DELIVERED = listOf("undelivered", "not delivered")
+
+/** Wordings that contain "shipped" and negate it. Like [NOT_DELIVERED], evaluated on every
+ *  vocabulary: they suppress the SHIPPED lane and count as LABEL_CREATED. */
+private val NOT_SHIPPED = listOf("not yet shipped", "not shipped", "hasn't shipped", "has not shipped")
 
 private operator fun StatusKeywords.plus(o: StatusKeywords) = StatusKeywords(
     outForDelivery = outForDelivery + o.outForDelivery,
@@ -100,12 +105,13 @@ class StatusVocabulary(
     private fun stages(t: String): List<TrackingStatus> {
         fun hit(phrases: List<String>) = phrases.any { it in t }
         val negated = hit(NOT_DELIVERED)
+        val negatedShipped = hit(NOT_SHIPPED)
         return buildList {
             if (hit(words.outForDelivery)) add(TrackingStatus.OUT_FOR_DELIVERY)
             if (!negated && hit(words.delivered)) add(TrackingStatus.DELIVERED)
             if (negated || hit(words.exception)) add(TrackingStatus.EXCEPTION)
-            if (hit(words.labelCreated)) add(TrackingStatus.LABEL_CREATED)
-            if (hit(words.shipped)) add(TrackingStatus.SHIPPED)
+            if (negatedShipped || hit(words.labelCreated)) add(TrackingStatus.LABEL_CREATED)
+            if (!negatedShipped && hit(words.shipped)) add(TrackingStatus.SHIPPED)
             if (hit(words.inTransit)) add(TrackingStatus.IN_TRANSIT)
         }
     }

@@ -15,6 +15,7 @@ import com.dgmltn.shiphappens.source.webview.WebCapableSource
 import com.dgmltn.shiphappens.source.webview.WebCookieJar
 import com.dgmltn.shiphappens.design.accentHex
 import com.dgmltn.shiphappens.domain.Carrier
+import com.dgmltn.shiphappens.domain.WellKnownCarriers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -56,23 +57,26 @@ class SettingsViewModel(
     private val blocked = MutableStateFlow(false)
 
     val state: StateFlow<SettingsUiState> = combine(settings.settings, toast, blocked) { s, t, b ->
-        val cards = registry.all().map { src ->
-            val d = src.descriptor
-            val cfg = s.sourceConfigs[d.id] ?: SourceConfig()
-            val (statusText, statusColor) = when {
-                !cfg.enabled -> "Not connected" to "#A8A296"
-                !d.implemented -> "Coming soon" to "#A8A296"
-                else -> "Connected · syncing" to "#1F7A4D"
+        val order = WellKnownCarriers.all.map { it.code }
+        val cards = registry.all()
+            .sortedBy { order.indexOf(it.descriptor.id).let { i -> if (i < 0) Int.MAX_VALUE else i } }
+            .map { src ->
+                val d = src.descriptor
+                val cfg = s.sourceConfigs[d.id] ?: SourceConfig()
+                val (statusText, statusColor) = when {
+                    !cfg.enabled -> "Not connected" to "#A8A296"
+                    !d.implemented -> "Coming soon" to "#A8A296"
+                    else -> "Connected · syncing" to "#1F7A4D"
+                }
+                val webSpec = (src as? WebCapableSource)?.webSpec
+                SourceCardUi(
+                    id = d.id, name = d.displayName,
+                    accentHex = d.accentColorHex ?: Carrier(d.id, d.displayName).accentHex(),
+                    enabled = cfg.enabled, statusText = statusText, statusColorHex = statusColor,
+                    webCapable = webSpec?.login != null,
+                    signedIn = webSpec?.login != null && cfg.values["loggedIn"] == "true",
+                )
             }
-            val webSpec = (src as? WebCapableSource)?.webSpec
-            SourceCardUi(
-                id = d.id, name = d.displayName,
-                accentHex = d.accentColorHex ?: Carrier(d.id, d.displayName).accentHex(),
-                enabled = cfg.enabled, statusText = statusText, statusColorHex = statusColor,
-                webCapable = webSpec?.login != null,
-                signedIn = webSpec?.login != null && cfg.values["loggedIn"] == "true",
-            )
-        }
         SettingsUiState(
             carriers = cards,
             autoImport = s.autoClipboardImport,

@@ -3,7 +3,6 @@ package com.dgmltn.shiphappens.source.webview
 import com.dgmltn.shiphappens.domain.Carrier
 import com.dgmltn.shiphappens.domain.TrackingSnapshot
 import com.dgmltn.shiphappens.domain.TrackingStatus
-import com.dgmltn.shiphappens.domain.WellKnownCarriers
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
@@ -108,14 +107,15 @@ class PayloadRouterTest {
     }
 
     @Test fun spec_defaults_derive_from_the_carrier_and_the_shared_markers() {
-        val spec = WebProviderSpec(carrier = WellKnownCarriers.UPS, cookieDomain = "ups.com", trackingUrl = { it }, extractionJs = "function(){}")
-        assertEquals("ups", spec.sourceId)
+        val carrier = Carrier("test", "Test")
+        val spec = WebProviderSpec(carrier = carrier, cookieDomain = "example.com", trackingUrl = { it }, extractionJs = "function(){}")
+        assertEquals("test", spec.sourceId)
         assertEquals(NEVER_LOGGED_IN_JS, spec.isLoggedInJs)
         assertEquals(DEFAULT_CHALLENGE_MARKERS, spec.challengeMarkers)
-        val withExtras = WebProviderSpec(carrier = WellKnownCarriers.UPS, cookieDomain = "ups.com", trackingUrl = { it }, extractionJs = "function(){}",
-            login = LoginRecipe("https://www.ups.com/signin", "(function(){return true})()"), extraChallengeMarkers = listOf("Pardon Our Interruption"))
+        val withExtras = WebProviderSpec(carrier = carrier, cookieDomain = "example.com", trackingUrl = { it }, extractionJs = "function(){}",
+            login = LoginRecipe("https://www.example.com/signin", "(function(){return true})()"), extraChallengeMarkers = listOf("synthetic marker"))
         assertEquals("(function(){return true})()", withExtras.isLoggedInJs)
-        assertEquals(DEFAULT_CHALLENGE_MARKERS + "Pardon Our Interruption", withExtras.challengeMarkers)
+        assertEquals(DEFAULT_CHALLENGE_MARKERS + "synthetic marker", withExtras.challengeMarkers)
     }
 
     @Test fun hop_url_allowlist_semantics() {

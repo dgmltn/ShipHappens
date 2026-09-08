@@ -164,7 +164,7 @@ flowchart TD
     C -- yes --> NF[PageOutcome.NotFound]
     C -- no --> D{headline names two stages?<br/>progress rail}
     D -- yes --> N1[null → Unparsed]
-    D -- no --> E[events ← rows via toTrackingEvent<br/>eta ← rules.etaDate etaText today<br/>window ← findEtaWindowText etaText]
+    D -- no --> E[events ← rows via toTrackingEvent<br/>eta ← rules.etaDate raw today<br/>window ← findEtaWindowText statusText, then etaText]
     E --> F{no headline, no events,<br/>no eta, no window?}
     F -- yes --> EM[PageOutcome.Empty]
     F -- no --> G[assembleSnapshot:<br/>status = headline ▸ newest classified event ▸ UNKNOWN<br/>location = banner ▸ newest located event<br/>delayNote = headline ▸ newest event]
@@ -173,8 +173,9 @@ flowchart TD
 
 The hooks exist for the two cases the ladder cannot know: `location` when the banner carries
 page phrasing ("Currently in Sacramento, CA", FedEx strips the prefix) and `etaDate` when the
-promise needs a gate before parsing (Amazon reads it out of a status headline). Most carriers
-override nothing.
+promise needs a gate before parsing (Amazon reads it out of a status headline). The `etaDate`
+hook receives the whole `DomRaw`, not just `etaText`, so a carrier can read the promise from
+wherever the page puts it. Most carriers override nothing.
 
 The shared not-found list already holds the generic wordings ("couldn't find", "invalid
 tracking", "no record of this tracking"); `notFound` is for the carrier's own copy.

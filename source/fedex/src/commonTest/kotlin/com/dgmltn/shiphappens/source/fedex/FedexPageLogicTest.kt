@@ -20,6 +20,7 @@ import kotlin.test.assertNull
 class FedexPageLogicTest {
 
     private fun page(raw: DomRaw) = resolveTrackerPage(raw, FEDEX_PAGE, TimeZone.UTC)
+    private fun eta(text: String?, today: LocalDate? = null) = FEDEX_PAGE.etaDate(DomRaw(kind = "tracker", etaText = text), today)
 
     // -- status vocabulary (fedex.com wording, banner headline and scan-event descriptions) --
 
@@ -71,7 +72,7 @@ class FedexPageLogicTest {
     // -- ETA date parsing (banner text; both fedex date renderings plus relative wording) --
 
     @Test fun parses_numeric_month_day_year() {
-        assertEquals(LocalDate(2026, 8, 19), FEDEX_PAGE.etaDate("Estimated delivery Tuesday 8/19/2026 by end of day", null))
+        assertEquals(LocalDate(2026, 8, 19), eta("Estimated delivery Tuesday 8/19/2026 by end of day"))
     }
 
     @Test fun parses_run_together_weekday_and_date() {
@@ -79,24 +80,24 @@ class FedexPageLogicTest {
         // (QA capture 2026-08-19), so the date match can't demand a word boundary.
         assertEquals(
             LocalDate(2026, 8, 20),
-            FEDEX_PAGE.etaDate("ESTIMATED DELIVERY DATE Thursday8/20/2026 Between 10:10 AM - 2:10 PM", null),
+            eta("ESTIMATED DELIVERY DATE Thursday8/20/2026 Between 10:10 AM - 2:10 PM"),
         )
     }
 
     @Test fun parses_month_name_form() {
-        assertEquals(LocalDate(2026, 8, 19), FEDEX_PAGE.etaDate("Estimated delivery: Tuesday, August 19, 2026", null))
+        assertEquals(LocalDate(2026, 8, 19), eta("Estimated delivery: Tuesday, August 19, 2026"))
     }
 
     @Test fun resolves_today_and_tomorrow_against_page_date() {
         val today = LocalDate(2026, 8, 19)
-        assertEquals(LocalDate(2026, 8, 19), FEDEX_PAGE.etaDate("Estimated delivery today by 8:00 PM", today))
-        assertEquals(LocalDate(2026, 8, 20), FEDEX_PAGE.etaDate("Estimated delivery tomorrow by end of day", today))
-        assertNull(FEDEX_PAGE.etaDate("Estimated delivery today by 8:00 PM", null))
+        assertEquals(LocalDate(2026, 8, 19), eta("Estimated delivery today by 8:00 PM", today))
+        assertEquals(LocalDate(2026, 8, 20), eta("Estimated delivery tomorrow by end of day", today))
+        assertNull(eta("Estimated delivery today by 8:00 PM"))
     }
 
     @Test fun pending_banner_has_no_date() {
-        assertNull(FEDEX_PAGE.etaDate("Estimated delivery Pending", null))
-        assertNull(FEDEX_PAGE.etaDate(null, null))
+        assertNull(eta("Estimated delivery Pending"))
+        assertNull(eta(null))
     }
 
     // -- delivery-window phrase extraction (fed to the shared EtaWindowParser downstream) --

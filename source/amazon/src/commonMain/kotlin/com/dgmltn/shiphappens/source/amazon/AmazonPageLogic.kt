@@ -8,14 +8,12 @@ import com.dgmltn.shiphappens.source.webview.DomRaw
 import com.dgmltn.shiphappens.source.webview.PageOutcome
 import com.dgmltn.shiphappens.source.webview.StatusKeywords
 import com.dgmltn.shiphappens.source.webview.StatusVocabulary
-import com.dgmltn.shiphappens.source.webview.assembleSnapshot
-import com.dgmltn.shiphappens.source.webview.headlineThenNewestEvent
+import com.dgmltn.shiphappens.source.webview.TrackerPageRules
 import com.dgmltn.shiphappens.source.webview.parseDayWithoutYear
 import com.dgmltn.shiphappens.source.webview.parseRelativeDay
+import com.dgmltn.shiphappens.source.webview.resolveTrackerPage
 import com.dgmltn.shiphappens.source.webview.today
-import com.dgmltn.shiphappens.source.webview.toTrackingEvent
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.TimeZone
 
 /**
  * Everything the Amazon scrape *decides*, kept out of AMAZON_EXTRACTION_JS so it can be tested
@@ -48,7 +46,7 @@ internal val AMAZON_VOCABULARY = StatusVocabulary(
             "undeliverable", "delivery attempted", "returned to sender", "return to sender",
             "being returned", "package was lost", "lost in transit",
         ),
-        labelCreated = listOf("not yet shipped", "not shipped", "ordered", "order placed", "preparing for shipment"),
+        labelCreated = listOf("ordered", "order placed", "preparing for shipment"),
         shipped = listOf("shipped", "dispatched", "picked up"),
         inTransit = listOf("in transit", "on the way", "on its way", "at carrier"),
         delayed = listOf("delayed", "running late", "now expected"),
@@ -144,29 +142,20 @@ internal fun resolveAmazonCards(raw: DomRaw): PageOutcome {
     }
 }
 
-/** Tracker page: the shared ladder, with Amazon's promise-phrase gate on the status line. */
-internal fun resolveAmazonTracker(raw: DomRaw, zone: TimeZone = TimeZone.currentSystemDefault()): PageOutcome {
-    val today = raw.today()
-    val events = raw.events.mapNotNull { it.toTrackingEvent(AMAZON_VOCABULARY, zone, today) }
-    val headline = raw.statusText?.takeIf { it.isNotBlank() }
-    if (headline == null && events.isEmpty()) return PageOutcome.Empty
-    return PageOutcome.Tracking(
-        assembleSnapshot(
-            vocabulary = AMAZON_VOCABULARY,
-            headline = headline,
-            events = events,
-            etaDate = parseAmazonDay(raw.etaText, today)
-                ?: amazonEtaFromStatus(headline, today)
-                ?: raw.etaDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() },
-            etaWindowText = raw.etaWindowText,
-            delayNote = headlineThenNewestEvent(AMAZON_VOCABULARY, headline, events),
-        ),
-    )
-}
+/**
+ * Tracker page: the shared ladder, with the one thing it cannot know — Amazon writes the promise
+ * in the status headline ("Now expected tomorrow by 8 AM"), gated by a promise phrase so a
+ * "Delivered June 25" date is never read as an arrival. The promise element, when present,
+ * still wins.
+ */
+internal val AMAZON_PAGE = TrackerPageRules(
+    vocabulary = AMAZON_VOCABULARY,
+    etaDate = { raw, today -> parseAmazonDay(raw.etaText, today) ?: amazonEtaFromStatus(raw.statusText, today) },
+)
 
 /** Dispatches a raw extraction by the page that produced it. */
 internal fun parseAmazonRaw(raw: DomRaw): PageOutcome? = when (raw.kind) {
     "cards" -> resolveAmazonCards(raw)
-    "tracker" -> resolveAmazonTracker(raw)
+    "tracker" -> resolveTrackerPage(raw, AMAZON_PAGE)
     else -> null
 }

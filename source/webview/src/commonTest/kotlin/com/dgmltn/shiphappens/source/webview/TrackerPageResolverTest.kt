@@ -121,4 +121,20 @@ class TrackerPageResolverTest {
         assertEquals(TrackingStatus.IN_TRANSIT, s.status)
         assertEquals("On the way: Delayed", s.delayNote)
     }
+
+    @Test fun eta_hook_sees_the_whole_raw_page() {
+        val fromHeadline = TrackerPageRules(rules.vocabulary, etaDate = { raw, today -> parseRelativeDay(raw.statusText, today) })
+        val out = resolveTrackerPage(tracker(statusText = "Arriving tomorrow", todayIso = "2026-08-18"), fromHeadline, TimeZone.UTC)
+        assertEquals(LocalDate(2026, 8, 19), out.snapshotOrNull()?.etaDate)
+    }
+
+    @Test fun window_is_read_from_the_status_line_before_the_promise_banner() {
+        val out = resolve(tracker(statusText = "Arriving today by 10 PM", etaText = "Between 8 AM and 12 PM tomorrow"))
+        assertEquals(LocalTime(22, 0), out.snapshotOrNull()?.etaWindowEnd)
+        assertNull(out.snapshotOrNull()?.etaWindowStart)
+        val bannerOnly = resolve(tracker(statusText = "In transit", etaText = "Between 8 AM and 12 PM"))
+        assertEquals(LocalTime(8, 0), bannerOnly.snapshotOrNull()?.etaWindowStart)
+        val delivered = resolve(tracker(statusText = "Delivered at 1:15 pm", etaText = "Estimated delivery by 9:00 pm"))
+        assertEquals(LocalTime(21, 0), delivered.snapshotOrNull()?.etaWindowEnd)
+    }
 }

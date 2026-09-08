@@ -27,8 +27,9 @@ class TrackerPageRules(
     val vocabulary: StatusVocabulary,
     /** Regex sources (case-insensitive) matched against [DomRaw.pageText], merged with the shared list. */
     val notFound: List<String> = emptyList(),
-    /** Reads the delivery promise out of [DomRaw.etaText]. Override only when the page needs a gate first. */
-    val etaDate: (text: String?, today: LocalDate?) -> LocalDate? = ::parsePromiseDate,
+    /** Reads the delivery promise out of the page. The default reads [DomRaw.etaText]; a carrier
+     *  whose promise lives in the status line (Amazon) reads that instead. */
+    val etaDate: (raw: DomRaw, today: LocalDate?) -> LocalDate? = { raw, today -> parsePromiseDate(raw.etaText, today) },
     /** The current-location banner; override to strip page phrasing ("Currently in"). */
     val location: (DomRaw) -> String? = { it.locationText },
     val delayNote: (headline: String?, events: List<TrackingEvent>) -> String? =
@@ -70,8 +71,9 @@ fun resolveTrackerPage(
     if (headline != null && rules.vocabulary.isMultiStage(headline)) return null
     val today = raw.today()
     val events = raw.events.mapNotNull { it.toTrackingEvent(rules.vocabulary, zone, today) }
-    val etaDate = rules.etaDate(raw.etaText, today) ?: raw.etaDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-    val etaWindowText = raw.etaWindowText ?: findEtaWindowText(raw.etaText)
+    val etaDate = rules.etaDate(raw, today) ?: raw.etaDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    // The status line first (Amazon quotes the window there), the promise banner as the fallback.
+    val etaWindowText = raw.etaWindowText ?: findEtaWindowText(raw.statusText) ?: findEtaWindowText(raw.etaText)
     if (headline == null && events.isEmpty() && etaDate == null && etaWindowText == null) return PageOutcome.Empty
     return PageOutcome.Tracking(
         assembleSnapshot(

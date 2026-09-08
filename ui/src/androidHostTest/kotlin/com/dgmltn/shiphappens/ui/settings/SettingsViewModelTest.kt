@@ -12,6 +12,7 @@ import com.dgmltn.shiphappens.data.source.SourceRegistry
 import com.dgmltn.shiphappens.source.amazon.AmazonWebSpec
 import com.dgmltn.shiphappens.source.ups.UpsWebSpec
 import com.dgmltn.shiphappens.source.usps.UspsWebSpec
+import com.dgmltn.shiphappens.source.api.TrackingSource
 import com.dgmltn.shiphappens.source.webview.NoOpCookieJar
 import com.dgmltn.shiphappens.source.webview.NoWebScraper
 import com.dgmltn.shiphappens.source.webview.WebSource
@@ -82,7 +83,10 @@ class SettingsViewModelTest {
     private suspend fun awaitRecorded(timeoutMs: Long = 10_000, predicate: (SettingsUiState) -> Boolean): SettingsUiState =
         withContext(Dispatchers.Default) { withTimeout(timeoutMs) { recordedStates.first(predicate) } }
 
-    private suspend fun TestScope.vm(is24Hour: Boolean = false): SettingsViewModel {
+    private suspend fun TestScope.vm(
+        is24Hour: Boolean = false,
+        sources: List<TrackingSource> = listOf(WebSource(UpsWebSpec, NoWebScraper), WebSource(UspsWebSpec, NoWebScraper), WebSource(AmazonWebSpec, NoWebScraper)),
+    ): SettingsViewModel {
         timeFormat = TimeFormat { is24Hour }
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val dir = kotlin.io.path.createTempDirectory("settingsvm").toString()
@@ -91,10 +95,7 @@ class SettingsViewModelTest {
         // The three real web-scraping sources over NoWebScraper: empty configSpec doesn't exist
         // any more (Task 3), and none are `implemented` without a real scraper, so every card
         // shows "Coming soon" once enabled — exactly what production shows on iOS/JVM.
-        val registry = SourceRegistry(
-            listOf(WebSource(UpsWebSpec, NoWebScraper), WebSource(UspsWebSpec, NoWebScraper), WebSource(AmazonWebSpec, NoWebScraper)),
-            settings,
-        )
+        val registry = SourceRegistry(sources, settings)
         repo = ParcelRepository(db.parcelDao(), registry, settings, FixedClock())
         vm = SettingsViewModel(registry, settings, repo, NoOpCookieJar, scheduler, FixedClock(), timeFormat)
         // Records every emission and keeps WhileSubscribed alive for the whole test.
@@ -126,6 +127,12 @@ class SettingsViewModelTest {
         val s = awaitState { it.carriers.size == 3 }
         assertEquals(listOf("ups", "usps", "amazon"), s.carriers.map { it.id })
         assertTrue(s.carriers.all { it.statusText == "Not connected" })
+    }
+
+    @Test fun carrier_cards_follow_the_well_known_order_not_registration_order() = runTest {
+        val vm = vm(sources = listOf(WebSource(AmazonWebSpec, NoWebScraper), WebSource(UspsWebSpec, NoWebScraper), WebSource(UpsWebSpec, NoWebScraper)))
+        val s = awaitState { it.carriers.size == 3 }
+        assertEquals(listOf("ups", "usps", "amazon"), s.carriers.map { it.id })
     }
 
     @Test fun toggling_an_unimplemented_source_shows_coming_soon() = runTest {

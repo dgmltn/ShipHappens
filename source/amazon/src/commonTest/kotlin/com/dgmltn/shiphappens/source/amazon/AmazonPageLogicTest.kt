@@ -5,9 +5,11 @@ import com.dgmltn.shiphappens.source.webview.DomCard
 import com.dgmltn.shiphappens.source.webview.DomRaw
 import com.dgmltn.shiphappens.source.webview.DomRawEvent
 import com.dgmltn.shiphappens.source.webview.PageOutcome
+import com.dgmltn.shiphappens.source.webview.resolveTrackerPage
 import com.dgmltn.shiphappens.source.webview.snapshotOrNull
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -91,6 +93,11 @@ class AmazonPageLogicTest {
         assertEquals(TrackingStatus.LABEL_CREATED, AMAZON_VOCABULARY.classify("Ordered"))
     }
 
+    @Test fun a_pre_shipment_tracker_headline_is_not_mistaken_for_a_progress_rail() {
+        assertEquals(TrackingStatus.LABEL_CREATED,
+            resolveTrackerPage(DomRaw(kind = "tracker", statusText = "Not yet shipped"), AMAZON_PAGE, TimeZone.UTC).snapshotOrNull()?.status)
+    }
+
     @Test fun genuine_transit_phrasing_still_classifies_in_transit() {
         assertEquals(TrackingStatus.IN_TRANSIT, AMAZON_VOCABULARY.classify("Package is on the way"))
         assertEquals(TrackingStatus.IN_TRANSIT, AMAZON_VOCABULARY.classify("In transit to next facility"))
@@ -124,7 +131,7 @@ class AmazonPageLogicTest {
     }
 
     @Test fun tracker_classifies_status_line_and_events() {
-        val result = resolveAmazonTracker(
+        val result = resolveTrackerPage(
             DomRaw(
                 kind = "tracker",
                 statusText = "Delivered June 25",
@@ -134,6 +141,8 @@ class AmazonPageLogicTest {
                     DomRawEvent("2026-06-25T14:00:00Z", "Delivered, left near front door", "Tempe, AZ"),
                 ),
             ),
+            AMAZON_PAGE,
+            TimeZone.UTC,
         )
         val snapshot = result.snapshotOrNull()
         assertEquals(TrackingStatus.DELIVERED, snapshot?.status)
@@ -143,18 +152,26 @@ class AmazonPageLogicTest {
     }
 
     @Test fun tracker_falls_back_to_newest_event_when_status_line_is_unreadable() {
-        val result = resolveAmazonTracker(
+        val result = resolveTrackerPage(
             DomRaw(
                 kind = "tracker",
                 statusText = "Your order",
                 events = listOf(DomRawEvent("2026-06-24T09:00:00Z", "Out for delivery", null)),
             ),
+            AMAZON_PAGE,
+            TimeZone.UTC,
         )
         assertEquals(TrackingStatus.OUT_FOR_DELIVERY, result.snapshotOrNull()?.status)
     }
 
     @Test fun tracker_with_nothing_readable_is_empty() {
-        assertIs<PageOutcome.Empty>(resolveAmazonTracker(DomRaw(kind = "tracker")))
+        assertIs<PageOutcome.Empty>(resolveTrackerPage(DomRaw(kind = "tracker"), AMAZON_PAGE, TimeZone.UTC))
+    }
+
+    @Test fun a_tracker_page_with_only_a_promise_still_reports_its_eta() {
+        val out = resolveTrackerPage(DomRaw(kind = "tracker", etaText = "Arriving tomorrow", todayIso = "2026-08-18"), AMAZON_PAGE, TimeZone.UTC)
+        assertEquals(TrackingStatus.UNKNOWN, out.snapshotOrNull()?.status)
+        assertEquals(LocalDate(2026, 8, 19), out.snapshotOrNull()?.etaDate)
     }
 
     @Test fun unknown_raw_kind_is_refused() {
@@ -221,7 +238,7 @@ class AmazonPageLogicTest {
 
     @Test fun delayed_tracker_page_reports_tomorrow_the_window_and_the_delay() {
         // Verbatim from the 2026-08-18 capture.
-        val result = resolveAmazonTracker(
+        val result = resolveTrackerPage(
             DomRaw(
                 kind = "tracker",
                 statusText = "Now expected tomorrow by 8 AM",
@@ -233,6 +250,8 @@ class AmazonPageLogicTest {
                     DomRawEvent("2026-08-18T07:00:00.000Z", "Package delayed in transit", ""),
                 ),
             ),
+            AMAZON_PAGE,
+            TimeZone.UTC,
         )
         val snapshot = result.snapshotOrNull()
         assertEquals(LocalDate(2026, 8, 19), snapshot?.etaDate)
@@ -284,8 +303,10 @@ class AmazonPageLogicTest {
     }
 
     @Test fun a_delayed_tracker_page_carries_the_wording_as_its_note() {
-        val result = resolveAmazonTracker(
+        val result = resolveTrackerPage(
             DomRaw(kind = "tracker", statusText = "Now expected tomorrow by 8 AM", todayIso = "2026-08-18"),
+            AMAZON_PAGE,
+            TimeZone.UTC,
         )
         assertEquals("Now expected tomorrow by 8 AM", result.snapshotOrNull()?.delayNote)
     }
@@ -293,7 +314,7 @@ class AmazonPageLogicTest {
     @Test fun a_tracker_whose_only_delay_signal_is_an_event_still_reports_it() {
         // The 2026-08-18 capture's warning: a tracker that hadn't logged the revised promise in
         // its status line still had "Package delayed in transit" in the rows.
-        val result = resolveAmazonTracker(
+        val result = resolveTrackerPage(
             DomRaw(
                 kind = "tracker",
                 statusText = "Arriving tomorrow",
@@ -303,13 +324,17 @@ class AmazonPageLogicTest {
                     DomRawEvent("2026-08-18T07:00:00.000Z", "Package delayed in transit", ""),
                 ),
             ),
+            AMAZON_PAGE,
+            TimeZone.UTC,
         )
         assertEquals("Package delayed in transit", result.snapshotOrNull()?.delayNote)
     }
 
     @Test fun an_undelayed_tracker_page_has_no_note() {
-        val result = resolveAmazonTracker(
+        val result = resolveTrackerPage(
             DomRaw(kind = "tracker", statusText = "Arriving tomorrow", todayIso = "2026-08-18"),
+            AMAZON_PAGE,
+            TimeZone.UTC,
         )
         assertNull(result.snapshotOrNull()?.delayNote)
     }
@@ -332,13 +357,15 @@ class AmazonPageLogicTest {
     }
 
     @Test fun tracker_prefers_the_promise_element_over_the_status_line() {
-        val result = resolveAmazonTracker(
+        val result = resolveTrackerPage(
             DomRaw(
                 kind = "tracker",
                 statusText = "Now expected tomorrow by 8 AM",
                 etaText = "Saturday, August 22",
                 todayIso = "2026-08-18",
             ),
+            AMAZON_PAGE,
+            TimeZone.UTC,
         )
         assertEquals(LocalDate(2026, 8, 22), result.snapshotOrNull()?.etaDate)
     }

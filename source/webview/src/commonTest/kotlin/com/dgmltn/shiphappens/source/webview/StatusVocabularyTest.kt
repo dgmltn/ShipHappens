@@ -162,6 +162,16 @@ class StatusVocabularyTest {
         assertEquals(TrackingStatus.EXCEPTION, bare.classify("Undelivered"))
     }
 
+    // -- negated shipped: checked on every vocabulary, ahead of the SHIPPED lane --
+
+    @Test fun not_shipped_wording_is_label_created_not_shipped_and_not_multi_stage() {
+        assertEquals(TrackingStatus.LABEL_CREATED, SHARED.classify("Not yet shipped"))
+        assertEquals(TrackingStatus.LABEL_CREATED, SHARED.classify("Your order has not shipped"))
+        assertFalse(SHARED.isMultiStage("Not yet shipped"))
+        val bare = StatusVocabulary(StatusKeywords(shipped = listOf("shipped")), base = BaseKeywords.None)
+        assertEquals(TrackingStatus.LABEL_CREATED, bare.classify("Not yet shipped"))
+    }
+
     // -- BaseKeywords.None: only the carrier's own phrases --
 
     @Test fun a_none_base_vocabulary_knows_nothing_it_was_not_told() {

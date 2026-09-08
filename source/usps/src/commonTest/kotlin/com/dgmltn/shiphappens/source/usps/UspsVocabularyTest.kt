@@ -24,6 +24,7 @@ import kotlin.test.assertNull
 class UspsVocabularyTest {
 
     private fun page(raw: DomRaw) = resolveTrackerPage(raw, USPS_PAGE, TimeZone.UTC)
+    private fun eta(text: String?, today: LocalDate? = null) = USPS_PAGE.etaDate(DomRaw(kind = "tracker", etaText = text), today)
 
     // The .expected_delivery banner, textContent-flattened: the date is split across
     // .day/.date/.month_year spans and two tooltips interleave their copy into the text.
@@ -61,17 +62,17 @@ class UspsVocabularyTest {
     }
 
     @Test fun eta_date_survives_split_spans_and_tooltip_copy() {
-        assertEquals(LocalDate(2026, 7, 28), USPS_PAGE.etaDate(etaBanner, null))
+        assertEquals(LocalDate(2026, 7, 28), eta(etaBanner))
     }
 
     @Test fun eta_date_also_parses_month_first_wording() {
         // The "Expected Delivery on" variants render "Monday, July 28, 2026".
-        assertEquals(LocalDate(2026, 7, 28), USPS_PAGE.etaDate("Expected Delivery on Monday, July 28, 2026", null))
+        assertEquals(LocalDate(2026, 7, 28), eta("Expected Delivery on Monday, July 28, 2026"))
     }
 
     @Test fun eta_date_is_null_when_banner_is_absent_or_junk() {
-        assertNull(USPS_PAGE.etaDate(null, null))
-        assertNull(USPS_PAGE.etaDate("Get More Out of USPS Tracking:", null))
+        assertNull(eta(null))
+        assertNull(eta("Get More Out of USPS Tracking:"))
     }
 
     @Test fun eta_window_cutoff_is_extracted_verbatim() {
