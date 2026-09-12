@@ -15,6 +15,10 @@ class UspsWebSpecTest {
             "https://tools.usps.com/tracking/9434636106092288655003",
             UspsWebSpec.trackingUrl("9434636106092288655003"),
         )
+        assertEquals(
+            "https://tools.usps.com/tracking/9434636106092288655003",
+            UspsWebSpec.trackingUrl("9434 6361 0609 2288 6550 03"),
+        )
     }
 
     @Test fun api_pattern_matches_candidate_tracking_endpoints_only() {

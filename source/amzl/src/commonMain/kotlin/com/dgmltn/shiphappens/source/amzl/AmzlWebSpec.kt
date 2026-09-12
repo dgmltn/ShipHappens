@@ -16,28 +16,11 @@ import org.koin.core.module.Module
 // Selector constants and not-found wording are validated on-device during QA — off-device recon
 // (2026-08-11) only saw the SPA shell, so every bail-out carries why/probe/detail for the tracer.
 private val AMZL_EXTRACTION_JS = """
-function() {
-  var text = (document.body && document.body.innerText) || '';
-  var href = location.href;
-  function clean(el) { return el ? el.textContent.replace(/\s+/g, ' ').trim() : null; }
-  var statusEl = document.querySelector('#primaryStatus')
-    || document.querySelector('[class*="pt-status"], [class*="trackingStatus"], [class*="status-main"]')
-    || document.querySelector('main h1, h1');
-  var statusText = clean(statusEl);
-  var pageText = text.replace(/\s+/g, ' ').slice(0, 400);
-  if (statusText) return {page: 'raw', raw: {kind: 'tracker', statusText: statusText, pageText: pageText}};
-  function probe() {
-    var sel = ['#primaryStatus', '[class*="status"]', 'main h1', 'h1', '[data-testid]'];
-    var out = {};
-    for (var p = 0; p < sel.length; p++) {
-      try { out[sel[p]] = document.querySelectorAll(sel[p]).length; } catch (e) { out[sel[p]] = -1; }
-    }
-    return out;
-  }
-  // Raw (not 'empty') so Kotlin can still classify not-found wording from pageText; the
-  // decoder ignores why/probe, the tracer logs them verbatim.
-  return {page: 'raw', raw: {kind: 'tracker', pageText: pageText},
-          why: 'noStatusHeadline', url: href, probe: probe()};
+function(page) {
+  var statusText = page.text('#primaryStatus', '[class*="pt-status"]', '[class*="trackingStatus"]', '[class*="status-main"]', 'main h1', 'h1');
+  var r = page.raw('tracker', {statusText: statusText});
+  if (!statusText) { r.why = 'noStatusHeadline'; r.url = location.href; r.probe = page.probe('#primaryStatus', '[class*="status"]', 'main h1', 'h1', '[data-testid]'); }
+  return r;
 }
 """.trimIndent()
 

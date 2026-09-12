@@ -17,32 +17,17 @@ import org.koin.core.module.Module
 // 'no-result-found-msg') come from the production bundle (recon 2026-09-03); off-device fetches
 // only see the SPA shell, so they're validated on-device during QA — every bail-out carries
 // why/probe for the tracer, AMZL-style.
+// .list-status only (the results list's status cell) — NOT [class*="shipment-status"]: on the
+// details route that matched a CONTAINER whose text concatenates the progress rail's static
+// step labels ("Notified En Route Delivered"), and the rail's "Delivered" overwrote a
+// label-only package (live QA 2026-09-03). Kotlin refuses multi-stage text too, but the
+// precise-node-or-nothing rule is the same lesson as USPS's 2026-07-15 ancestor-wrapper bug.
 private val DHLECS_EXTRACTION_JS = """
-function() {
-  var text = (document.body && document.body.innerText) || '';
-  var pageText = text.replace(/\s+/g, ' ').slice(0, 400);
-  function clean(el) { return el ? el.textContent.replace(/\s+/g, ' ').trim() : null; }
-  // .list-status only (the results list's status cell) — NOT [class*="shipment-status"]: on the
-  // details route that matched a CONTAINER whose text concatenates the progress rail's static
-  // step labels ("Notified En Route Delivered"), and the rail's "Delivered" overwrote a
-  // label-only package (live QA 2026-09-03). Kotlin refuses multi-stage text too, but the
-  // precise-node-or-nothing rule is the same lesson as USPS's 2026-07-15 ancestor-wrapper bug.
-  var statusEl = document.querySelector('.list-status')
-    || document.querySelector('main h1, h1');
-  var statusText = clean(statusEl);
-  if (statusText) return {page: 'raw', raw: {kind: 'tracker', statusText: statusText, pageText: pageText}};
-  function probe() {
-    var sel = ['.list-status', '[class*="shipment-status"]', '.no-result-found-msg', 'h1', '#root *'];
-    var out = {};
-    for (var p = 0; p < sel.length; p++) {
-      try { out[sel[p]] = document.querySelectorAll(sel[p]).length; } catch (e) { out[sel[p]] = -1; }
-    }
-    return out;
-  }
-  // Raw (not 'empty') so Kotlin can still classify not-found wording from pageText; the
-  // decoder ignores why/probe, the tracer logs them verbatim.
-  return {page: 'raw', raw: {kind: 'tracker', pageText: pageText},
-          why: 'noStatusHeadline', url: location.href, probe: probe()};
+function(page) {
+  var statusText = page.text('.list-status', 'main h1', 'h1');
+  var r = page.raw('tracker', {statusText: statusText});
+  if (!statusText) { r.why = 'noStatusHeadline'; r.url = location.href; r.probe = page.probe('.list-status', '[class*="shipment-status"]', '.no-result-found-msg', 'h1', '#root *'); }
+  return r;
 }
 """.trimIndent()
 

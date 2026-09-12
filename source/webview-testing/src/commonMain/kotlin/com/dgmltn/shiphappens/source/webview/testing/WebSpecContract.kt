@@ -34,6 +34,9 @@ object WebSpecContract {
         assertEquals(listOf("https://*.$d", "https://$d"), spec.allowedOriginRules(), "origin rules derive from the cookie domain")
         assertTrue(spec.challengeMarkers.containsAll(DEFAULT_CHALLENGE_MARKERS), "shared challenge markers present")
         assertTrue(spec.extractionJs.trimStart().startsWith("function"), "extractionJs is a function expression")
+        for (forbidden in listOf("new Date(", "Date.parse", "getFullYear")) {
+            assertFalse(spec.extractionJs.contains(forbidden), "extractionJs must not do date arithmetic ($forbidden); send the text and let Kotlin decide")
+        }
         assertTrue(spec.isLoggedInJs.trimStart().startsWith("(function"), "isLoggedInJs is a self-invoking function expression")
         spec.login?.let { assertTrue(it.url.startsWith("https://"), "login URL is https") }
 

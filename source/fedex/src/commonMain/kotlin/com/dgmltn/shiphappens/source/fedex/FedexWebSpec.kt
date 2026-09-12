@@ -1,6 +1,7 @@
 package com.dgmltn.shiphappens.source.fedex
 
 import com.dgmltn.shiphappens.domain.WellKnownCarriers
+import com.dgmltn.shiphappens.domain.normalizeTracking
 import com.dgmltn.shiphappens.source.webview.BridgeScripts
 import com.dgmltn.shiphappens.source.webview.LoginRecipe
 import com.dgmltn.shiphappens.source.webview.WebProviderSpec
@@ -33,39 +34,29 @@ import kotlin.time.Duration.Companion.seconds
 // first and the click only happens when they aren't there. Every fallback still finishes with
 // the summary fields, so a failed click is never worse than the pre-history behavior.
 private val FEDEX_EXTRACTION_JS = """
-function(finish) {
-  var text = (document.body && document.body.innerText) || '';
-  function clean(el) { return el ? el.textContent.replace(/\s+/g, ' ').trim() : null; }
-  var statusText = clean(document.querySelector('.phase3-progress-bar__active-label'))
-    || clean(document.querySelector('[class*="progress-bar__active-label"]'))
-    || clean(document.querySelector('[data-test-id="delivery-date-header"]'));
-  var etaText = clean(document.querySelector('[data-test-id="delivery-date-text"]'))
-    || clean(document.querySelector('.phase3-view__delivery-date-embed, [class*="delivery-date-embed"]'));
-  var locationText = clean(document.querySelector('.phase3-view__current-location, [class*="current-location"]'));
-  var d = new Date();
-  var todayIso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+function(page, finish) {
+  var statusText = page.text('.phase3-progress-bar__active-label', '[class*="progress-bar__active-label"]', '[data-test-id="delivery-date-header"]');
+  var etaText = page.text('[data-test-id="delivery-date-text"]', '.phase3-view__delivery-date-embed', '[class*="delivery-date-embed"]');
+  var locationText = page.text('.phase3-view__current-location', '[class*="current-location"]');
   function readTravelHistory() {
     var events = [];
     var rows = document.querySelectorAll('tr.travel-history-table__row');
     for (var r = 0; r < rows.length; r++) {
-      var dateText = clean(rows[r].querySelector('td'));
+      var dateText = page.clean(rows[r].querySelector('td'));
       var evs = rows[r].querySelectorAll('.travel-history__scan-event');
       for (var i = 0; i < evs.length; i++) {
         var kids = evs[i].children;
-        var desc = kids[1] ? clean(kids[1]) : null;
+        var desc = kids[1] ? page.clean(kids[1]) : null;
         if (!desc) continue;
-        events.push({whenText: (dateText || '') + ' ' + (kids[0] ? clean(kids[0]) : ''),
+        events.push({whenText: (dateText || '') + ' ' + (kids[0] ? page.clean(kids[0]) : ''),
                      description: desc,
-                     location: (kids[2] && clean(kids[2])) || null});
+                     location: (kids[2] && page.clean(kids[2])) || null});
       }
     }
     return events;
   }
   function result(events) {
-    return {page: 'raw', raw: {kind: 'tracker', statusText: statusText, etaText: etaText,
-                               locationText: locationText, todayIso: todayIso,
-                               pageText: text.replace(/\s+/g, ' ').slice(0, 400),
-                               events: events}};
+    return page.raw('tracker', {statusText: statusText, etaText: etaText, locationText: locationText, events: events});
   }
   var direct = readTravelHistory();
   if (direct.length) return result(direct);
@@ -78,13 +69,8 @@ function(finish) {
   if (!control) {
     var res = result([]);
     if (!statusText && !etaText) {
-      // Selector-drift diagnostics for the tracer; the DomExtraction decoder ignores these keys.
       res.why = 'noStatusHeadline';
-      res.probe = {};
-      var sel = ['.phase3-view', '[class*="progress-bar" i]', '[data-test-id]', 'tr.travel-history-table__row', 'h1'];
-      for (var q = 0; q < sel.length; q++) {
-        try { res.probe[sel[q]] = document.querySelectorAll(sel[q]).length; } catch (e) { res.probe[sel[q]] = -1; }
-      }
+      res.probe = page.probe('.phase3-view', '[class*="progress-bar" i]', '[data-test-id]', 'tr.travel-history-table__row', 'h1');
     }
     return res;
   }
@@ -98,7 +84,7 @@ val FedexWebSpec = WebProviderSpec(
     carrier = WellKnownCarriers.FEDEX,
     cookieDomain = "fedex.com",
     // The SPA client-routes this through /wtrk/track/ and back to /fedextrack/?trknbr=...&trkqual=...
-    trackingUrl = { "https://www.fedex.com/fedextrack/?trknbr=$it" },
+    trackingUrl = { "https://www.fedex.com/fedextrack/?trknbr=${normalizeTracking(it)}" },
     // Greeting/sign-out markers on fedex.com chrome — the logged-out page shows "Sign Up or Log In"
     // (QA 2026-08-19); sign-out wording is best-effort until a logged-in QA pass.
     login = LoginRecipe(

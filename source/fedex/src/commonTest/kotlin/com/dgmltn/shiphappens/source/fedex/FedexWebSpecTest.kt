@@ -15,6 +15,10 @@ class FedexWebSpecTest {
             "https://www.fedex.com/fedextrack/?trknbr=123456789012",
             FedexWebSpec.trackingUrl("123456789012"),
         )
+        assertEquals(
+            FedexWebSpec.trackingUrl("123456789012"),
+            FedexWebSpec.trackingUrl("1234 5678 9012"),
+        )
     }
 
     @Test fun dom_only_no_api_capture_and_a_long_settle() {

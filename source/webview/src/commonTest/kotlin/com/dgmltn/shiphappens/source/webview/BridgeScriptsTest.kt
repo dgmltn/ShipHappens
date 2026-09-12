@@ -28,16 +28,22 @@ class BridgeScriptsTest {
         assertFalse(js.contains("\${"))                          // no unresolved Kotlin templates
     }
 
-    @Test fun extraction_runner_supports_async_extractors() {
-        // The extractor receives a finish callback: returning a value finishes synchronously
-        // (every pre-existing extractor), returning undefined defers to a later finish(...) call
-        // (click-and-continue choreography). One post no matter what, and a backstop timer so a
-        // stuck async extractor reports instead of hanging the scrape to its 30s timeout.
+    @Test fun extraction_runner_passes_page_helpers_then_finish() {
         val js = BridgeScripts.extractionRunner(testSpec())
-        assertContains(js, "extractor(finish)")
+        assertContains(js, "var page = {")
+        assertContains(js, "extractor(page, finish)")
         assertContains(js, "if (finished) return")   // post-once guard
         assertContains(js, "asyncTimeout")           // backstop outcome is diagnosable in traces
         assertContains(js, "!== undefined")          // sync return path preserved
+    }
+
+    @Test fun page_helpers_expose_the_documented_surface() {
+        val js = BridgeScripts.extractionRunner(testSpec())
+        for (member in listOf("bodyText:", "pageText:", "todayIso:", "clean: function", "text: function", "count: function", "probe: function", "raw: function")) {
+            assertContains(js, member)
+        }
+        assertContains(js, "slice(0, 400)")                 // pageText length is the shared contract
+        assertContains(js, "raw = {kind: kind, pageText: page.pageText, todayIso: page.todayIso}")
     }
 
     @Test fun logged_in_probe_embeds_selectors_and_text_pattern() {

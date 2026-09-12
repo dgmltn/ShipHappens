@@ -2,8 +2,10 @@ package com.dgmltn.shiphappens.source.webview
 
 import com.dgmltn.shiphappens.domain.TrackingStatus
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -62,5 +64,17 @@ class PageEventsTest {
     @Test fun a_row_with_no_resolvable_date_is_dropped() {
         assertNull(DomRawEvent(description = "Picked up", whenText = "sometime").toTrackingEvent(vocabulary, utc))
         assertNull(DomRawEvent(description = "Picked up").toTrackingEvent(vocabulary, utc))
+    }
+
+    @Test fun usps_tb_date_wording_resolves_to_a_local_instant() {
+        // Verbatim .tb-date text from a live tools.usps.com scrape (2026-09-10, in-flight parcel):
+        // month-name date, a space, then a 12-hour clock. Sent as whenText since the blob stopped
+        // calling Date.parse; the shared helpers must read it exactly as V8 did.
+        val zone = TimeZone.of("America/Los_Angeles")
+        val e = assertNotNull(DomRawEvent(description = "Arrived at USPS Facility", whenText = "September 10, 2026 2:15 PM").toTrackingEvent(vocabulary, zone))
+        assertEquals(LocalDateTime(2026, 9, 10, 14, 15), e.timestamp.toLocalDateTime(zone))
+        assertEquals(TrackingStatus.IN_TRANSIT, e.status)
+        val early = assertNotNull(DomRawEvent(description = "Departed USPS Facility", whenText = "September 10, 2026 4:01 AM").toTrackingEvent(vocabulary, zone))
+        assertEquals(LocalDateTime(2026, 9, 10, 4, 1), early.timestamp.toLocalDateTime(zone))
     }
 }

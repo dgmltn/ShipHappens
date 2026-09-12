@@ -57,12 +57,14 @@ object BridgeScripts {
      * provider's extractor and posts its result as a {kind:'dom', body} payload. Always posts
      * exactly one payload (page:'empty' on any error) so callers can treat 'dom' as end-of-scrape.
      *
-     * The extractor receives a `finish(result)` callback. Returning a value finishes
-     * synchronously — every plain `function(){...}` extractor keeps working untouched. Returning
-     * undefined defers the post to a later `finish(...)` call, for choreography that must wait on
-     * the page (click a control, let the SPA re-render, then read — see FedexWebSpec). A backstop
-     * timer finishes `{page:'empty', why:'asyncTimeout'}` if the deferred call never comes, well
-     * inside the scraper's own 30s timeout, and the `finished` guard keeps it to one post.
+     * The extractor receives the [page] helper object, then a `finish(result)` callback: a plain
+     * `function(page){...}` finishes synchronously by returning a value — every extractor that
+     * ignores its arguments keeps working untouched. `function(page, finish){...}` may return
+     * undefined and defer the post to a later `finish(...)` call, for choreography that must wait
+     * on the page (click a control, let the SPA re-render, then read — see FedexWebSpec). A
+     * backstop timer finishes `{page:'empty', why:'asyncTimeout'}` if the deferred call never
+     * comes, well inside the scraper's own 30s timeout, and the `finished` guard keeps it to one
+     * post.
      */
     fun extractionRunner(spec: WebProviderSpec): String {
         val markerArray = spec.challengeMarkers.joinToString(",") { jsString(it.lowercase()) }
@@ -80,14 +82,44 @@ object BridgeScripts {
     post(r || {page: 'empty'});
   }
   try {
-    var text = ((document.body && document.body.innerText) || '').toLowerCase();
+    var bodyText = (document.body && document.body.innerText) || '';
+    var page = {
+      bodyText: bodyText,
+      pageText: bodyText.replace(/\s+/g, ' ').slice(0, 400),
+      todayIso: (function() {
+        var d = new Date();
+        return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+      })(),
+      clean: function(el) { return el ? el.textContent.replace(/\s+/g, ' ').trim() : null; },
+      text: function() {
+        for (var i = 0; i < arguments.length; i++) {
+          var el = null;
+          try { el = document.querySelector(arguments[i]); } catch (e) {}
+          var t = page.clean(el);
+          if (t) return t;
+        }
+        return null;
+      },
+      count: function(sel) { try { return document.querySelectorAll(sel).length; } catch (e) { return -1; } },
+      probe: function() {
+        var out = {};
+        for (var i = 0; i < arguments.length; i++) out[arguments[i]] = page.count(arguments[i]);
+        return out;
+      },
+      raw: function(kind, fields) {
+        var raw = {kind: kind, pageText: page.pageText, todayIso: page.todayIso};
+        for (var k in fields) if (fields[k] !== undefined && fields[k] !== null) raw[k] = fields[k];
+        return {page: 'raw', raw: raw};
+      }
+    };
+    var text = bodyText.toLowerCase();
     var markers = [$markerArray];
     for (var i = 0; i < markers.length; i++) {
       if (text.indexOf(markers[i]) !== -1) { finish({page: 'challenge'}); return; }
     }
     backstop = setTimeout(function() { finish({page: 'empty', why: 'asyncTimeout'}); }, $ASYNC_BACKSTOP_MS);
     var extractor = (${spec.extractionJs});
-    var r = extractor(finish);
+    var r = extractor(page, finish);
     if (r !== undefined) finish(r);
   } catch (e) {
     // A thrown extractor and a genuinely empty page both route to Unparsed; without 'why' the

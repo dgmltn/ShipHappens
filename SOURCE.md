@@ -184,29 +184,36 @@ tracking", "no record of this tracking"); `notFound` is for the carrier's own co
 
 ```kotlin
 private val DHLEXPRESS_EXTRACTION_JS = """
-function() {
-  var text = (document.body && document.body.innerText) || '';
-  function clean(el) { return el ? el.textContent.replace(/\s+/g, ' ').trim() : null; }
-  var statusText = clean(document.querySelector('.tracking-status h2'))
-    || clean(document.querySelector('[data-test="status-headline"]'));
-  var etaText = clean(document.querySelector('.delivery-estimate'));
+function(page) {
+  var statusText = page.text('.tracking-status h2', '[data-test="status-headline"]');
+  var etaText = page.text('.delivery-estimate');
   var events = [];
   var rows = document.querySelectorAll('.event-row');
   for (var i = 0; i < rows.length; i++) {
     events.push({
-      whenText: clean(rows[i].querySelector('.event-date')) + ' ' + clean(rows[i].querySelector('.event-time')),
-      description: clean(rows[i].querySelector('.event-description')),
-      location: clean(rows[i].querySelector('.event-location'))
+      whenText: (page.clean(rows[i].querySelector('.event-date')) || '') + ' ' + (page.clean(rows[i].querySelector('.event-time')) || ''),
+      description: page.clean(rows[i].querySelector('.event-description')),
+      location: page.clean(rows[i].querySelector('.event-location'))
     });
   }
-  var d = new Date();
-  var todayIso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-  return {page: 'raw', raw: {kind: 'tracker', statusText: statusText, etaText: etaText,
-                             todayIso: todayIso, events: events,
-                             pageText: text.replace(/\s+/g, ' ').slice(0, 400)}};
+  return page.raw('tracker', {statusText: statusText, etaText: etaText, events: events});
 }
 """.trimIndent()
 ```
+
+The extractor is `function(page)` or, for choreography, `function(page, finish)`. The runner builds
+`page` before calling the extractor:
+
+| Helper | What it gives you |
+|---|---|
+| `page.bodyText` | `document.body.innerText`, read once. |
+| `page.pageText` | First 400 chars of `bodyText`, whitespace collapsed. |
+| `page.todayIso` | Device-local date, `YYYY-MM-DD`. |
+| `page.clean(el)` | Trimmed, whitespace-collapsed `textContent`, or `null`. |
+| `page.text(sel, sel, …)` | Clean text of the FIRST selector that yields non-empty text, in argument order — never a comma list, which is document order. |
+| `page.count(sel)` | `querySelectorAll(sel).length`, or `-1` for a bad selector. |
+| `page.probe(sel, sel, …)` | `{selector: count}` for tracer diagnostics. |
+| `page.raw(kind, fields)` | `{page:'raw', raw:{kind, pageText, todayIso, …fields}}`; `undefined` and `null` fields are omitted; add `why`/`probe`/`url` on the returned object for the tracer. |
 
 The contract for this function expression:
 
@@ -222,20 +229,20 @@ The contract for this function expression:
 | Field | Send it when |
 |---|---|
 | `kind` | `'tracker'` for a detail page, `'cards'` for an order list (Amazon only). |
-| `statusText` | The precise status element. **Query selectors in priority order, never as one comma list**: `querySelector('a, b')` returns document order, and an ancestor wrapper's concatenated text has misclassified a delivered package before. |
+| `statusText` | The precise status element. **Pass selectors to `page.text` in priority order, never as one comma-joined selector**: `querySelector('a, b')` returns document order, and an ancestor wrapper's concatenated text has misclassified a delivered package before. |
 | `etaText` | The whole promise banner, verbatim, tooltip junk included. Kotlin digs the date and window out. |
 | `etaDate`, `etaWindowText` | Only if the page gives you ISO / a bare window phrase already. |
 | `locationText` | A current-location banner shown without event rows. |
 | `events[]` | `description`, `location`, and either an ISO `timestamp` or the verbatim `whenText` (date header plus time). Kotlin builds the instant. |
-| `todayIso` | Always. Relative days ("tomorrow") and year-less dates ("Saturday, August 22") resolve against it. |
-| `pageText` | Always: the first 400 characters of body text, so not-found wording is classified in Kotlin. |
+| `todayIso` | `page.raw` sends it automatically. Relative days ("tomorrow") and year-less dates ("Saturday, August 22") resolve against it. |
+| `pageText` | `page.raw` sends it automatically: the first 400 characters of body text, so not-found wording is classified in Kotlin. |
 
 Extra keys (`why`, `probe`, `url`) are ignored by the decoder and logged verbatim by the tracer;
 they are how a selector drift gets diagnosed from a log instead of a device session.
 
 For a page that needs choreography (click "View more details", wait for the SPA), declare
-`function(finish)` and call `finish(result)` later; a backstop timer reports empty if it never
-comes. FedEx is the example.
+`function(page, finish)` and call `finish(result)` later; a backstop timer reports empty if it
+never comes. FedEx is the example.
 
 ### 3d. Login, capture, markers, settle
 

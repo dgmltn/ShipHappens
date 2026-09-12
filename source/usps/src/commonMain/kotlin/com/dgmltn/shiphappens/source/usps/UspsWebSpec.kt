@@ -1,6 +1,7 @@
 package com.dgmltn.shiphappens.source.usps
 
 import com.dgmltn.shiphappens.domain.WellKnownCarriers
+import com.dgmltn.shiphappens.domain.normalizeTracking
 import com.dgmltn.shiphappens.source.webview.BridgeScripts
 import com.dgmltn.shiphappens.source.webview.LoginRecipe
 import com.dgmltn.shiphappens.source.webview.StatusKeywords
@@ -41,58 +42,43 @@ internal val USPS_PAGE = TrackerPageRules(
 // harness (no JS engine in commonTest), and that's exactly how "On the Way" — the current step's
 // headline — shipped unclassifiable on 2026-07-24: a moving package reported UNKNOWN and the
 // card kept its stale "Label created". Selector constants are still validated only against the
-// live page during device QA (Akamai blocks off-device inspection).
+// live page during device QA (Akamai blocks off-device inspection). Event dates travel verbatim
+// as whenText and are resolved by the shared Kotlin.
 private val USPS_EXTRACTION_JS = """
-function() {
-  var text = (document.body && document.body.innerText) || '';
-  // Priority chain, NOT a comma list: querySelector('a, b') returns the first match in
-  // DOCUMENT order, and on the live page ancestor wrappers (current-tracking-status-wrapper)
-  // precede the precise node — their concatenated text misclassified a delivered package as
-  // OUT_FOR_DELIVERY (live QA 2026-07-15). .tb-status is unique on the live page (inside the
-  // current .tb-step); .statusSummaryText is the "Latest Update" banner sentence.
-  var statusEl = document.querySelector('.tb-status')
-    || document.querySelector('.delivery_status h2')
-    || document.querySelector('.statusSummaryText');
-  function clean(el) { return el ? el.textContent.replace(/\s+/g, ' ').trim() : null; }
+function(page) {
+  var statusText = page.text('.tb-status', '.delivery_status h2', '.statusSummaryText');
   var events = [];
   var steps = document.querySelectorAll('#trackingHistory .tb-step, .tracking-progress-bar-status-container .tb-step');
   for (var i = 0; i < steps.length; i++) {
-    var dateText = clean(steps[i].querySelector('.tb-date'));
-    // Same comma-list trap as statusEl, one level down: the current step carries BOTH
-    // '.tb-status' ("On the Way", the progress-bar headline) and '.tb-status-detail'
-    // ("Departed USPS Facility", the actual event), and the headline comes first in document
-    // order. Query separately so the event row always reads the event wording.
-    var desc = clean(steps[i].querySelector('.tb-status-detail')) || clean(steps[i].querySelector('.tb-status'));
+    var dateText = page.clean(steps[i].querySelector('.tb-date'));
+    // Priority chain, NOT a comma list: querySelector('a, b') returns the first match in
+    // DOCUMENT order, and on the live page ancestor wrappers (current-tracking-status-wrapper)
+    // precede the precise node — their concatenated text misclassified a delivered package as
+    // OUT_FOR_DELIVERY (live QA 2026-07-15). .tb-status is unique on the live page (inside the
+    // current .tb-step); .statusSummaryText is the "Latest Update" banner sentence. Same
+    // comma-list trap as statusEl, one level down: the current step carries BOTH '.tb-status'
+    // ("On the Way", the progress-bar headline) and '.tb-status-detail' ("Departed USPS Facility",
+    // the actual event), and the headline comes first in document order. Query separately so the
+    // event row always reads the event wording.
+    var desc = page.clean(steps[i].querySelector('.tb-status-detail')) || page.clean(steps[i].querySelector('.tb-status'));
     if (!dateText || !desc) continue;
-    var t = Date.parse(dateText);
-    if (isNaN(t)) continue;
-    events.push({
-      timestamp: new Date(t).toISOString(),
-      description: desc,
-      location: clean(steps[i].querySelector('.tb-location'))
-    });
+    events.push({whenText: dateText, description: desc, location: page.clean(steps[i].querySelector('.tb-location'))});
   }
-  events.reverse();  // page lists newest first; canonical order is ascending
-  var statusText = clean(statusEl);
-  // The WHOLE banner, tooltip junk and all — Kotlin regexes dig the date and window out of the
-  // flattened text. The old '.expected_delivery .date' selector read only the bare day number
-  // ("28": USPS splits the date across .day/.date/.month_year spans), which Date.parse can't
-  // survive, so a package with a visible July 28 promise scraped etaDate null (2026-07-24).
-  var etaText = clean(document.querySelector('.expected_delivery, [class*="expected-delivery"], .eta_info'));
-  return {page: 'raw', raw: {
-    kind: 'tracker',
-    pageText: text.replace(/\s+/g, ' ').slice(0, 400),
+  return page.raw('tracker', {
     statusText: statusText,
-    etaText: etaText,
+    // The WHOLE banner is sent, tooltip copy and all, because the Kotlin regexes dig the date
+    // and window out of the flattened text (the old '.expected_delivery .date' selector read
+    // only the bare day number, 2026-07-24).
+    etaText: page.text('.expected_delivery', '[class*="expected-delivery"]', '.eta_info'),
     events: events
-  }};
+  });
 }
 """.trimIndent()
 
 val UspsWebSpec = WebProviderSpec(
     carrier = WellKnownCarriers.USPS,
     cookieDomain = "usps.com",
-    trackingUrl = { "https://tools.usps.com/tracking/$it" },
+    trackingUrl = { "https://tools.usps.com/tracking/${normalizeTracking(it)}" },
     // Greeting/sign-out markers on usps.com chrome — validated in live QA like the selectors above.
     login = LoginRecipe(
         "https://reg.usps.com/entreg/LoginAction_input",

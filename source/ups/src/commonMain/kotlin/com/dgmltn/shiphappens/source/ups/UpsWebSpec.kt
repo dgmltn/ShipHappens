@@ -1,6 +1,7 @@
 package com.dgmltn.shiphappens.source.ups
 
 import com.dgmltn.shiphappens.domain.WellKnownCarriers
+import com.dgmltn.shiphappens.domain.normalizeTracking
 import com.dgmltn.shiphappens.source.webview.BridgeScripts
 import com.dgmltn.shiphappens.source.webview.LoginRecipe
 import com.dgmltn.shiphappens.source.webview.StatusKeywords
@@ -37,20 +38,16 @@ internal val UPS_PAGE = TrackerPageRules(
 // (UPS_VOCABULARY / UPS_PAGE above). The blob finds the status element and returns its text; it
 // decides nothing.
 private val UPS_EXTRACTION_JS = """
-function() {
-  var text = (document.body && document.body.innerText) || '';
-  if (/log in|sign in to view/i.test(text) && !/track/i.test(document.title)) return {page: 'loginWall'};
-  var statusEl = document.querySelector('#stApp_txtPackageStatus, [id*="PackageStatus"], .ups-tracking_status');
-  return {page: 'raw', raw: {kind: 'tracker',
-    statusText: statusEl ? statusEl.textContent.replace(/\s+/g, ' ').trim() : null,
-    pageText: text.replace(/\s+/g, ' ').slice(0, 400)}};
+function(page) {
+  if (/log in|sign in to view/i.test(page.bodyText) && !/track/i.test(document.title)) return {page: 'loginWall'};
+  return page.raw('tracker', {statusText: page.text('#stApp_txtPackageStatus', '[id*="PackageStatus"]', '.ups-tracking_status')});
 }
 """.trimIndent()
 
 val UpsWebSpec = WebProviderSpec(
     carrier = WellKnownCarriers.UPS,
     cookieDomain = "ups.com",
-    trackingUrl = { "https://www.ups.com/track?loc=en_US&tracknum=$it" },
+    trackingUrl = { "https://www.ups.com/track?loc=en_US&tracknum=${normalizeTracking(it)}" },
     // Greeting/sign-out markers on ups.com chrome — validated in live QA.
     login = LoginRecipe(
         "https://www.ups.com/lasso/signin?loc=en_US",
