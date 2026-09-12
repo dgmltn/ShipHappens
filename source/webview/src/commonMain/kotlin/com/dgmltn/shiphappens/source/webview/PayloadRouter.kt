@@ -55,7 +55,13 @@ data class DomRaw(
 /** One shipment card from a list page: its status headline and detail-page link, unclassified.
  *  The headline also carries the delivery day; parsing it is the provider's job (see [DomRaw.todayIso]). */
 @Serializable
-data class DomCard(val head: String = "", val href: String? = null)
+data class DomCard(
+    val head: String = "",
+    val href: String? = null,
+    /** The active step's label when the card shows a progress rail ("Out for delivery"); the
+     *  rail's other labels are always in the DOM too, so only the marked one is sent. */
+    val stage: String? = null,
+)
 
 /** One event row. [timestamp] is ISO-8601 when the page's own date context lets the JS normalize
  *  it (USPS); pages that render date-group headers plus bare times (FedEx's travel history) send

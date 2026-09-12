@@ -61,9 +61,17 @@ function(page) {
     var head = page.clean(cards[k].querySelector('[data-component="shipmentStatus"], .shipment-top-row, [class*="shipment-status"], h4, h5')) || '';
     if (!head) head = (('' + (cards[k].innerText || '')).split('\n')[0] || '').trim();
     var link = cards[k].querySelector('a[href*="progress-tracker"], a[href*="ship-track"]');
-    out.push({head: head, href: (link && link.href) ? link.href : null});
+    // The OUI order page's progress rail ("Ordered Shipped Out for delivery Delivered") marks
+    // the current milestone with an `active` class; its label is the shipment's stage, which
+    // the headline no longer states (device capture 2026-09-12).
+    var stage = page.clean(cards[k].querySelector('.od-milestone-label.active'));
+    out.push({head: head, href: (link && link.href) ? link.href : null, stage: stage});
   }
   var borrowedLink = false;
+  if (out.length === 1 && !out[0].stage) {
+    var actives = document.querySelectorAll('.od-milestone-label.active');
+    if (actives.length === 1) out[0].stage = page.clean(actives[0]);
+  }
   if (out.length === 1 && !out[0].href) {
     var links = document.querySelectorAll('a[href*="progress-tracker"], a[href*="ship-track"]');
     if (links.length === 1 && links[0].href) { out[0].href = links[0].href; borrowedLink = true; }

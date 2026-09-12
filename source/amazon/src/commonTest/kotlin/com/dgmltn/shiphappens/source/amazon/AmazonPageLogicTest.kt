@@ -396,4 +396,46 @@ class AmazonPageLogicTest {
             parseAmazonRaw(DomRaw(kind = "cards", pageText = "We can't find that order")),
         )
     }
+
+    // --- Progress rail on the OUI order page (device capture 2026-09-12) ---
+    //
+    // The redesigned order page shows the shipment's stage as a rail of milestone labels
+    // ("Ordered Shipped Out for delivery Delivered") whose active step is marked only by
+    // styling; the blob sends the active label as the card's `stage`. The headline still only
+    // carries the promise ("Arriving today").
+
+    @Test fun the_rails_active_step_supplies_the_stage_the_headline_lacks() {
+        val card = DomCard(head = "Arriving today", href = null, stage = "Out for delivery")
+        val s = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(card), todayIso = "2026-09-12")).snapshotOrNull()!!
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, s.status)
+        assertEquals(LocalDate(2026, 9, 12), s.etaDate)
+    }
+
+    @Test fun every_rail_label_maps_to_its_stage() {
+        fun statusOf(stage: String) = resolveAmazonCards(
+            DomRaw(kind = "cards", cards = listOf(DomCard(head = "Arriving Tuesday", stage = stage)), todayIso = "2026-09-12"),
+        ).snapshotOrNull()?.status
+        assertEquals(TrackingStatus.LABEL_CREATED, statusOf("Ordered"))
+        assertEquals(TrackingStatus.SHIPPED, statusOf("Shipped"))
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, statusOf("Out for delivery"))
+        assertEquals(TrackingStatus.DELIVERED, statusOf("Delivered"))
+    }
+
+    @Test fun a_headline_that_names_a_stage_still_wins_over_the_rail() {
+        val card = DomCard(head = "Delivered June 25 Your package was left near the front door or porch.", stage = "Delivered")
+        assertEquals(TrackingStatus.DELIVERED, resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(card))).snapshotOrNull()?.status)
+    }
+
+    @Test fun a_rail_without_an_active_step_changes_nothing() {
+        val card = DomCard(head = "Arriving today", href = null, stage = null)
+        val s = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(card), todayIso = "2026-09-12")).snapshotOrNull()!!
+        assertEquals(TrackingStatus.UNKNOWN, s.status)
+        assertEquals(LocalDate(2026, 9, 12), s.etaDate)
+    }
+
+    @Test fun a_delivered_rail_counts_as_delivered_when_picking_the_card() {
+        val deliveredByRail = DomCard(head = "Arriving today", stage = "Delivered")
+        val inFlight = DomCard(head = "Arriving tomorrow", stage = "Shipped")
+        assertEquals(inFlight, pickShipmentCard(listOf(deliveredByRail, inFlight)))
+    }
 }

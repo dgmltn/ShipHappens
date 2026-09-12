@@ -83,4 +83,11 @@ class AmazonWebSpecTest {
         assertFalse(AmazonWebSpec.extractionJs.contains("Date.parse"))
         assertFalse(AmazonWebSpec.extractionJs.contains("getFullYear"))
     }
+
+    @Test fun extraction_js_reads_the_rails_active_step() {
+        // The OUI order page's progress rail marks the current milestone with an `active` class
+        // (device capture 2026-09-12); the blob sends its label as the card's stage.
+        assertTrue(AmazonWebSpec.extractionJs.contains(".od-milestone-label.active"))
+        assertTrue(AmazonWebSpec.extractionJs.contains("stage:"))
+    }
 }

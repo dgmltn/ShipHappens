@@ -125,4 +125,12 @@ class PayloadRouterTest {
         assertFalse(isAllowedHopUrl("http://example.com/a", "example.com"))
         assertFalse(isAllowedHopUrl("https://example.com@evil.com/a", "example.com"))
     }
+
+    @Test fun dom_card_decodes_the_rails_active_stage() {
+        val raw = Json { ignoreUnknownKeys = true }.decodeFromString<DomRaw>(
+            """{"kind":"cards","cards":[{"head":"Arriving today","href":null,"stage":"Out for delivery"},{"head":"x"}]}""",
+        )
+        assertEquals("Out for delivery", raw.cards[0].stage)
+        assertNull(raw.cards[1].stage)
+    }
 }

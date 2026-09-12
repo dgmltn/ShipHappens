@@ -57,7 +57,7 @@ class LoggingScrapeTracer(
     private companion object {
         const val TAG = "ShipScrape"
         const val CHUNK_CHARS = 3000
-        const val DOM_PREVIEW_CHARS = 1500
+        const val DOM_PREVIEW_CHARS = 8000
         const val PREVIEW_CHARS = 600
     }
 }

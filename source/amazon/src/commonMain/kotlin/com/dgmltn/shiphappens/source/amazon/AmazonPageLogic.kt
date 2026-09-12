@@ -103,11 +103,20 @@ internal fun amazonEtaFromStatus(text: String?, today: LocalDate?): LocalDate? {
  * A card qualifies by having a tracker link or a recognizable shipping status; if none does, every
  * card stays eligible so the caller still produces its page:'empty' diagnostics rather than nothing.
  */
+/**
+ * The stage a card names: its headline when that names one ("Delivered June 25"), else the
+ * progress rail's active step ("Out for delivery") — the OUI order page's headline is only the
+ * promise ("Arriving today"), and the rail is where the transit state lives (device capture
+ * 2026-09-12).
+ */
+private fun DomCard.stageStatus(): TrackingStatus? =
+    AMAZON_VOCABULARY.classify(head) ?: AMAZON_VOCABULARY.classify(stage)
+
 internal fun pickShipmentCard(cards: List<DomCard>): DomCard? {
     if (cards.isEmpty()) return null
-    val shipments = cards.filter { it.href != null || AMAZON_VOCABULARY.classify(it.head) != null }
+    val shipments = cards.filter { it.href != null || it.stageStatus() != null }
     val pool = shipments.ifEmpty { cards }
-    return pool.firstOrNull { AMAZON_VOCABULARY.classify(it.head) != TrackingStatus.DELIVERED } ?: pool.last()
+    return pool.firstOrNull { it.stageStatus() != TrackingStatus.DELIVERED } ?: pool.last()
 }
 
 // Verbatim from the JS blob's original decision (moved to Kotlin 2026-08-20); order-page copy,
@@ -125,8 +134,9 @@ internal fun resolveAmazonCards(raw: DomRaw): PageOutcome {
     // The headline's "Arriving <day>" carries the ETA but not a transit state, so a card can
     // have a delivery date with no classifiable status. Keep the ETA regardless — a shipment
     // with no tracker link still yields a countdown — and leave status UNKNOWN until a real
-    // signal (the tracker hop, or delivered/shipped/exception phrasing) supplies one.
-    val status = AMAZON_VOCABULARY.classify(pick.head)
+    // signal (the rail's active step, the tracker hop, or delivered/shipped/exception
+    // phrasing) supplies one.
+    val status = pick.stageStatus()
     val coarse = if (status != null || eta != null) {
         TrackingSnapshot(
             status = status ?: TrackingStatus.UNKNOWN,
