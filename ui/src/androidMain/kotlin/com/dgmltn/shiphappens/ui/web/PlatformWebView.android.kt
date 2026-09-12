@@ -34,6 +34,12 @@ actual fun PlatformWebView(
             modifier = modifier,
             factory = { ctx ->
                 WebView(ctx).apply {
+                    // Until Chromium delivers its first frame, WebView's hardware draw clears its
+                    // render target with the view background — unclipped, so during the nav
+                    // transition (an offscreen layer) the default opaque white blanks the whole
+                    // window, header and status bar included, for a second or more. A transparent
+                    // background makes that clear a no-op; the page paints its own background.
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
                     WebSessions.configure(this, spec, onPayload, onEvent, tracer)
                     loadUrl(url)
                     holder[0] = this

@@ -148,4 +148,18 @@ class WebDetailViewModelTest {
         withContext(Dispatchers.Default) { kotlinx.coroutines.delay(250) }
         assertEquals(TrackingStatus.UNKNOWN, assertNotNull(db.parcelDao().getById("p1")).parcel.status.let { TrackingStatus.valueOf(it) })
     }
+
+    @Test fun page_loading_tracks_started_and_finished_events() = runTest {
+        buildVm()
+        db.parcelDao().upsertParcel(parcel.toEntity())
+        // Loading from the start: the page is requested the moment the WebView exists.
+        assertTrue(awaitState { it.loaded }.pageLoading)
+        assertNull(vm.onEvent(PageEvent.Finished("https://www.ups.com/track")))
+        assertFalse(awaitState { !it.pageLoading }.pageLoading)
+        // A redirect or in-page navigation starts a fresh load.
+        assertNull(vm.onEvent(PageEvent.Started("https://www.ups.com/track/details")))
+        assertTrue(awaitState { it.pageLoading }.pageLoading)
+        assertNull(vm.onEvent(PageEvent.LoadFailed("net::ERR_NAME_NOT_RESOLVED")))
+        assertFalse(awaitState { !it.pageLoading }.pageLoading)
+    }
 }

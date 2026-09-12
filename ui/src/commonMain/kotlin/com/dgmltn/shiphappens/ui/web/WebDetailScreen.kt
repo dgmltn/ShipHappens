@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -41,6 +42,7 @@ fun WebDetailScreen(parcelId: String, onBack: () -> Unit) {
         WebDetailHeader(
             carrierName = s.carrierName,
             accent = accent,
+            loading = s.pageLoading,
             onBack = onBack,
             // Null until the parcel resolves to a web spec: no URL to hand off yet.
             onOpenInBrowser = if (s.loaded) ({ uriHandler.openUri(s.url) }) else null,
@@ -65,33 +67,47 @@ fun WebDetailScreen(parcelId: String, onBack: () -> Unit) {
 
 /**
  * Accent-colored top bar: "‹ Back" on the left, carrier name plus an open-in-browser action on
- * the right. [onOpenInBrowser] null hides the action (nothing to open yet).
+ * the right, and an indeterminate progress strip along the bottom edge while [loading].
+ * [onOpenInBrowser] null hides the action (nothing to open yet).
  */
 @Composable
 fun WebDetailHeader(
     carrierName: String,
     accent: Color,
+    loading: Boolean,
     onBack: () -> Unit,
     onOpenInBrowser: (() -> Unit)?,
 ) {
-    Row(
-        Modifier.fillMaxWidth().background(accent)
-            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
-            .padding(start = 20.dp, end = 12.dp, top = 9.dp, bottom = 9.dp),
-        horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("‹ Back", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp,
-            modifier = Modifier.clip(RoundedCornerShape(11.dp)).background(Color.White.copy(alpha = .16f))
-                .clickable(onClick = onBack).padding(horizontal = 14.dp, vertical = 8.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(carrierName, color = Color.White.copy(alpha = .9f), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
-            if (onOpenInBrowser != null) {
-                Icon(
-                    painterResource(Res.drawable.ic_open_in_new),
-                    contentDescription = "Open in browser",
-                    tint = Color.White.copy(alpha = .9f),
-                    // 44dp tap target around a 24dp glyph; the circle clip bounds the ripple.
-                    modifier = Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onOpenInBrowser).padding(10.dp),
+    Column(Modifier.fillMaxWidth().background(accent)) {
+        Row(
+            Modifier.fillMaxWidth()
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+                .padding(start = 20.dp, end = 12.dp, top = 9.dp, bottom = 9.dp),
+            horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("‹ Back", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp,
+                modifier = Modifier.clip(RoundedCornerShape(11.dp)).background(Color.White.copy(alpha = .16f))
+                    .clickable(onClick = onBack).padding(horizontal = 14.dp, vertical = 8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(carrierName, color = Color.White.copy(alpha = .9f), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                if (onOpenInBrowser != null) {
+                    Icon(
+                        painterResource(Res.drawable.ic_open_in_new),
+                        contentDescription = "Open in browser",
+                        tint = Color.White.copy(alpha = .9f),
+                        // 44dp tap target around a 24dp glyph; the circle clip bounds the ripple.
+                        modifier = Modifier.size(44.dp).clip(CircleShape).clickable(onClick = onOpenInBrowser).padding(10.dp),
+                    )
+                }
+            }
+        }
+        // Reserved height either way so the page below doesn't jump when loading ends.
+        Box(Modifier.fillMaxWidth().height(3.dp)) {
+            if (loading) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxSize(),
+                    color = Color.White.copy(alpha = .9f),
+                    trackColor = Color.White.copy(alpha = .16f),
                 )
             }
         }
@@ -102,7 +118,15 @@ fun WebDetailHeader(
 @Composable
 private fun Preview_WebDetailHeader() {
     ShipTheme {
-        WebDetailHeader(carrierName = "Amazon", accent = colorFromHex("#FF9900"), onBack = {}, onOpenInBrowser = {})
+        WebDetailHeader(carrierName = "Amazon", accent = colorFromHex("#FF9900"), loading = false, onBack = {}, onOpenInBrowser = {})
+    }
+}
+
+@Preview
+@Composable
+private fun Preview_WebDetailHeader_Loading() {
+    ShipTheme {
+        WebDetailHeader(carrierName = "UPS", accent = colorFromHex("#5A3A21"), loading = true, onBack = {}, onOpenInBrowser = {})
     }
 }
 
@@ -110,6 +134,6 @@ private fun Preview_WebDetailHeader() {
 @Composable
 private fun Preview_WebDetailHeader_NotLoaded() {
     ShipTheme {
-        WebDetailHeader(carrierName = "", accent = colorFromHex("#17150F"), onBack = {}, onOpenInBrowser = null)
+        WebDetailHeader(carrierName = "", accent = colorFromHex("#17150F"), loading = true, onBack = {}, onOpenInBrowser = null)
     }
 }

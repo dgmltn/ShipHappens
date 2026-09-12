@@ -22,6 +22,8 @@ object NoWebScraper : WebScraper {
 
 /** Page lifecycle signals shared by the visible WebView composable and the headless scraper. */
 sealed interface PageEvent {
+    /** A main-frame load began — fires again for every redirect hop and in-page navigation. */
+    data class Started(val url: String) : PageEvent
     data class Finished(val url: String) : PageEvent
     data class LoggedIn(val loggedIn: Boolean) : PageEvent
     data class LoadFailed(val message: String?) : PageEvent

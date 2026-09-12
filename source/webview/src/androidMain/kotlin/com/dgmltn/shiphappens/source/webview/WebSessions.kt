@@ -91,6 +91,7 @@ object WebSessions {
 
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                onEvent(PageEvent.Started(url.orEmpty()))
                 // Fallback when document-start injection isn't available: inject ASAP at page
                 // start. Racy against very early page requests, but the DOM extractor still
                 // provides coverage when the capture layer misses.

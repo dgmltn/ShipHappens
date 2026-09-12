@@ -8,6 +8,7 @@ import com.dgmltn.shiphappens.data.source.SourceRegistry
 import com.dgmltn.shiphappens.design.accentHex
 import com.dgmltn.shiphappens.source.webview.*
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -23,6 +24,8 @@ data class WebDetailUiState(
     val accentHex: String = "#17150F",
     val spec: WebProviderSpec? = null,
     val showLoginHint: Boolean = false,
+    /** True from the moment a page load is requested until it finishes or fails. */
+    val pageLoading: Boolean = true,
 )
 
 class WebDetailViewModel(
@@ -40,8 +43,11 @@ class WebDetailViewModel(
     // could read the same baseline row and clobber each other's field-preserve branches.
     private val applyMutex = Mutex()
 
+    // Starts true: the WebView requests the page as soon as it exists, before any Started event.
+    private val pageLoading = MutableStateFlow(true)
+
     val state: StateFlow<WebDetailUiState> =
-        combine(repository.observeParcel(parcelId), settings.settings) { parcel, appSettings ->
+        combine(repository.observeParcel(parcelId), settings.settings, pageLoading) { parcel, appSettings, loading ->
             val spec = parcel?.let { p -> webSources.firstOrNull { it.webSpec.carrier.code == p.carrier.code }?.webSpec }
             if (parcel == null || spec == null) WebDetailUiState()
             else WebDetailUiState(
@@ -51,6 +57,7 @@ class WebDetailViewModel(
                 accentHex = parcel.carrier.accentHex(),
                 spec = spec,
                 showLoginHint = appSettings.sourceConfigs[spec.sourceId]?.values?.get("loggedIn") != "true",
+                pageLoading = loading,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), WebDetailUiState())
 
@@ -68,8 +75,16 @@ class WebDetailViewModel(
         }
     }
 
-    /** A login that happens mid-browse also flips the persisted flag and flushes cookies. */
+    /**
+     * Page lifecycle drives the loading indicator; a login that happens mid-browse also flips the
+     * persisted flag and flushes cookies.
+     */
     fun onEvent(event: PageEvent): Job? {
+        when (event) {
+            is PageEvent.Started -> pageLoading.value = true
+            is PageEvent.Finished, is PageEvent.LoadFailed -> pageLoading.value = false
+            is PageEvent.LoggedIn -> Unit
+        }
         val spec = state.value.spec ?: return null
         if (event is PageEvent.LoggedIn && event.loggedIn && state.value.showLoginHint) {
             return viewModelScope.launch {
