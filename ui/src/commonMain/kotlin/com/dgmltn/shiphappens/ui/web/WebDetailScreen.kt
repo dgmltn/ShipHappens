@@ -38,7 +38,10 @@ fun WebDetailScreen(parcelId: String, onBack: () -> Unit) {
     val uriHandler = LocalUriHandler.current
     StatusBarIconsForHeader(accent)
 
-    Column(Modifier.fillMaxSize().background(ShipColors.bg)) {
+    Column(Modifier
+        .fillMaxSize()
+        .background(ShipColors.bg)
+    ) {
         WebDetailHeader(
             carrierName = s.carrierName,
             accent = accent,
@@ -57,8 +60,10 @@ fun WebDetailScreen(parcelId: String, onBack: () -> Unit) {
         val spec = s.spec
         if (s.loaded && spec != null) {
             PlatformWebView(
-                url = s.url, spec = spec,
-                onPayload = vm::onPayload, onEvent = vm::onEvent,
+                url = s.url,
+                spec = spec,
+                onPayload = vm::onPayload,
+                onEvent = vm::onEvent,
                 modifier = Modifier.fillMaxSize(),
             )
         }

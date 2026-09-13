@@ -63,6 +63,13 @@ object WebSessions {
     }
 
     @SuppressLint("SetJavaScriptEnabled", "AddJavascriptInterface")
+    /**
+     * A visible host may load this before the real page (see PlatformWebView.android.kt). Its
+     * navigation is ignored below: no lifecycle events, and never an extraction pass, which
+     * would otherwise route a not-found result into the parcel.
+     */
+    const val BLANK_URL = "about:blank"
+
     fun configure(
         webView: WebView,
         spec: WebProviderSpec,
@@ -91,6 +98,7 @@ object WebSessions {
 
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                if (url == BLANK_URL) return
                 onEvent(PageEvent.Started(url.orEmpty()))
                 // Fallback when document-start injection isn't available: inject ASAP at page
                 // start. Racy against very early page requests, but the DOM extractor still
@@ -99,6 +107,7 @@ object WebSessions {
             }
 
             override fun onPageFinished(view: WebView, url: String) {
+                if (url == BLANK_URL) return
                 tracer.pageFinished(spec.sourceId, url)
                 onEvent(PageEvent.Finished(url))
                 view.evaluateJavascript(spec.isLoggedInJs) { value ->

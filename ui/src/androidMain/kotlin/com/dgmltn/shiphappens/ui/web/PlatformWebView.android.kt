@@ -41,6 +41,13 @@ actual fun PlatformWebView(
                     // background makes that clear a no-op; the page paints its own background.
                     setBackgroundColor(android.graphics.Color.TRANSPARENT)
                     WebSessions.configure(this, spec, onPayload, onEvent, tracer)
+                    // Give Chromium a frame to present right away. On hardware, WebView composites
+                    // through its own SurfaceControl overlay, attached the first time Chromium has a
+                    // frame; attaching re-composites the whole window (a visible flash). A blank
+                    // document commits instantly, so that attach lands during the screen's
+                    // enter transition instead of seconds later at the carrier page's first paint.
+                    // WebSessions ignores this navigation in its client callbacks.
+                    loadUrl(WebSessions.BLANK_URL)
                     loadUrl(url)
                     holder[0] = this
                 }
