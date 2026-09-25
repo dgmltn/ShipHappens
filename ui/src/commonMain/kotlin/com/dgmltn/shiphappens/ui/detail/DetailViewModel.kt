@@ -72,6 +72,8 @@ class DetailViewModel(
     private fun Parcel.toDetail(refreshing: Boolean): DetailUiState {
         val delivered = status == TrackingStatus.DELIVERED
         val days = etaDate?.let { clock.today().daysUntil(it) }
+        val tz = TimeZone.currentSystemDefault()
+        val is24Hour = timeFormat.uses24HourClock()
         // A delay never replaces the headline: the ETA is the thing the user came for, and a
         // delayed package still has one (usually a freshly revised one). The delay shows as its
         // own note below, so "Arrives tomorrow" + "Delayed — due to weather" both get said.
@@ -84,12 +86,12 @@ class DetailViewModel(
             // timeline, and the home card can't disagree.
             lastRefreshedAt == null && status == TrackingStatus.UNKNOWN -> "Waiting for first update"
             days == null -> TRACKING_STEP_LABELS[effectiveStepIndex]
-            days <= 0 -> "Arriving today"
+            // On the day itself the window is the news: "Arriving 12:45 – 16:45" beats "today".
+            days <= 0 -> formatEtaWindow(etaWindowStart, etaWindowEnd, is24Hour)
+                ?.let { "Arriving $it" } ?: "Arriving today"
             days == 1 -> "Arrives tomorrow"
             else -> "Arrives in $days days"
         }
-        val tz = TimeZone.currentSystemDefault()
-        val is24Hour = timeFormat.uses24HourClock()
         // Delivered parcels show the actual delivery time (last DELIVERED event) rather than a
         // stale or absent ETA — USPS delivered pages carry no expected-delivery block at all.
         val deliveredAt = if (delivered) events.lastOrNull { it.status == TrackingStatus.DELIVERED }?.timestamp else null

@@ -194,8 +194,23 @@ class DetailViewModelTest {
         assertEquals(expected, s.windowText)
     }
 
+    @Test fun arriving_today_with_a_window_names_it_in_the_headline() = runTest {
+        val p = base(TrackingStatus.OUT_FOR_DELIVERY, LocalDate(2026, 7, 10))
+            .copy(etaWindowStart = LocalTime(12, 45), etaWindowEnd = LocalTime(16, 45))
+        vm(p, is24Hour = true)
+        db.parcelDao().upsertParcel(p.toEntity())
+        assertEquals("Arriving 12:45 – 16:45", awaitState { it.loaded }.headline)
+    }
+
+    @Test fun arriving_today_with_a_cutoff_names_it_in_the_headline() = runTest {
+        val p = base(TrackingStatus.OUT_FOR_DELIVERY, LocalDate(2026, 7, 10))
+        vm(p)
+        db.parcelDao().upsertParcel(p.toEntity())
+        assertEquals("Arriving by 9:00 PM", awaitState { it.loaded }.headline)
+    }
+
     @Test fun arriving_today_and_in_n_days() = runTest {
-        val today = base(TrackingStatus.OUT_FOR_DELIVERY, LocalDate(2026, 7, 10))
+        val today = base(TrackingStatus.OUT_FOR_DELIVERY, LocalDate(2026, 7, 10)).copy(etaWindowEnd = null)
         vm(today)
         db.parcelDao().upsertParcel(today.toEntity())
         val first = awaitState { it.loaded && it.headline == "Arriving today" }
