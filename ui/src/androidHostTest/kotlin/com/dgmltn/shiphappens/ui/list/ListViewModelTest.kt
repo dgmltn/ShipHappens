@@ -24,6 +24,7 @@ import kotlinx.coroutines.test.*
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalTime
 import okio.Path.Companion.toPath
 import kotlin.time.Instant
 import kotlin.test.*
@@ -108,7 +109,7 @@ class ListViewModelTest {
         clipboard = FakeClipboard()
         manager = ClipboardImportManager(clipboard, registry, db.parcelDao(), settings)
         val coordinator = RefreshCoordinator(repo, backgroundScope)
-        vm = ListViewModel(repo, manager, coordinator, clock, registry, settings)
+        vm = ListViewModel(repo, manager, coordinator, clock, registry, settings, TimeFormat { false })
         // Records every emission and keeps WhileSubscribed alive for the whole test.
         backgroundScope.launch { vm.state.collect { check(recordedStates.tryEmit(it)) } }
         // Prime the pipeline: the first combined emission requires both Room flows' initial
@@ -190,6 +191,19 @@ class ListViewModelTest {
         assertTrue(card.urgent)
         assertEquals("Out for delivery", card.statusText)  // same label as the detail timeline's current step
         assertEquals(0, card.ring?.number)
+    }
+
+    @Test fun arriving_today_with_a_window_names_it_like_the_detail_header() = runTest {
+        val vm = vm()
+        settings.setSourceConfig("fake", SourceConfig(enabled = true))
+        source.snapshot = TrackingSnapshot(
+            TrackingStatus.IN_TRANSIT, etaDate = LocalDate(2026, 7, 10),
+            etaWindowStart = LocalTime(12, 45), etaWindowEnd = LocalTime(16, 45),
+        )
+        val added = repo.addParcel("Lamp", "1Z88E0330398765432", WellKnownCarriers.UPS) as AddResult.Added
+        repo.refresh(added.parcel.id)
+        val s = awaitState { it.cards.size == 1 && it.cards.single().statusText.startsWith("Arriving") }
+        assertEquals("Arriving 12:45 – 4:45 PM", s.cards.single().statusText)
     }
 
     @Test fun status_falls_back_to_events_when_status_unknown_matching_detail() = runTest {

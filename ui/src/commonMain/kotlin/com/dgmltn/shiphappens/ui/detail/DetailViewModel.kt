@@ -87,8 +87,7 @@ class DetailViewModel(
             lastRefreshedAt == null && status == TrackingStatus.UNKNOWN -> "Waiting for first update"
             days == null -> TRACKING_STEP_LABELS[effectiveStepIndex]
             // On the day itself the window is the news: "Arriving 12:45 – 16:45" beats "today".
-            days <= 0 -> formatEtaWindow(etaWindowStart, etaWindowEnd, is24Hour)
-                ?.let { "Arriving $it" } ?: "Arriving today"
+            days <= 0 -> arrivingWindowText(etaWindowStart, etaWindowEnd, is24Hour) ?: "Arriving today"
             days == 1 -> "Arrives tomorrow"
             else -> "Arrives in $days days"
         }

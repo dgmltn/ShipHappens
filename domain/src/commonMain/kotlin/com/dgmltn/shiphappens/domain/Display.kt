@@ -61,3 +61,10 @@ fun formatEtaWindow(start: LocalTime?, end: LocalTime?, is24Hour: Boolean): Stri
     }
     return "$startText – ${end.designTime(is24Hour)}"
 }
+
+/**
+ * Same-day headline naming the delivery window ("Arriving 3:00 – 5:00 PM", "Arriving by 8:00 PM"),
+ * or null when no time is known. Shared by the home card and the detail header so they agree.
+ */
+fun arrivingWindowText(start: LocalTime?, end: LocalTime?, is24Hour: Boolean): String? =
+    formatEtaWindow(start, end, is24Hour)?.let { "Arriving $it" }

@@ -30,6 +30,7 @@ class ListViewModel(
     private val clock: AppClock,
     private val registry: SourceRegistry,
     settingsRepository: SettingsRepository,
+    private val timeFormat: TimeFormat,
 ) : ViewModel() {
 
     private val tab = MutableStateFlow(ListTab.ACTIVE)
@@ -100,6 +101,11 @@ class ListViewModel(
         val statusText = when {
             status == TrackingStatus.EXCEPTION -> "Delivery exception"
             lastRefreshedAt == null && status == TrackingStatus.UNKNOWN -> "Waiting for first update"
+            // Due today with a known time: name the window, matching the detail header. The ring
+            // already says the day count, so other days keep the stage.
+            !delivered && days != null && days <= 0 ->
+                arrivingWindowText(etaWindowStart, etaWindowEnd, timeFormat.uses24HourClock())
+                    ?: TRACKING_STEP_LABELS[effectiveStepIndex]
             else -> TRACKING_STEP_LABELS[effectiveStepIndex]
         }
         return ParcelCardUi(
