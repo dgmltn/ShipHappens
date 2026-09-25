@@ -321,7 +321,7 @@ private fun ParcelRow(
 
                 card.ring != null -> DaysRing(
                     days = card.ring.number,
-                    accent = colorFromHex(card.accentHex),
+                    accentColor = colorFromHex(card.accentHex),
                     urgent = card.urgent
                 )
             }
