@@ -64,6 +64,7 @@ class AndroidStatusNotifier(private val context: Context) : StatusNotifier {
             .setProgress(total, done, total == 0)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setContentIntent(openAppIntent())
             .build()
         post(RUN_PROGRESS_ID, notification)
     }
@@ -77,6 +78,7 @@ class AndroidStatusNotifier(private val context: Context) : StatusNotifier {
             .setContentText(NotificationText.runSummaryShort(summary))
             .setStyle(NotificationCompat.BigTextStyle().bigText(NotificationText.runSummaryBody(summary)))
             .setShowWhen(true)
+            .setContentIntent(openAppIntent())
             .setAutoCancel(true)
             .build()
         post(RUN_SUMMARY_ID, notification)
@@ -91,6 +93,7 @@ class AndroidStatusNotifier(private val context: Context) : StatusNotifier {
             .setContentText(message)
             .setStyle(NotificationCompat.BigTextStyle().bigText(message))
             .setShowWhen(true)
+            .setContentIntent(openAppIntent())
             .setAutoCancel(true)
             .build()
         post(RUN_SUMMARY_ID, notification)
@@ -102,6 +105,7 @@ class AndroidStatusNotifier(private val context: Context) : StatusNotifier {
             .setContentTitle("Package updates")
             .setGroup(GROUP_UPDATES)
             .setGroupSummary(true)
+            .setContentIntent(openAppIntent())
             .setAutoCancel(true)
             .build()
         post(SUMMARY_ID, summary)
@@ -121,6 +125,15 @@ class AndroidStatusNotifier(private val context: Context) : StatusNotifier {
         }
         return PendingIntent.getActivity(
             context, requestCode, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+    }
+
+    /** Opens the app to wherever it was, or its start screen on a cold launch. */
+    private fun openAppIntent(): PendingIntent? {
+        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return null
+        return PendingIntent.getActivity(
+            context, OPEN_APP_REQUEST_CODE, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
     }
@@ -153,5 +166,6 @@ class AndroidStatusNotifier(private val context: Context) : StatusNotifier {
         const val RUN_PROGRESS_ID = 2
         const val RUN_SUMMARY_ID = 3
         const val SIGN_IN_ID_BASE = 100_000
+        const val OPEN_APP_REQUEST_CODE = 0
     }
 }
