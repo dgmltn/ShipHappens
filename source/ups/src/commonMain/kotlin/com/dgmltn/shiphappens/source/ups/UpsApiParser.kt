@@ -9,9 +9,15 @@ import com.dgmltn.shiphappens.source.webview.eventAt
 import com.dgmltn.shiphappens.source.webview.parseCompactDate
 import com.dgmltn.shiphappens.source.webview.parseNumericMdyDate
 import com.dgmltn.shiphappens.source.webview.parseTimeOfDay
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.UtcOffset
+import kotlinx.datetime.toInstant
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlin.time.Instant
 
 @Serializable private data class UpsTrackResponse(val trackDetails: List<UpsTrackDetail>? = null)
 
@@ -36,13 +42,18 @@ import kotlinx.serialization.json.Json
     val time: String? = null,
     val location: String? = null,
     val activityScan: String? = null,
+    // The same moment pinned to UTC ("20261001" / "11:24:00"), and the facility's offset from it
+    // ("+08:00"); "date"/"time" above are local to the facility.
+    val gmtDate: String? = null,
+    val gmtTime: String? = null,
+    val gmtOffset: String? = null,
 )
 
 /**
  * Maps ups.com's in-page tracking API JSON to a [TrackingSnapshot]. Field vocabulary is
- * tolerant: every field optional, unknown wording degrades to UNKNOWN. UPS reports local
- * wall-clock times with no zone; we interpret them in the device zone — imperfect for
- * cross-zone shipments, but only event ordering and dates surface in the UI.
+ * tolerant: every field optional, unknown wording degrades to UNKNOWN. Scan times are the
+ * UTC instant UPS reports alongside each facility-local time, so a route through several time
+ * zones keeps its real order; scans without one are read in the device zone.
  */
 object UpsApiParser {
     private val json = Json { ignoreUnknownKeys = true }
@@ -56,7 +67,7 @@ object UpsApiParser {
             val date = parseNumericMdyDate(a.date) ?: return@mapNotNull null
             val scan = a.activityScan ?: return@mapNotNull null
             TrackingEvent(
-                timestamp = eventAt(date, parseTimeOfDay(a.time), zone),
+                timestamp = a.instant(date, zone),
                 description = scan,
                 location = a.location,
                 status = UPS_VOCABULARY.classify(scan),
@@ -80,6 +91,17 @@ object UpsApiParser {
                 ?.let { detail.simplifiedText?.takeIf(String::isNotBlank) ?: it },
             statusFallback = typeCodeStatus(detail.packageStatusType),
         )
+    }
+
+    /** Best available reading of a scan's moment: UTC, then local time less the facility's offset, then the device zone. */
+    private fun UpsActivity.instant(localDate: LocalDate, deviceZone: TimeZone): Instant {
+        val utcDate = parseCompactDate(gmtDate)
+        val utcTime = gmtTime?.let { runCatching { LocalTime.parse(it.trim()) }.getOrNull() }
+        if (utcDate != null && utcTime != null) return LocalDateTime(utcDate, utcTime).toInstant(TimeZone.UTC)
+        val localTime = parseTimeOfDay(time)
+        val offset = gmtOffset?.let { runCatching { UtcOffset.parse(it.trim()) }.getOrNull() }
+        if (offset != null) return LocalDateTime(localDate, localTime ?: LocalTime(0, 0)).toInstant(offset)
+        return eventAt(localDate, localTime, deviceZone)
     }
 
     private fun typeCodeStatus(code: String?): TrackingStatus? = when (code?.uppercase()) {

@@ -2,7 +2,11 @@ package com.dgmltn.shiphappens.source.ups
 
 import com.dgmltn.shiphappens.domain.TrackingStatus
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
+import kotlin.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -85,7 +89,77 @@ private const val DELAYED_FIXTURE = """
 }
 """
 
+// Captured live from webapis.ups.com GetStatus on 2026-10-07 for an international package,
+// trimmed to the fields the parser reads; the tracking number is synthetic. Each scan's "date" and
+// "time" are local to the facility, while gmtDate/gmtTime pin it to UTC: Hong Kong's 7:24 P.M.
+// departure happened before Anchorage's 12:57 P.M. arrival.
+private const val INTERNATIONAL_FIXTURE = """
+{
+  "statusCode": "200",
+  "trackDetails": [{
+    "trackingNumber": "1ZA1B2C3D4E5F6G7H8",
+    "packageStatus": "On the Way",
+    "packageStatusType": "I",
+    "shipFromGMTOffset": "+08:00",
+    "shipToGMTOffset": "-07:00",
+    "shipmentProgressActivities": [
+      {"date": "10/03/2026", "time": "4:26 A.M.", "location": "Louisville, KY, United States", "activityScan": "Departed from Facility", "gmtDate": "20261003", "gmtOffset": "-04:00", "gmtTime": "08:26:00"},
+      {"date": "10/01/2026", "time": "12:57 P.M.", "location": "Anchorage, AK, United States", "activityScan": "Arrived at Facility", "gmtDate": "20261001", "gmtOffset": "-08:00", "gmtTime": "20:57:00"},
+      {"date": "10/01/2026", "time": "7:24 P.M.", "location": "Chek Lap Kok, Hong Kong", "activityScan": "Departed from Facility", "gmtDate": "20261001", "gmtOffset": "+08:00", "gmtTime": "11:24:00"},
+      {"date": "09/29/2026", "time": "2:29 P.M.", "location": "Chek Lap Kok, Hong Kong", "activityScan": "Arrived at Facility", "gmtDate": "20260929", "gmtOffset": "+08:00", "gmtTime": "06:29:00"},
+      {"date": "09/29/2026", "time": "12:30 P.M.", "location": "Shenzhen, China", "activityScan": "Departed from Facility", "gmtDate": "20260929", "gmtOffset": "+08:00", "gmtTime": "04:30:00"},
+      {"date": "", "time": "", "location": "China", "activityScan": "Shipper created a label, UPS has not received the package yet. ", "gmtDate": "", "gmtOffset": "", "gmtTime": ""}
+    ]
+  }]
+}
+"""
+
+private fun oneActivity(fields: String) =
+    """{"trackDetails":[{"packageStatusType":"I","shipmentProgressActivities":[{"date":"10/01/2026","time":"7:24 P.M.","location":"Chek Lap Kok, Hong Kong","activityScan":"Departed from Facility"$fields}]}]}"""
+
 class UpsApiParserTest {
+
+    @Test fun scan_times_are_read_as_the_utc_instant_ups_reports() {
+        val t = assertNotNull(UpsApiParser.parse(INTERNATIONAL_FIXTURE))
+        val hongKongDeparture = t.events.single { it.location == "Chek Lap Kok, Hong Kong" && it.description == "Departed from Facility" }
+        assertEquals(Instant.parse("2026-10-01T11:24:00Z"), hongKongDeparture.timestamp)
+    }
+
+    @Test fun scans_in_different_time_zones_keep_their_real_order() {
+        val t = assertNotNull(UpsApiParser.parse(INTERNATIONAL_FIXTURE))
+        assertEquals(
+            listOf(
+                "Shenzhen, China",
+                "Chek Lap Kok, Hong Kong",
+                "Chek Lap Kok, Hong Kong",
+                "Anchorage, AK, United States",
+                "Louisville, KY, United States",
+            ),
+            t.events.map { it.location },
+        )
+    }
+
+    @Test fun a_scan_with_only_an_offset_is_shifted_by_that_offset() {
+        val t = assertNotNull(UpsApiParser.parse(oneActivity(""","gmtOffset":"+08:00"""")))
+        assertEquals(Instant.parse("2026-10-01T11:24:00Z"), t.events.single().timestamp)
+    }
+
+    @Test fun a_scan_with_blank_utc_fields_falls_back_to_the_offset() {
+        val t = assertNotNull(UpsApiParser.parse(oneActivity(""","gmtDate":"","gmtTime":"","gmtOffset":"+08:00"""")))
+        assertEquals(Instant.parse("2026-10-01T11:24:00Z"), t.events.single().timestamp)
+    }
+
+    @Test fun a_scan_with_no_zone_information_is_read_in_the_device_zone() {
+        val t = assertNotNull(UpsApiParser.parse(oneActivity("")))
+        val expected = LocalDateTime(2026, 10, 1, 19, 24).toInstant(TimeZone.currentSystemDefault())
+        assertEquals(expected, t.events.single().timestamp)
+    }
+
+    @Test fun a_malformed_offset_falls_back_to_the_device_zone() {
+        val t = assertNotNull(UpsApiParser.parse(oneActivity(""","gmtOffset":"bogus"""")))
+        val expected = LocalDateTime(2026, 10, 1, 19, 24).toInstant(TimeZone.currentSystemDefault())
+        assertEquals(expected, t.events.single().timestamp)
+    }
 
     @Test fun out_for_delivery_text_wins_over_coarse_type_code() {
         // Live ups.com reports type "I" for OFD packages; the status text must take precedence.
