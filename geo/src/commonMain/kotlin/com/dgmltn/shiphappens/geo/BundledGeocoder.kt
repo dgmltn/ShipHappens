@@ -12,14 +12,16 @@ import kotlinx.coroutines.withContext
  * asset degrades to "knows nothing" — every place then falls through to the platform geocoder
  * instead of taking the detail screen down.
  */
-class BundledGeocoder(private val load: suspend () -> ByteArray) : Geocoder {
+class BundledGeocoder(private val load: suspend () -> ByteArray) : Geocoder, CityIndex {
     private val mutex = Mutex()
     private var table: PlacesTable? = null
 
-    override suspend fun lookup(key: String): GeoResult {
-        val t = mutex.withLock { table ?: loadTable().also { table = it } }
-        return t.lookup(key)?.let { GeoResult.Found(it) } ?: GeoResult.NotFound
-    }
+    override suspend fun lookup(key: String): GeoResult =
+        table().lookup(key)?.let { GeoResult.Found(it) } ?: GeoResult.NotFound
+
+    override suspend fun candidates(city: String): List<CityCandidate> = table().candidates(city)
+
+    private suspend fun table(): PlacesTable = mutex.withLock { table ?: loadTable().also { table = it } }
 
     private suspend fun loadTable(): PlacesTable = try {
         withContext(Dispatchers.Default) { PlacesTable.decode(load()) }

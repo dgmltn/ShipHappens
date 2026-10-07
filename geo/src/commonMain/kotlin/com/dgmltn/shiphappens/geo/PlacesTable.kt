@@ -23,6 +23,30 @@ class PlacesTable private constructor(
         return null
     }
 
+    /** Every "CITY, XX" place named [city], in key order. */
+    fun candidates(city: String): List<CityCandidate> {
+        val prefix = "$city, ".encodeToByteArray()
+        var lo = 0
+        var hi = keys.size
+        while (lo < hi) {
+            val mid = (lo + hi) ushr 1
+            if (compareBytes(keys[mid], prefix) < 0) lo = mid + 1 else hi = mid
+        }
+        val found = ArrayList<CityCandidate>()
+        var i = lo
+        while (i < keys.size && keys[i].startsWith(prefix)) {
+            found += CityCandidate(keys[i].decodeToString(), LatLng(coords[i * 2].toDouble(), coords[i * 2 + 1].toDouble()))
+            i++
+        }
+        return found
+    }
+
+    private fun ByteArray.startsWith(prefix: ByteArray): Boolean {
+        if (size < prefix.size) return false
+        for (j in prefix.indices) if (this[j] != prefix[j]) return false
+        return true
+    }
+
     companion object {
         private const val MIN_ENTRY_BYTES = 10
         val EMPTY = PlacesTable(emptyArray(), FloatArray(0))

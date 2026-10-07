@@ -10,12 +10,17 @@ object PlaceKey {
     private val WHITESPACE = Regex("""\s+""")
     private val US_SUFFIX = Regex("""(^|,\s*|\s+)(US|USA|UNITED STATES|UNITED STATES OF AMERICA)$""")
     private val TRAILING_STATE = Regex("""^(.*\S)\s+([A-Z]{2})$""")
+    private val USPS_FACILITY = Regex(
+        """\s+((REGIONAL )?PROCESSING AND DISTRIBUTION CENTER|NETWORK DISTRIBUTION CENTER|DISTRIBUTION CENTER|PROCESSING CENTER|P&DC|ANNEX)$""",
+    )
+    private val COMPASS_PREFIX = Regex("""^(NORTHWEST|NORTHEAST|SOUTHWEST|SOUTHEAST|NORTH|SOUTH|EAST|WEST)\s+""")
 
     fun normalize(raw: String?): String? {
         if (raw == null) return null
         var s = raw.uppercase().replace(ZIP, " ")
         s = s.split(',').map { it.trim().replace(WHITESPACE, " ") }.filter { it.isNotEmpty() }.joinToString(", ")
         s = s.replace(US_SUFFIX, "").trim().trimEnd(',').trim()
+        s = s.withoutUspsFacility()
         if (s.isEmpty()) return null
         val parts = s.split(", ").toMutableList()
         if (parts.size == 1) {
@@ -30,6 +35,16 @@ object PlaceKey {
             US_STATES[last]?.let { parts[parts.lastIndex] = it }
         }
         return parts.joinToString(", ").takeIf { it.any(Char::isLetter) }
+    }
+
+    /**
+     * USPS names its plants after the city they serve ("SAN DIEGO CA DISTRIBUTION CENTER",
+     * "NORTHWEST ROCHESTER NY DISTRIBUTION CENTER"); keep the city and state. A leading compass
+     * word names the plant, not the city, so it goes too — only here, never for real city names.
+     */
+    private fun String.withoutUspsFacility(): String {
+        if (!USPS_FACILITY.containsMatchIn(this)) return this
+        return replace(USPS_FACILITY, "").replace(COMPASS_PREFIX, "")
     }
 
     private val US_STATES: Map<String, String> = mapOf(

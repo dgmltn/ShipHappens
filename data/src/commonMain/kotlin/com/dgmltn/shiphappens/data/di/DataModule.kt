@@ -26,7 +26,10 @@ val dataModule = module {
     single { SourceRegistry(getAll<TrackingSource>(), get()) }
     single { get<ShipHappensDb>().parcelDao() }
     single { get<ShipHappensDb>().geoDao() }
-    single { GeoRepository(get(), GeoAssets.bundledGeocoder(), get(named(PLATFORM_GEOCODER)), get()) }
+    single {
+        val bundled = GeoAssets.bundledGeocoder()
+        GeoRepository(get(), bundled, get(named(PLATFORM_GEOCODER)), get(), cities = bundled)
+    }
     single { ParcelRepository(get(), get(), get(), get()) }
     single { RefreshCoordinator(get(), get()) }
     single { ClipboardImportManager(get(), get(), get(), get()) }

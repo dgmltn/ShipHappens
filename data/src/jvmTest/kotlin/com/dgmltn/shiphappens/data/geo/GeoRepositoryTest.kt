@@ -5,6 +5,8 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.dgmltn.shiphappens.data.AppClock
 import com.dgmltn.shiphappens.data.db.GeoCacheEntity
 import com.dgmltn.shiphappens.data.db.ShipHappensDb
+import com.dgmltn.shiphappens.data.db.toEntity
+import com.dgmltn.shiphappens.domain.*
 import com.dgmltn.shiphappens.geo.*
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -170,5 +172,72 @@ class GeoRepositoryTest {
             delay(200)
         }
         assertEquals(1, calls.size)
+    }
+
+    private val southernCalifornia = CityIndex { city ->
+        when (city) {
+            "VISTA" -> listOf(CityCandidate("VISTA, CA", LatLng(33.19, -117.24)), CityCandidate("VISTA, MO", LatLng(37.98, -93.67)))
+            "SAN DIEGO" -> listOf(CityCandidate("SAN DIEGO, CA", LatLng(32.72, -117.16)), CityCandidate("SAN DIEGO, TX", LatLng(27.76, -98.24)))
+            "CARLSBAD" -> listOf(CityCandidate("CARLSBAD, CA", LatLng(33.13, -117.28)), CityCandidate("CARLSBAD, NM", LatLng(32.42, -104.23)))
+            else -> emptyList()
+        }
+    }
+
+    @Test fun a_route_of_city_only_places_resolves_offline_to_the_plausible_state() = runTest {
+        val platform = FakeGeocoder(emptyMap())
+        val repo = GeoRepository(db.geoDao(), bundledNone, platform, Clock(), cities = southernCalifornia)
+        val m = real {
+            repo.observe(listOf("Vista, US", "San Diego, US", "Carlsbad, US")).first { it.size == 3 }
+        }
+        assertEquals(LatLng(33.19, -117.24), m["VISTA"])
+        assertEquals(LatLng(32.72, -117.16), m["SAN DIEGO"])
+        assertEquals(LatLng(33.13, -117.28), m["CARLSBAD"])
+        assertTrue(platform.calls.isEmpty())
+    }
+
+    @Test fun a_city_only_choice_depends_on_its_route_so_it_is_not_remembered() = runTest {
+        val repo = GeoRepository(db.geoDao(), bundledNone, FakeGeocoder(emptyMap()), Clock(), cities = southernCalifornia)
+        real { repo.observe(listOf("Vista, US", "San Diego, US")).first { it.size == 2 } }
+        assertTrue(db.geoDao().get(listOf("VISTA", "SAN DIEGO")).isEmpty())
+    }
+
+    @Test fun a_city_only_place_takes_the_state_nearest_the_routes_known_stops() = runTest {
+        val bundled = Geocoder { k -> if (k == "OCEANSIDE, CA") GeoResult.Found(LatLng(33.22, -117.31)) else GeoResult.NotFound }
+        val repo = GeoRepository(db.geoDao(), bundled, FakeGeocoder(emptyMap()), Clock(), cities = southernCalifornia)
+        val m = real { repo.observe(listOf("OCEANSIDE, CA", "Carlsbad, US")).first { it.size == 2 } }
+        assertEquals(LatLng(33.13, -117.28), m["CARLSBAD"])
+    }
+
+    private suspend fun deliverHomeTo(location: String) {
+        val parcel = Parcel(id = "home", name = "Earlier", trackingNumber = "1Z", carrier = WellKnownCarriers.UPS,
+            status = TrackingStatus.DELIVERED, createdAt = Instant.fromEpochMilliseconds(0))
+        db.parcelDao().upsertParcel(parcel.toEntity())
+        db.parcelDao().replaceEvents("home", listOf(
+            TrackingEvent(Instant.fromEpochMilliseconds(1), "Delivered", location, TrackingStatus.DELIVERED).toEntity("home"),
+        ))
+    }
+
+    @Test fun a_lone_city_only_place_takes_the_state_nearest_where_parcels_are_delivered() = runTest {
+        deliverHomeTo("CARLSBAD, CA 92009")
+        val bundled = Geocoder { k -> if (k == "CARLSBAD, CA") GeoResult.Found(LatLng(33.13, -117.28)) else GeoResult.NotFound }
+        val platform = FakeGeocoder(emptyMap())
+        val repo = GeoRepository(db.geoDao(), bundled, platform, Clock(), cities = southernCalifornia)
+        val m = real { repo.observe(listOf("Vista, US")).first { it.isNotEmpty() } }
+        assertEquals(LatLng(33.19, -117.24), m["VISTA"])
+        assertTrue(platform.calls.isEmpty())
+    }
+
+    @Test fun a_city_only_place_is_never_sent_to_the_platform_geocoder() = runTest {
+        val platform = FakeGeocoder(mapOf("VISTA" to GeoResult.Found(LatLng(46.21, -119.23))))
+        real { GeoRepository(db.geoDao(), bundledNone, platform, Clock(), cities = southernCalifornia).resolve(listOf("Vista, US")) }
+        assertTrue(platform.calls.isEmpty())
+    }
+
+    @Test fun a_previously_cached_guess_for_a_city_only_place_is_ignored() = runTest {
+        db.geoDao().upsert(GeoCacheEntity("VISTA", 46.21, -119.23, 0))  // Vista, WA: the platform's old guess
+        db.geoDao().upsert(GeoCacheEntity("SACRAMENTO, CA", sac.lat, sac.lng, 0))
+        val repo = GeoRepository(db.geoDao(), bundledNone, FakeGeocoder(emptyMap()), Clock())
+        val m = real { repo.observe(listOf("Vista, US", "Sacramento, CA")).first { it.isNotEmpty() } }
+        assertEquals(setOf("SACRAMENTO, CA"), m.keys)
     }
 }

@@ -28,6 +28,20 @@ class PlaceKeyTest {
         for (raw in listOf("United States", "US", "USA", "united states of america")) assertNull(PlaceKey.normalize(raw), raw)
     }
     @Test fun foreign_place_keeps_its_country() = assertEquals("SHENZHEN, CN", PlaceKey.normalize("Shenzhen, CN"))
+    @Test fun usps_facility_names_reduce_to_their_city() {
+        assertEquals("SAN DIEGO, CA", PlaceKey.normalize("SAN DIEGO CA DISTRIBUTION CENTER"))
+        assertEquals("LOS ANGELES, CA", PlaceKey.normalize("LOS ANGELES CA DISTRIBUTION CENTER"))
+        assertEquals("SANTA CLARITA, CA", PlaceKey.normalize("SANTA CLARITA CA PROCESSING AND DISTRIBUTION CENTER"))
+        assertEquals("DENVER, CO", PlaceKey.normalize("DENVER CO NETWORK DISTRIBUTION CENTER"))
+        assertEquals("OAKLAND, CA", PlaceKey.normalize("OAKLAND CA P&DC"))
+    }
+    @Test fun a_compass_word_naming_a_usps_facility_is_dropped() =
+        assertEquals("ROCHESTER, NY", PlaceKey.normalize("NORTHWEST ROCHESTER NY DISTRIBUTION CENTER"))
+    @Test fun a_compass_word_in_a_real_city_name_is_kept() {
+        assertEquals("NORTH LAS VEGAS, NV", PlaceKey.normalize("North Las Vegas, NV"))
+        assertEquals("WEST PALM BEACH, FL", PlaceKey.normalize("WEST PALM BEACH FL 33401"))
+    }
+    @Test fun a_city_with_only_a_country_keeps_just_the_city() = assertEquals("VISTA", PlaceKey.normalize("Vista, US"))
     @Test fun blank_and_null_are_null() {
         assertNull(PlaceKey.normalize(null))
         assertNull(PlaceKey.normalize("   "))

@@ -11,6 +11,9 @@ interface GeoDao {
     @Query("SELECT * FROM geo_cache WHERE `key` IN (:keys)")
     suspend fun get(keys: List<String>): List<GeoCacheEntity>
 
+    @Query("SELECT location FROM tracking_events WHERE status = 'DELIVERED' AND location IS NOT NULL")
+    suspend fun deliveredLocations(): List<String>
+
     @Upsert
     suspend fun upsert(e: GeoCacheEntity)
 
