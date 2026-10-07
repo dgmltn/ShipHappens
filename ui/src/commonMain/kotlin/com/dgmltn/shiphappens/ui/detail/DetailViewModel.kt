@@ -13,9 +13,20 @@ import com.dgmltn.shiphappens.domain.TRACKING_STEP_LABELS
 import com.dgmltn.shiphappens.domain.designTime
 import com.dgmltn.shiphappens.domain.designFormat
 import com.dgmltn.shiphappens.domain.formatEtaWindow
+import com.dgmltn.shiphappens.data.geo.GeoRepository
+import com.dgmltn.shiphappens.geo.LatLng
+import com.dgmltn.shiphappens.geo.buildRoute
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
@@ -24,6 +35,13 @@ import kotlinx.datetime.toLocalDateTime
 
 enum class StepState { DONE, CURRENT, TODO }
 data class TimelineStepUi(val label: String, val time: String?, val state: StepState)
+
+data class StopEventUi(val whenText: String, val description: String)
+
+/** [events] are newest first. */
+data class StopUi(val name: String, val at: LatLng, val events: List<StopEventUi>)
+
+data class RouteUi(val stops: List<StopUi>, val delivered: Boolean, val description: String)
 
 data class DetailUiState(
     val loaded: Boolean = false,
@@ -42,6 +60,8 @@ data class DetailUiState(
     val webCarrierName: String? = null,
     /** True while a refresh for this parcel is in flight. */
     val refreshing: Boolean = false,
+    /** Null when no scan location resolved; the card then keeps its placeholder. */
+    val route: RouteUi? = null,
 )
 
 class DetailViewModel(
@@ -50,15 +70,29 @@ class DetailViewModel(
     private val clock: AppClock,
     registry: SourceRegistry,
     private val timeFormat: TimeFormat,
+    private val geo: GeoRepository,
 ) : ViewModel() {
 
     private val webCarrierNames: Map<String, String> =
         registry.all().filterIsInstance<WebCapableSource>()
             .associate { it.webSpec.carrier.code to it.webSpec.carrier.displayName }
 
+    private val parcel: Flow<Parcel?> =
+        repository.observeParcel(parcelId).shareIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), replay = 1)
+
+    // Resolved places arrive after the parcel does, so the screen renders at once and the route
+    // fills in later; a geo failure leaves the route empty rather than failing the screen.
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val coords: Flow<Map<String, LatLng>> =
+        parcel
+            .map { p -> p?.events?.mapNotNull { it.location }?.distinct().orEmpty() }
+            .distinctUntilChanged()
+            .flatMapLatest { places -> geo.observe(places) }
+            .catch { emit(emptyMap()) }
+
     val state: StateFlow<DetailUiState> =
-        combine(repository.observeParcel(parcelId), repository.refreshingIds) { parcel, refreshingIds ->
-            parcel?.toDetail(refreshing = parcel.id in refreshingIds) ?: DetailUiState()
+        combine(parcel, repository.refreshingIds, coords.onStart { emit(emptyMap()) }) { parcel, refreshingIds, coords ->
+            parcel?.toDetail(refreshing = parcel.id in refreshingIds, coords = coords) ?: DetailUiState()
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailUiState())
 
     /**
@@ -69,7 +103,7 @@ class DetailViewModel(
         viewModelScope.launch { repository.rename(parcelId, name) }
     }
 
-    private fun Parcel.toDetail(refreshing: Boolean): DetailUiState {
+    private fun Parcel.toDetail(refreshing: Boolean, coords: Map<String, LatLng>): DetailUiState {
         val delivered = status == TrackingStatus.DELIVERED
         val days = etaDate?.let { clock.today().daysUntil(it) }
         val tz = TimeZone.currentSystemDefault()
@@ -133,6 +167,28 @@ class DetailViewModel(
             timeline = timeline,
             webCarrierName = webCarrierNames[carrier.code],
             refreshing = refreshing,
+            route = routeUi(coords, delivered, tz, is24Hour),
         )
     }
+
+    private fun Parcel.routeUi(coords: Map<String, LatLng>, delivered: Boolean, tz: TimeZone, is24Hour: Boolean): RouteUi? {
+        val stops = buildRoute(events, coords)
+        if (stops.isEmpty()) return null
+        return RouteUi(
+            stops = stops.map { s ->
+                StopUi(s.displayName, s.at, s.events.asReversed().map { e ->
+                    val ldt = e.timestamp.toLocalDateTime(tz)
+                    StopEventUi("${ldt.date.designFormat()} · ${ldt.time.designTime(is24Hour)}", e.description)
+                })
+            },
+            delivered = delivered,
+            description = routeDescription(stops.map { it.displayName }),
+        )
+    }
+}
+
+internal fun routeDescription(names: List<String>): String {
+    val shown = if (names.size > 5) names.take(2) + "…" + names.takeLast(2) else names
+    val count = if (names.size == 1) "1 stop" else "${names.size} stops"
+    return "Route: ${shown.joinToString(" → ")}, $count"
 }

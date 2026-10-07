@@ -9,8 +9,8 @@ import androidx.room3.RoomDatabaseConstructor
 import androidx.room3.migration.AutoMigrationSpec
 
 @Database(
-    entities = [ParcelEntity::class, TrackingEventEntity::class],
-    version = 3,
+    entities = [ParcelEntity::class, TrackingEventEntity::class, GeoCacheEntity::class],
+    version = 4,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = ShipHappensDb.MoveEtaTimeToWindowEnd::class),
         // v2 -> v3 adds the nullable `delayNote` column (a delay is a modifier on the status,
@@ -18,11 +18,15 @@ import androidx.room3.migration.AutoMigrationSpec
         // `ALTER TABLE ADD COLUMN`, so unlike v1 -> v2 it never recreates `parcels` and cannot
         // endanger the cascading `tracking_events` foreign key described below.
         AutoMigration(from = 2, to = 3),
+        // v3 -> v4 only adds the `geo_cache` table; no existing table is touched.
+        AutoMigration(from = 3, to = 4),
     ],
 )
 @ConstructedBy(ShipHappensDbConstructor::class)
 abstract class ShipHappensDb : RoomDatabase() {
     abstract fun parcelDao(): ParcelDao
+
+    abstract fun geoDao(): GeoDao
 
     /**
      * v1 -> v2: the single `etaTime` cutoff became `etaWindowStart`/`etaWindowEnd`. The old value

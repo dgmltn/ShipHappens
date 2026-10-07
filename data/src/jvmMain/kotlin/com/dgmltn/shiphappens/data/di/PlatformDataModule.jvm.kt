@@ -8,9 +8,12 @@ import com.dgmltn.shiphappens.data.TwelveHourFormat
 import com.dgmltn.shiphappens.data.clipboard.ClipboardReader
 import com.dgmltn.shiphappens.data.daily.*
 import com.dgmltn.shiphappens.data.db.ShipHappensDb
+import com.dgmltn.shiphappens.geo.Geocoder
+import com.dgmltn.shiphappens.geo.UnavailableGeocoder
 import kotlinx.coroutines.Dispatchers
 import okio.Path.Companion.toPath
 import org.koin.core.module.Module
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 actual fun platformDataModule(): Module = module {
@@ -22,6 +25,7 @@ actual fun platformDataModule(): Module = module {
         Room.inMemoryDatabaseBuilder<ShipHappensDb>()
             .setDriver(BundledSQLiteDriver()).setQueryCoroutineContext(Dispatchers.IO).build()
     }
+    single<Geocoder>(named(PLATFORM_GEOCODER)) { UnavailableGeocoder }
     single<ClipboardReader> { object : ClipboardReader { override suspend fun readText(): String? = null } }
     single<StatusNotifier> { NoOpStatusNotifier }
     single<DailyRefreshScheduler> { NoOpDailyRefreshScheduler }

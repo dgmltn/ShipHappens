@@ -9,10 +9,13 @@ import com.dgmltn.shiphappens.data.TimeFormat
 import com.dgmltn.shiphappens.data.clipboard.ClipboardReader
 import com.dgmltn.shiphappens.data.daily.*
 import com.dgmltn.shiphappens.data.db.ShipHappensDb
+import com.dgmltn.shiphappens.geo.Geocoder
+import com.dgmltn.shiphappens.geo.AndroidGeocoder
 import kotlinx.coroutines.Dispatchers
 import okio.Path.Companion.toPath
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.module.Module
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 private class AndroidClipboardReader(private val context: Context) : ClipboardReader {
@@ -34,6 +37,7 @@ actual fun platformDataModule(): Module = module {
             androidContext().getDatabasePath("shiphappens.db").absolutePath,
         ).setDriver(BundledSQLiteDriver()).setQueryCoroutineContext(Dispatchers.IO).build()
     }
+    single<Geocoder>(named(PLATFORM_GEOCODER)) { AndroidGeocoder(androidContext()) }
     single<ClipboardReader> { AndroidClipboardReader(androidContext()) }
     single<StatusNotifier> { AndroidStatusNotifier(androidContext()) }
     single<DailyRefreshScheduler> { WorkManagerDailyRefreshScheduler(androidContext()) }

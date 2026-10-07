@@ -7,12 +7,15 @@ import com.dgmltn.shiphappens.data.TimeFormat
 import com.dgmltn.shiphappens.data.clipboard.ClipboardReader
 import com.dgmltn.shiphappens.data.daily.*
 import com.dgmltn.shiphappens.data.db.ShipHappensDb
+import com.dgmltn.shiphappens.geo.Geocoder
+import com.dgmltn.shiphappens.geo.IosGeocoder
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.Dispatchers
 import okio.Path.Companion.toPath
 // Note: kotlinx.coroutines 1.11.0 keeps `Dispatchers.IO` internal on Kotlin/Native
 // targets (unlike JVM/Android), so this actual uses `Dispatchers.Default` instead.
 import org.koin.core.module.Module
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 import platform.Foundation.NSDateFormatter
 import platform.Foundation.NSDocumentDirectory
@@ -57,6 +60,7 @@ actual fun platformDataModule(): Module = module {
         Room.databaseBuilder<ShipHappensDb>("${documentsDir()}/shiphappens.db")
             .setDriver(BundledSQLiteDriver()).setQueryCoroutineContext(Dispatchers.Default).build()
     }
+    single<Geocoder>(named(PLATFORM_GEOCODER)) { IosGeocoder() }
     single<ClipboardReader> { IosClipboardReader() }
     single<StatusNotifier> { IosStatusNotifier() }
     single<DailyRefreshScheduler> { BgTaskDailyRefreshScheduler() }

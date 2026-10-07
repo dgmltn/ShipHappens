@@ -11,6 +11,9 @@ import com.dgmltn.shiphappens.data.daily.NoOpDailyRefreshScheduler
 import com.dgmltn.shiphappens.data.daily.NoOpStatusNotifier
 import com.dgmltn.shiphappens.data.daily.StatusNotifier
 import com.dgmltn.shiphappens.data.db.ShipHappensDb
+import com.dgmltn.shiphappens.data.di.PLATFORM_GEOCODER
+import com.dgmltn.shiphappens.geo.Geocoder
+import com.dgmltn.shiphappens.geo.UnavailableGeocoder
 import com.dgmltn.shiphappens.source.api.TrackingSource
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
@@ -22,6 +25,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.setMain
 import okio.Path.Companion.toPath
 import org.koin.core.module.Module
+import org.koin.core.qualifier.named
 import org.koin.dsl.koinApplication
 import org.koin.dsl.module
 import org.koin.test.check.checkModules
@@ -50,6 +54,7 @@ class AppModulesTest {
             Room.inMemoryDatabaseBuilder<ShipHappensDb>()
                 .setDriver(BundledSQLiteDriver()).setQueryCoroutineContext(Dispatchers.IO).build()
         }
+        single<Geocoder>(named(PLATFORM_GEOCODER)) { UnavailableGeocoder }
         single<ClipboardReader> { object : ClipboardReader { override suspend fun readText(): String? = null } }
         single<StatusNotifier> { NoOpStatusNotifier }
         single<DailyRefreshScheduler> { NoOpDailyRefreshScheduler }

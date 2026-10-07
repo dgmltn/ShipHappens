@@ -104,13 +104,18 @@ fun DetailContent(
                 DelayNote(it)
             }
             Spacer(Modifier.height(14.dp))
-            // Map placeholder card (spec: decorative, with real location text)
+            // Map card: the parcel's scanned stops when any resolved, otherwise a decorative pin.
             Box(Modifier.fillMaxWidth().height(152.dp).clip(RoundedCornerShape(18.dp))
                 .background(Color(0xFFEEECE6)).border(1.dp, ShipColors.hairline, RoundedCornerShape(18.dp))) {
-                Box(Modifier.align(Alignment.Center).size(20.dp).clip(CircleShape).background(accent))
-                Text(state.locationText ?: "package location", color = ShipColors.muted, fontSize = 10.sp, fontFamily = monoFamily(),
-                    modifier = Modifier.align(Alignment.BottomStart).padding(12.dp)
-                        .clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = .72f)).padding(horizontal = 7.dp, vertical = 3.dp))
+                val route = state.route
+                if (route != null) {
+                    RouteMap(route, accent, state.locationText)
+                } else {
+                    Box(Modifier.align(Alignment.Center).size(20.dp).clip(CircleShape).background(accent))
+                    Text(state.locationText ?: "package location", color = ShipColors.muted, fontSize = 10.sp, fontFamily = monoFamily(),
+                        modifier = Modifier.align(Alignment.BottomStart).padding(12.dp)
+                            .clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = .72f)).padding(horizontal = 7.dp, vertical = 3.dp))
+                }
             }
             Spacer(Modifier.height(14.dp))
             DetailCard {

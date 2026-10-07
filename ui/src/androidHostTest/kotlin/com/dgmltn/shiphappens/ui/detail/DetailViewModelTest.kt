@@ -6,6 +6,9 @@ import androidx.room3.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.dgmltn.shiphappens.data.*
 import com.dgmltn.shiphappens.data.db.ShipHappensDb
+import com.dgmltn.shiphappens.data.geo.GeoRepository
+import com.dgmltn.shiphappens.geo.GeoResult
+import com.dgmltn.shiphappens.geo.LatLng
 import com.dgmltn.shiphappens.data.db.toEntity
 import com.dgmltn.shiphappens.data.settings.SettingsRepository
 import com.dgmltn.shiphappens.data.source.SourceRegistry
@@ -52,6 +55,8 @@ class DetailViewModelTest {
     private suspend fun awaitState(timeoutMs: Long = 10_000, predicate: (DetailUiState) -> Boolean): DetailUiState =
         withContext(Dispatchers.Default) { withTimeout(timeoutMs) { vm.state.first(predicate) } }
 
+    private var geoAnswers: Map<String, GeoResult> = emptyMap()
+
     private fun TestScope.vm(parcel: Parcel, is24Hour: Boolean = false): DetailViewModel {
         timeFormat = TimeFormat { is24Hour }
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
@@ -60,14 +65,20 @@ class DetailViewModelTest {
         db = Room.inMemoryDatabaseBuilder<ShipHappensDb>().setDriver(BundledSQLiteDriver()).build()
         val registry = SourceRegistry(listOf(com.dgmltn.shiphappens.source.webview.WebSource(com.dgmltn.shiphappens.source.ups.UpsWebSpec, com.dgmltn.shiphappens.source.webview.NoWebScraper)), settings)
         val repo = ParcelRepository(db.parcelDao(), registry, settings, FixedClock())
-        val v = DetailViewModel(parcel.id, repo, FixedClock(), registry, timeFormat)
+        val geo = GeoRepository(
+            db.geoDao(),
+            bundled = { GeoResult.NotFound },
+            platform = { key -> geoAnswers[key] ?: GeoResult.NotFound },
+            clock = FixedClock(),
+        )
+        val v = DetailViewModel(parcel.id, repo, FixedClock(), registry, timeFormat, geo)
         backgroundScope.launch { v.state.collect() }
         vm = v
         return v
     }
 
     @AfterTest fun tearDown() {
-        // `state` maps Room's observeParcel (real invalidation-tracker threads) via
+        // `state` maps Room's observeParcel (real invalidation-tracker threads), shared once via
         // WhileSubscribed(5_000) on viewModelScope — the same shape as WebDetailViewModelTest's
         // documented flake, just with one real-thread source instead of two (lower odds, not
         // zero — this class was still an observed contributor to the full-suite flake).
@@ -278,5 +289,40 @@ class DetailViewModelTest {
         val s = awaitState { it.loaded && it.delayNote != null }
         assertEquals("Delivery exception", s.headline)
         assertEquals("Delayed by weather", s.delayNote)
+    }
+
+    private fun ev(sec: Long, loc: String?, desc: String) =
+        TrackingEvent(Instant.fromEpochSeconds(1_752_000_000 + sec), desc, loc, TrackingStatus.IN_TRANSIT)
+
+    @Test fun no_locations_means_no_route() = runTest {
+        val p = base(TrackingStatus.IN_TRANSIT, LocalDate(2026, 7, 14))
+        vm(p)
+        db.parcelDao().upsertParcel(p.toEntity())
+        assertNull(awaitState { it.loaded }.route)
+    }
+
+    @Test fun route_fills_in_as_places_resolve() = runTest {
+        geoAnswers = mapOf(
+            "FOSTER CITY, CA" to GeoResult.Found(LatLng(37.55, -122.27)),
+            "SACRAMENTO, CA" to GeoResult.Found(LatLng(38.58, -121.49)),
+        )
+        val p = base(TrackingStatus.IN_TRANSIT, LocalDate(2026, 7, 14)).copy(events = listOf(
+            ev(0, "FOSTER CITY, CA", "Picked up"),
+            ev(3600, "SACRAMENTO, CA", "Arrived at FedEx location"),
+            ev(7200, "SACRAMENTO, CA", "Departed FedEx location"),
+        ))
+        vm(p)
+        db.parcelDao().upsertParcel(p.toEntity())
+        db.parcelDao().replaceEvents(p.id, p.events.map { it.toEntity(p.id) })
+        val route = assertNotNull(awaitState { it.route?.stops?.size == 2 }.route)
+        assertEquals(listOf("Foster City, CA", "Sacramento, CA"), route.stops.map { it.name })
+        assertEquals(listOf("Departed FedEx location", "Arrived at FedEx location"), route.stops[1].events.map { it.description })
+        assertEquals("Route: Foster City, CA → Sacramento, CA, 2 stops", route.description)
+        assertFalse(route.delivered)
+    }
+
+    @Test fun route_description_abbreviates_long_trails() {
+        assertEquals("Route: A → B → … → F → G, 7 stops", routeDescription(listOf("A", "B", "C", "D", "E", "F", "G")))
+        assertEquals("Route: A, 1 stop", routeDescription(listOf("A")))
     }
 }

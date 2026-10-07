@@ -22,6 +22,7 @@ kotlin {
         }
         commonMain.dependencies {
             api(projects.source.api)
+            api(projects.geo)
             api(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
             api(libs.room3.runtime)
@@ -29,6 +30,7 @@ kotlin {
             api(libs.datastore.preferences.core)
             api(project.dependencies.platform(libs.koin.bom))
             api(libs.koin.core)
+            implementation(libs.kermit)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

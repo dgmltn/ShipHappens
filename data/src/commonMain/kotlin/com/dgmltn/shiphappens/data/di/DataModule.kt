@@ -4,15 +4,20 @@ import com.dgmltn.shiphappens.data.*
 import com.dgmltn.shiphappens.data.clipboard.ClipboardImportManager
 import com.dgmltn.shiphappens.data.daily.DailyRefreshRunner
 import com.dgmltn.shiphappens.data.db.ShipHappensDb
+import com.dgmltn.shiphappens.data.geo.GeoRepository
 import com.dgmltn.shiphappens.data.settings.SettingsRepository
 import com.dgmltn.shiphappens.data.source.SourceRegistry
+import com.dgmltn.shiphappens.geo.GeoAssets
 import com.dgmltn.shiphappens.source.api.TrackingSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import org.koin.core.module.Module
+import org.koin.core.qualifier.named
 import org.koin.dsl.bind
 import org.koin.dsl.module
+
+const val PLATFORM_GEOCODER = "platformGeocoder"
 
 val dataModule = module {
     single<AppClock> { SystemClock() }
@@ -20,6 +25,8 @@ val dataModule = module {
     single { SettingsRepository(get()) }
     single { SourceRegistry(getAll<TrackingSource>(), get()) }
     single { get<ShipHappensDb>().parcelDao() }
+    single { get<ShipHappensDb>().geoDao() }
+    single { GeoRepository(get(), GeoAssets.bundledGeocoder(), get(named(PLATFORM_GEOCODER)), get()) }
     single { ParcelRepository(get(), get(), get(), get()) }
     single { RefreshCoordinator(get(), get()) }
     single { ClipboardImportManager(get(), get(), get(), get()) }

@@ -17,6 +17,7 @@ dependencyResolutionManagement {
 }
 
 include(":domain")
+include(":geo")
 include(":data")
 include(":design")
 include(":source:api")
