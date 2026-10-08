@@ -13,7 +13,7 @@ reference.
 
 <p>
   <img src="resources/screenshots/device-2026-08-26-183842.png" width="280" alt="Ship Happens list screen showing active and delivered parcels">
-  <img src="resources/screenshots/device-2026-08-26-183854.png" width="280" alt="Ship Happens detail screen showing estimated delivery, map, and tracking history">
+  <img src="resources/screenshots/Screenshot_20261007_171501.png" width="280" alt="Ship Happens detail screen showing delivery time, route map, and tracking history">
 </p>
 
 ## Module map
