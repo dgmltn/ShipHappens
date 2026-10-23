@@ -1,6 +1,8 @@
 package com.dgmltn.shiphappens.source.amazon
 
+import com.dgmltn.shiphappens.domain.Handoff
 import com.dgmltn.shiphappens.domain.TrackingStatus
+import com.dgmltn.shiphappens.domain.WellKnownCarriers
 import com.dgmltn.shiphappens.source.webview.DomCard
 import com.dgmltn.shiphappens.source.webview.DomRaw
 import com.dgmltn.shiphappens.source.webview.DomRawEvent
@@ -501,5 +503,22 @@ class AmazonPageLogicTest {
         )
         val s = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(card), todayIso = "2026-10-23"), pacific).snapshotOrNull()!!
         assertEquals("Package delayed in transit", s.delayNote)
+    }
+
+    @Test fun the_sheets_tracking_id_row_names_the_delivering_carrier() {
+        assertEquals(Handoff(WellKnownCarriers.AMAZON_LOGISTICS, "TBA335777783614"), amazonHandoff("Tracking ID: TBA335777783614"))
+        assertEquals(Handoff(WellKnownCarriers.USPS, "9400111899223197428490"), amazonHandoff("Tracking ID:9400111899223197428490"))
+    }
+
+    @Test fun an_unrecognized_or_amazon_tracking_id_is_no_handoff() {
+        assertNull(amazonHandoff("Tracking ID: 112-0087174-7649828"))
+        assertNull(amazonHandoff("Tracking ID: ABC"))
+        assertNull(amazonHandoff(null))
+    }
+
+    @Test fun the_order_page_snapshot_carries_the_handoff() {
+        val card = DomCard(head = "Arriving today", stage = "Out for delivery", events = sheetEvents, handoffText = "Tracking ID: TBA335777783614")
+        val s = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(card), todayIso = "2026-10-23"), pacific).snapshotOrNull()!!
+        assertEquals(Handoff(WellKnownCarriers.AMAZON_LOGISTICS, "TBA335777783614"), s.handoff)
     }
 }

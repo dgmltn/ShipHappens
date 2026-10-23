@@ -1,6 +1,8 @@
 package com.dgmltn.shiphappens.source.amazon
 
+import com.dgmltn.shiphappens.domain.Handoff
 import com.dgmltn.shiphappens.domain.TrackingStatus
+import com.dgmltn.shiphappens.domain.WellKnownCarriers
 import com.dgmltn.shiphappens.source.webview.BaseKeywords
 import com.dgmltn.shiphappens.source.webview.DomCard
 import com.dgmltn.shiphappens.source.webview.DomRaw
@@ -122,6 +124,19 @@ internal fun pickShipmentCard(cards: List<DomCard>): DomCard? {
     return pool.firstOrNull { it.stageStatus() != TrackingStatus.DELIVERED } ?: pool.last()
 }
 
+private val TRACKING_ID = Regex("""Tracking ID:?\s*([A-Za-z0-9]+)""", RegexOption.IGNORE_CASE)
+
+/**
+ * The carrier the tracking sheet's "Tracking ID" row hands the parcel to. Only a number a
+ * well-known carrier other than Amazon claims counts (an AMZL `TBA…` today); anything else is
+ * no handoff rather than a guess.
+ */
+internal fun amazonHandoff(text: String?): Handoff? {
+    val number = text?.let { TRACKING_ID.find(it) }?.groupValues?.get(1) ?: return null
+    val carrier = WellKnownCarriers.detect(number)?.takeIf { it != WellKnownCarriers.AMAZON } ?: return null
+    return Handoff(carrier, number)
+}
+
 // Verbatim from the JS blob's original decision (moved to Kotlin 2026-08-20); order-page copy,
 // which is why the check lives in the cards branch just as it did in the blob.
 private val AMAZON_NOT_FOUND = Regex(
@@ -155,6 +170,7 @@ internal fun resolveAmazonCards(raw: DomRaw, zone: TimeZone = TimeZone.currentSy
             delayNote = headlineThenNewestEvent(AMAZON_VOCABULARY, pick.head, events),
             statusFallback = status,
         ).let { if (status != null) it.copy(status = status) else it }
+            .copy(handoff = amazonHandoff(pick.handoffText))
     } else null
     val href = pick.href
     return when {

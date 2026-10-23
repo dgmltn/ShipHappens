@@ -64,6 +64,9 @@ data class DomCard(
     /** Event rows a list page shows for this card (Amazon's preloaded "tracking updates" sheet),
      *  for pages whose detail link never yields a tracker page of its own. */
     val events: List<DomRawEvent> = emptyList(),
+    /** Verbatim text of a row naming the number the parcel travels under with another carrier
+     *  ("Tracking ID: TBA…"); the provider decides whether it is a handoff. */
+    val handoffText: String? = null,
 )
 
 /** One event row. [timestamp] is ISO-8601 when the page's own date context lets the JS normalize

@@ -78,4 +78,21 @@ class ParcelDaoTest {
         dao.upsertParcel(original.toEntity())
         assertEquals(original, dao.getById("a")!!.toDomain())
     }
+
+    @Test fun handoff_and_event_carrier_roundtrip() = runTest {
+        val dao = db().parcelDao()
+        val original = parcel("a").copy(handoff = Handoff(WellKnownCarriers.AMAZON_LOGISTICS, "TBA335777783614"))
+        dao.upsertParcel(original.toEntity())
+        val ev = TrackingEvent(Instant.fromEpochMilliseconds(2000), "Out for delivery", "Vista, US", TrackingStatus.OUT_FOR_DELIVERY, carrierCode = "amzl")
+        dao.replaceEvents("a", listOf(ev.toEntity("a")))
+        val read = dao.getById("a")!!.toDomain()
+        assertEquals(original.handoff, read.handoff)
+        assertEquals("amzl", read.events.single().carrierCode)
+    }
+
+    @Test fun an_unknown_handoff_carrier_reads_as_no_handoff() = runTest {
+        val dao = db().parcelDao()
+        dao.upsertParcel(parcel("a").toEntity().copy(handoffCarrierCode = "pigeon", handoffTrackingNumber = "X1"))
+        assertNull(dao.getById("a")!!.toDomain().handoff)
+    }
 }

@@ -83,7 +83,7 @@ fun DetailContent(
                     if (state.refreshing) {
                         CircularProgressIndicator(Modifier.size(12.dp), color = Color.White.copy(alpha = .9f), strokeWidth = 1.5.dp)
                     }
-                    Text(state.carrierName, color = Color.White.copy(alpha = .9f), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(state.carrierLabel, color = Color.White.copy(alpha = .9f), fontSize = 12.sp, fontWeight = FontWeight.ExtraBold)
                 }
             }
             Spacer(Modifier.height(20.dp))
@@ -147,6 +147,12 @@ fun DetailContent(
                                 fontWeight = if (step.state == StepState.TODO) FontWeight.SemiBold else FontWeight.Bold,
                                 color = if (step.state == StepState.TODO) Color(0xFFB4AFA5) else ShipColors.ink)
                             step.time?.let { Text(it, fontSize = 12.sp, color = ShipColors.faint) }
+                            step.scans.forEach { scan ->
+                                Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(scan.text, fontSize = 12.sp, color = ShipColors.muted, modifier = Modifier.weight(1f, fill = false))
+                                    scan.carrier?.let { Text(it, fontSize = 10.sp, color = ShipColors.faint, fontWeight = FontWeight.Bold) }
+                                }
+                            }
                         }
                     }
                 }
@@ -154,23 +160,14 @@ fun DetailContent(
             Spacer(Modifier.height(14.dp))
             DetailCard {
                 CardLabel("${state.carrierName} tracking number")
-                // No portable ClipEntry(text) factory in CMP 1.11.1 commonMain (see ClipEntry.withPlainText,
-                // iOS-only and @ExperimentalComposeUiApi) — LocalClipboardManager is deprecated but the only
-                // cross-platform way to write plain text today.
-                @Suppress("DEPRECATION") val clipboard = LocalClipboardManager.current
-                val haptics = LocalHapticFeedback.current
-                Text(
-                    state.trackingNumber, color = ShipColors.ink, fontFamily = monoFamily(), fontSize = 14.sp,
-                    modifier = Modifier.combinedClickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = {},
-                        onLongClick = {
-                            clipboard.setText(AnnotatedString(state.trackingNumber))
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        },
-                    ),
-                )
+                TrackingNumberText(state.trackingNumber)
+            }
+            state.secondary?.let { secondary ->
+                Spacer(Modifier.height(14.dp))
+                DetailCard {
+                    CardLabel("${secondary.carrierName} tracking number")
+                    TrackingNumberText(secondary.trackingNumber)
+                }
             }
             state.webCarrierName?.let { name ->
                 Spacer(Modifier.height(14.dp))
@@ -186,6 +183,28 @@ fun DetailContent(
             }
         }
     }
+}
+
+/** A tracking number in monospace; long-press copies it. */
+@Composable
+private fun TrackingNumberText(number: String) {
+    // No portable ClipEntry(text) factory in CMP 1.11.1 commonMain (see ClipEntry.withPlainText,
+    // iOS-only and @ExperimentalComposeUiApi) — LocalClipboardManager is deprecated but the only
+    // cross-platform way to write plain text today.
+    @Suppress("DEPRECATION") val clipboard = LocalClipboardManager.current
+    val haptics = LocalHapticFeedback.current
+    Text(
+        number, color = ShipColors.ink, fontFamily = monoFamily(), fontSize = 14.sp,
+        modifier = Modifier.combinedClickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = {},
+            onLongClick = {
+                clipboard.setText(AnnotatedString(number))
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            },
+        ),
+    )
 }
 
 /** Idle title and edit field share one style, so committing an edit never shifts the header. */
@@ -344,6 +363,7 @@ private fun Preview_DetailContent_InTransit() {
                 loaded = true,
                 name = "Baseball cap",
                 carrierName = "USPS",
+                carrierLabel = "USPS",
                 accentHex = "#1E3A8F",
                 headline = "Arrives in 2 days",
                 windowLabel = "Estimated delivery",
@@ -364,6 +384,39 @@ private fun Preview_DetailContent_InTransit() {
 
 @Preview
 @Composable
+private fun Preview_DetailContent_Handoff() {
+    ShipTheme {
+        DetailContent(
+            DetailUiState(
+                loaded = true,
+                name = "Light bulbs",
+                carrierName = "Amazon",
+                carrierLabel = "Amazon via Amazon Logistics",
+                secondary = SecondaryNumberUi("Amazon Logistics", "TBA335777783614"),
+                accentHex = "#146EB4",
+                headline = "Arriving today",
+                windowLabel = "Estimated delivery",
+                windowText = "Fri, Oct 23 · 12:45 – 4:45 PM",
+                locationText = "Vista, US",
+                trackingNumber = "112-0087174-7649828",
+                timeline = listOf(
+                    TimelineStepUi("Label created", "Wed, Oct 21", StepState.DONE),
+                    TimelineStepUi("Shipped", "Thu, Oct 22", StepState.DONE, listOf(ScanUi("Departed San Bernardino, CA · Thu, Oct 22", null))),
+                    TimelineStepUi("In transit", "Fri, Oct 23", StepState.DONE, listOf(
+                        ScanUi("Arrived Vista, US · Fri, Oct 23", null),
+                        ScanUi("Processed Vista, US · Fri, Oct 23", "Amazon Logistics"),
+                    )),
+                    TimelineStepUi("Out for delivery", "Fri, Oct 23 · latest update", StepState.CURRENT, listOf(ScanUi("Out for delivery, Vista, US · Fri, Oct 23", "Amazon Logistics"))),
+                    TimelineStepUi("Delivered", null, StepState.TODO),
+                ),
+                webCarrierName = "Amazon",
+            ),
+        )
+    }
+}
+
+@Preview
+@Composable
 private fun Preview_DetailContent_Delayed() {
     ShipTheme {
         DetailContent(
@@ -371,6 +424,7 @@ private fun Preview_DetailContent_Delayed() {
                 loaded = true,
                 name = "Boots",
                 carrierName = "UPS",
+                carrierLabel = "UPS",
                 accentHex = "#5A3A22",
                 // The delay does NOT displace the ETA headline — that is the point of the state.
                 headline = "Arrives tomorrow",
@@ -400,6 +454,7 @@ private fun Preview_DetailContent_Refreshing() {
                 loaded = true,
                 name = "Trail running shoes",
                 carrierName = "FedEx",
+                carrierLabel = "FedEx",
                 accentHex = "#5A1B9A",
                 headline = "Arriving today",
                 windowLabel = "Estimated delivery",
@@ -428,6 +483,7 @@ private fun Preview_DetailContent_Delivered() {
                 loaded = true,
                 name = "Oat-blend coffee beans",
                 carrierName = "USPS",
+                carrierLabel = "USPS",
                 accentHex = "#1E3A8F",
                 headline = "Delivered",
                 windowLabel = "Delivered",

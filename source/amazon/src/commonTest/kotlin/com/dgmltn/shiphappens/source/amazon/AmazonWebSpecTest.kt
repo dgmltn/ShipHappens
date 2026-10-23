@@ -73,6 +73,11 @@ class AmazonWebSpecTest {
         assertTrue(AmazonWebSpec.extractionJs.contains("events: sheetEvents("))
     }
 
+    @Test fun extraction_js_reads_the_sheets_tracking_id_row() {
+        assertTrue(AmazonWebSpec.extractionJs.contains("handoffText: sheetTrackingId("))
+        assertTrue(AmazonWebSpec.extractionJs.contains("Tracking ID"))
+    }
+
     @Test fun extraction_js_reports_why_it_gave_up() {
         // page:'empty' alone can't be debugged off-device — each bail-out names its branch.
         assertTrue(AmazonWebSpec.extractionJs.contains("noShipmentCards"))

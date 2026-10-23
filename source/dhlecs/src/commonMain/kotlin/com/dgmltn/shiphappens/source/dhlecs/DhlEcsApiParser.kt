@@ -1,7 +1,10 @@
 package com.dgmltn.shiphappens.source.dhlecs
 
+import com.dgmltn.shiphappens.domain.Handoff
 import com.dgmltn.shiphappens.domain.TrackingEvent
 import com.dgmltn.shiphappens.domain.TrackingSnapshot
+import com.dgmltn.shiphappens.domain.WellKnownCarriers
+import com.dgmltn.shiphappens.domain.normalizeTracking
 import com.dgmltn.shiphappens.source.webview.assembleSnapshot
 import com.dgmltn.shiphappens.source.webview.eventAt
 import com.dgmltn.shiphappens.source.webview.headlineThenNewestEvent
@@ -19,6 +22,9 @@ import kotlinx.serialization.json.Json
     val status: String? = null,
     val estimatedDeliveryDate: String? = null,
     val events: List<DhlEcsEvent> = emptyList(),
+    /** The delivery partner ("USPS") and the number the parcel travels under with it. */
+    val dspName: String? = null,
+    val deliveryConfirmationNumber: String? = null,
 )
 
 @Serializable private data class DhlEcsEvent(
@@ -64,7 +70,17 @@ object DhlEcsApiParser {
             etaDate = parseAnyDate(pkg.estimatedDeliveryDate),
             // Only the live status or the NEWEST event may assert a delay — the shared rule.
             delayNote = headlineThenNewestEvent(DHLECS_VOCABULARY, pkg.status, events),
-        )
+        ).copy(handoff = partnerHandoff(pkg.dspName, pkg.deliveryConfirmationNumber))
+    }
+
+    // Every DHL number embeds a USPS-shaped tail, so the number alone can't say there is a
+    // partner: the API has to name one we know, and that carrier has to claim the number.
+    private fun partnerHandoff(dspName: String?, number: String?): Handoff? {
+        val name = dspName?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val n = number?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val carrier = WellKnownCarriers.all.firstOrNull { it.code.equals(name, true) || it.displayName.equals(name, true) }
+            ?.takeIf { it != WellKnownCarriers.DHL_ECOMMERCE } ?: return null
+        return if (carrier.claims(normalizeTracking(n))) Handoff(carrier, n) else null
     }
 
     // The API SCREAMS its prose ("ARRIVAL DHL ECOMMERCE FACILITY"); fold to sentence case,

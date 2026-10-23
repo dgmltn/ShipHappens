@@ -34,7 +34,16 @@ import kotlinx.datetime.daysUntil
 import kotlinx.datetime.toLocalDateTime
 
 enum class StepState { DONE, CURRENT, TODO }
-data class TimelineStepUi(val label: String, val time: String?, val state: StepState)
+
+/** One scan listed under a timeline step: "Arrived San Diego, CA · Fri, Oct 23", and the name of
+ *  the carrier that reported it when that isn't the parcel's own. */
+data class ScanUi(val text: String, val carrier: String?)
+
+/** [scans] are the step's scans, oldest first. */
+data class TimelineStepUi(val label: String, val time: String?, val state: StepState, val scans: List<ScanUi> = emptyList())
+
+/** The number the parcel travels under with the carrier it was handed to. */
+data class SecondaryNumberUi(val carrierName: String, val trackingNumber: String)
 
 data class StopEventUi(val whenText: String, val description: String)
 
@@ -46,7 +55,12 @@ data class RouteUi(val stops: List<StopUi>, val delivered: Boolean, val descript
 data class DetailUiState(
     val loaded: Boolean = false,
     val name: String = "",
+    /** The parcel's own carrier; labels its tracking-number card. */
     val carrierName: String = "",
+    /** The header's carrier line: "Amazon via Amazon Logistics" once handed off. */
+    val carrierLabel: String = "",
+    /** Null until the parcel's carrier names a handoff. */
+    val secondary: SecondaryNumberUi? = null,
     val accentHex: String = "#17150F",
     val headline: String = "",
     val windowLabel: String = "",
@@ -137,6 +151,7 @@ class DetailViewModel(
             } ?: "—"
 
         val effectiveStep = effectiveStepIndex
+        val scans = scanRows(events, handoff, tz)
         val timeline = TRACKING_STEP_LABELS.mapIndexed { i, label ->
             val stepState = when {
                 delivered || i < effectiveStep -> StepState.DONE
@@ -153,11 +168,13 @@ class DetailViewModel(
                     else -> base
                 }
             }
-            TimelineStepUi(label, time, stepState)
+            TimelineStepUi(label, time, stepState, scans[i])
         }
 
         return DetailUiState(
-            loaded = true, name = name, carrierName = carrier.displayName, accentHex = carrier.accentHex(),
+            loaded = true, name = name, carrierName = carrier.displayName, carrierLabel = carrierLabel,
+            secondary = handoff?.let { SecondaryNumberUi(it.carrier.displayName, it.trackingNumber) },
+            accentHex = carrier.accentHex(),
             headline = headline,
             delayNote = delayNote,
             windowLabel = if (delivered) "Delivered" else "Estimated delivery",
@@ -185,6 +202,30 @@ class DetailViewModel(
             description = routeDescription(stops.map { it.displayName }),
         )
     }
+}
+
+/**
+ * Every scan filed under its timeline step, oldest first, so the rail reads as the trip. A
+ * scan whose wording names no stage follows the last one that did (the first step before any).
+ * A row is "Arrived San Diego, CA · Fri, Oct 23" when the wording carries a movement verb,
+ * else the carrier's own wording with the place; the reporting carrier is named only on rows
+ * from the carrier the parcel was handed to.
+ */
+internal fun scanRows(events: List<TrackingEvent>, handoff: Handoff?, tz: TimeZone): List<List<ScanUi>> {
+    val rows = List(TRACKING_STEP_LABELS.size) { mutableListOf<ScanUi>() }
+    var step = 0
+    for (e in events.sortedBy { it.timestamp }) {
+        e.status?.stepIndex?.takeIf { it >= 0 }?.let { step = it }
+        val verb = scanVerb(e.description)
+        val lead = when {
+            verb != null && e.location != null -> "$verb ${e.location}"
+            verb == null && e.location != null -> "${e.description}, ${e.location}"
+            else -> e.description
+        }
+        val carrier = handoff?.carrier?.displayName?.takeIf { e.carrierCode != null }
+        rows[step] += ScanUi("$lead · ${e.timestamp.toLocalDateTime(tz).date.designFormat()}", carrier)
+    }
+    return rows
 }
 
 internal fun routeDescription(names: List<String>): String {

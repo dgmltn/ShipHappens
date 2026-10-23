@@ -16,6 +16,10 @@ private val MO = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", 
  */
 val TRACKING_STEP_LABELS = listOf("Label created", "Shipped", "In transit", "Out for delivery", "Delivered")
 
+/** The carrier line a parcel is shown under: "Amazon via Amazon Logistics" once handed off. */
+val Parcel.carrierLabel: String
+    get() = handoff?.let { "${carrier.displayName} via ${it.carrier.displayName}" } ?: carrier.displayName
+
 // kotlinx-datetime 0.8.0: monthNumber/dayOfMonth are deprecated in favor of month.number/day.
 fun LocalDate.designFormat(): String = "${WD[dayOfWeek.isoDayNumber - 1]}, ${MO[month.number - 1]} $day"
 

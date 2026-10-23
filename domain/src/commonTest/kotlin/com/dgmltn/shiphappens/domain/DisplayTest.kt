@@ -2,6 +2,7 @@ package com.dgmltn.shiphappens.domain
 
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
+import kotlin.time.Instant
 import kotlin.test.*
 
 class DisplayTest {
@@ -52,5 +53,11 @@ class DisplayTest {
 
     @Test fun designFormat_is_weekday_month_day() {
         assertEquals("Wed, Aug 19", LocalDate(2026, 8, 19).designFormat())
+    }
+
+    @Test fun carrier_label_names_the_handoff() {
+        val p = Parcel(id = "p", name = "n", trackingNumber = "1", carrier = WellKnownCarriers.AMAZON, createdAt = Instant.fromEpochMilliseconds(0))
+        assertEquals("Amazon", p.carrierLabel)
+        assertEquals("Amazon via Amazon Logistics", p.copy(handoff = Handoff(WellKnownCarriers.AMAZON_LOGISTICS, "TBA1")).carrierLabel)
     }
 }

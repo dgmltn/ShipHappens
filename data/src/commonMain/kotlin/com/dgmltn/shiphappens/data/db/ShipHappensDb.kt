@@ -10,7 +10,7 @@ import androidx.room3.migration.AutoMigrationSpec
 
 @Database(
     entities = [ParcelEntity::class, TrackingEventEntity::class, GeoCacheEntity::class],
-    version = 4,
+    version = 5,
     autoMigrations = [
         AutoMigration(from = 1, to = 2, spec = ShipHappensDb.MoveEtaTimeToWindowEnd::class),
         // v2 -> v3 adds the nullable `delayNote` column (a delay is a modifier on the status,
@@ -20,6 +20,9 @@ import androidx.room3.migration.AutoMigrationSpec
         AutoMigration(from = 2, to = 3),
         // v3 -> v4 only adds the `geo_cache` table; no existing table is touched.
         AutoMigration(from = 3, to = 4),
+        // v4 -> v5 adds the nullable handoff columns on `parcels` and `carrierCode` on
+        // `tracking_events`; plain column adds, nothing recreated.
+        AutoMigration(from = 4, to = 5),
     ],
 )
 @ConstructedBy(ShipHappensDbConstructor::class)

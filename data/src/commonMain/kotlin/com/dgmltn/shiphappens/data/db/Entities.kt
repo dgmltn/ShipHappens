@@ -18,6 +18,8 @@ data class ParcelEntity(
     val etaWindowEnd: String?,   // ISO-8601 LocalTime; the cutoff / "by" time
     val delayNote: String?,     // carrier's delay explanation; null = not delayed
     val latestLocation: String?,
+    val handoffCarrierCode: String?,    // resolved through WellKnownCarriers at read time
+    val handoffTrackingNumber: String?,
     val isArchived: Boolean,
     val archivedAt: Long?,      // epoch millis, for archived-tab ordering
     val createdAt: Long,
@@ -40,6 +42,7 @@ data class TrackingEventEntity(
     val description: String,
     val location: String?,
     val status: String?,
+    val carrierCode: String?,   // null = the parcel's own carrier
 )
 
 data class ParcelWithEvents(

@@ -109,7 +109,7 @@ class ListViewModel(
             else -> TRACKING_STEP_LABELS[effectiveStepIndex]
         }
         return ParcelCardUi(
-            id = id, name = name, carrierName = carrier.displayName, accentHex = carrier.accentHex(),
+            id = id, name = name, carrierName = carrierLabel, accentHex = carrier.accentHex(),
             statusText = statusText, delivered = delivered,
             // No ring until we have an ETA — a never-refreshed parcel has nothing to count down.
             ring = if (delivered || days == null) null else RingUi(

@@ -224,4 +224,133 @@ class ParcelRepositoryTest {
         assertEquals(0, r.observeParcels(false).first().size)
         assertNull(r.observeParcel(a.parcel.id).first())
     }
+
+    // --- Handoffs -------------------------------------------------------------------------
+
+    private val handoff = Handoff(WellKnownCarriers.AMAZON_LOGISTICS, "TBA335777783614")
+    private fun ev(iso: String, desc: String, loc: String? = null, st: TrackingStatus? = null) =
+        TrackingEvent(Instant.parse(iso), desc, loc, st)
+    private fun amazonSource(h: Handoff? = handoff) = FakeSource("amazon", detects = WellKnownCarriers.AMAZON,
+        trackResult = SourceResult.Success(TrackingSnapshot(TrackingStatus.SHIPPED, handoff = h,
+            events = listOf(ev("2026-10-22T10:00:00Z", "Shipped", st = TrackingStatus.SHIPPED)))))
+    private fun amzlSource() = FakeSource("amzl", detects = WellKnownCarriers.AMAZON_LOGISTICS,
+        trackResult = SourceResult.Success(TrackingSnapshot(TrackingStatus.OUT_FOR_DELIVERY, etaDate = LocalDate(2026, 10, 23),
+            events = listOf(ev("2026-10-23T10:00:00Z", "Out for delivery", "Vista, US", TrackingStatus.OUT_FOR_DELIVERY)))))
+
+    @Test fun refresh_follows_the_handoff_through_its_own_source_and_merges() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val amazon = amazonSource(); val amzl = amzlSource()
+        val r = repo(scope, amazon, amzl)
+        settings.setSourceConfig("amazon", SourceConfig(enabled = true))
+        settings.setSourceConfig("amzl", SourceConfig(enabled = true))
+        val added = r.addParcel("Light bulbs", "112-0087174-7649828", null) as AddResult.Added
+        assertTrue(r.refresh(added.parcel.id))
+        assertEquals(listOf("TBA335777783614"), amzl.trackedNumbers)
+        val p = r.observeParcel(added.parcel.id).first()!!
+        assertEquals(handoff, p.handoff)
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, p.status)
+        assertEquals(LocalDate(2026, 10, 23), p.etaDate)
+        assertEquals(listOf(null, "amzl"), p.events.map { it.carrierCode })
+        assertEquals("amazon", p.sourceId)
+    }
+
+    @Test fun a_secondary_failure_is_quiet_and_keeps_its_stored_rows() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val amazon = amazonSource(); val amzl = amzlSource()
+        val r = repo(scope, amazon, amzl)
+        settings.setSourceConfig("amazon", SourceConfig(enabled = true))
+        settings.setSourceConfig("amzl", SourceConfig(enabled = true))
+        val added = r.addParcel("Light bulbs", "112-0087174-7649828", null) as AddResult.Added
+        r.refresh(added.parcel.id)
+        amzl.trackResult = SourceResult.Failure(FailureReason.NOT_FOUND)
+        val summary = r.refreshAll(force = true)
+        assertEquals(0, summary.failed)
+        val p = r.observeParcel(added.parcel.id).first()!!
+        assertEquals(listOf("Shipped", "Out for delivery"), p.events.map { it.description })
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, p.status)
+    }
+
+    @Test fun a_disabled_secondary_source_still_records_the_handoff() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val amazon = amazonSource(); val amzl = amzlSource()
+        val r = repo(scope, amazon, amzl)
+        settings.setSourceConfig("amazon", SourceConfig(enabled = true))
+        val added = r.addParcel("Light bulbs", "112-0087174-7649828", null) as AddResult.Added
+        assertTrue(r.refresh(added.parcel.id))
+        assertTrue(amzl.trackedNumbers.isEmpty())
+        val p = r.observeParcel(added.parcel.id).first()!!
+        assertEquals(handoff, p.handoff)
+        assertEquals(TrackingStatus.SHIPPED, p.status)
+    }
+
+    @Test fun a_handoff_to_the_parcels_own_carrier_is_dropped() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val amazon = amazonSource(Handoff(WellKnownCarriers.AMAZON, "112-0087174-7649828")); val amzl = amzlSource()
+        val r = repo(scope, amazon, amzl)
+        settings.setSourceConfig("amazon", SourceConfig(enabled = true))
+        settings.setSourceConfig("amzl", SourceConfig(enabled = true))
+        val added = r.addParcel("Light bulbs", "112-0087174-7649828", null) as AddResult.Added
+        r.refresh(added.parcel.id)
+        assertNull(r.observeParcel(added.parcel.id).first()!!.handoff)
+        assertTrue(amzl.trackedNumbers.isEmpty())
+    }
+
+    @Test fun a_page_that_stops_printing_the_number_keeps_the_stored_handoff() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val amazon = amazonSource(); val amzl = amzlSource()
+        val r = repo(scope, amazon, amzl)
+        settings.setSourceConfig("amazon", SourceConfig(enabled = true))
+        settings.setSourceConfig("amzl", SourceConfig(enabled = true))
+        val added = r.addParcel("Light bulbs", "112-0087174-7649828", null) as AddResult.Added
+        r.refresh(added.parcel.id)
+        amazon.trackResult = SourceResult.Success(TrackingSnapshot(TrackingStatus.SHIPPED))
+        r.refresh(added.parcel.id)
+        assertEquals(handoff, r.observeParcel(added.parcel.id).first()!!.handoff)
+        assertEquals(2, amzl.trackedNumbers.size)
+    }
+
+    @Test fun a_primary_whose_rows_all_match_the_secondarys_leaves_no_stale_copies() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val amazon = amazonSource(); val amzl = amzlSource()
+        amazon.trackResult = SourceResult.Success(TrackingSnapshot(TrackingStatus.OUT_FOR_DELIVERY, handoff = handoff,
+            events = listOf(ev("2026-10-23T10:00:20Z", "Package is out for delivery.", null, TrackingStatus.OUT_FOR_DELIVERY))))
+        val r = repo(scope, amazon, amzl)
+        settings.setSourceConfig("amazon", SourceConfig(enabled = true))
+        val added = r.addParcel("Light bulbs", "112-0087174-7649828", null) as AddResult.Added
+        r.refresh(added.parcel.id)                                   // AMZL disabled: the row is stored untagged
+        settings.setSourceConfig("amzl", SourceConfig(enabled = true))
+        r.refresh(added.parcel.id)
+        val p = r.observeParcel(added.parcel.id).first()!!
+        assertEquals(listOf("Out for delivery" to "amzl"), p.events.map { it.description to it.carrierCode })
+    }
+
+    @Test fun a_secondary_failure_keeps_the_eta_it_had_reported() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val amazon = amazonSource(); val amzl = amzlSource()
+        amazon.trackResult = SourceResult.Success(TrackingSnapshot(TrackingStatus.SHIPPED, handoff = handoff, etaDate = LocalDate(2026, 10, 24)))
+        val r = repo(scope, amazon, amzl)
+        settings.setSourceConfig("amazon", SourceConfig(enabled = true))
+        settings.setSourceConfig("amzl", SourceConfig(enabled = true))
+        val added = r.addParcel("Light bulbs", "112-0087174-7649828", null) as AddResult.Added
+        r.refresh(added.parcel.id)
+        assertEquals(LocalDate(2026, 10, 23), r.observeParcel(added.parcel.id).first()!!.etaDate)
+        amzl.trackResult = SourceResult.Failure(FailureReason.NETWORK)
+        r.refresh(added.parcel.id)
+        assertEquals(LocalDate(2026, 10, 23), r.observeParcel(added.parcel.id).first()!!.etaDate)
+    }
+
+    @Test fun a_secondary_that_never_answered_does_not_hold_the_primarys_eta() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val amazon = amazonSource(); val amzl = amzlSource()
+        amzl.trackResult = SourceResult.Failure(FailureReason.NOT_FOUND)
+        amazon.trackResult = SourceResult.Success(TrackingSnapshot(TrackingStatus.SHIPPED, handoff = handoff, etaDate = LocalDate(2026, 10, 24)))
+        val r = repo(scope, amazon, amzl)
+        settings.setSourceConfig("amazon", SourceConfig(enabled = true))
+        settings.setSourceConfig("amzl", SourceConfig(enabled = true))
+        val added = r.addParcel("Light bulbs", "112-0087174-7649828", null) as AddResult.Added
+        r.refresh(added.parcel.id)
+        amazon.trackResult = SourceResult.Success(TrackingSnapshot(TrackingStatus.SHIPPED, handoff = handoff, etaDate = LocalDate(2026, 10, 25)))
+        r.refresh(added.parcel.id)
+        assertEquals(LocalDate(2026, 10, 25), r.observeParcel(added.parcel.id).first()!!.etaDate)
+    }
 }

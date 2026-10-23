@@ -22,7 +22,12 @@ data class TrackingEvent(
     val description: String,
     val location: String? = null,
     val status: TrackingStatus? = null,
+    /** Code of the carrier that reported this scan; null means the parcel's own carrier. */
+    val carrierCode: String? = null,
 )
+
+/** The carrier a parcel's own carrier says now holds it, with the number it tracks under there. */
+data class Handoff(val carrier: Carrier, val trackingNumber: String)
 
 data class TrackingSnapshot(
     val status: TrackingStatus,
@@ -33,4 +38,6 @@ data class TrackingSnapshot(
     val latestLocation: String? = null,
     /** Carrier's own explanation of a delay; null means not delayed. See StatusVocabulary. */
     val delayNote: String? = null,
+    /** The handoff the source saw on the page or in the API; null when it named none. */
+    val handoff: Handoff? = null,
 )

@@ -1,6 +1,8 @@
 package com.dgmltn.shiphappens.source.dhlecs
 
+import com.dgmltn.shiphappens.domain.Handoff
 import com.dgmltn.shiphappens.domain.TrackingStatus
+import com.dgmltn.shiphappens.domain.WellKnownCarriers
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -153,5 +155,20 @@ class DhlEcsApiParserTest {
     @Test fun garbage_returns_null() {
         assertNull(DhlEcsApiParser.parse("not json"))
         assertNull(DhlEcsApiParser.parse("""{"unrelated":true}"""))
+    }
+
+    @Test fun the_postal_partner_and_its_number_become_the_handoff() {
+        assertEquals(Handoff(WellKnownCarriers.USPS, "9261234500000000000042"), DhlEcsApiParser.parse(envelope(enRoutePackage))!!.handoff)
+    }
+
+    @Test fun a_partner_that_does_not_claim_the_number_is_no_handoff() {
+        val body = envelope("""{"status":"En Route","dspName":"USPS","deliveryConfirmationNumber":"12345","events":[]}""")
+        assertNull(DhlEcsApiParser.parse(body)!!.handoff)
+    }
+
+    @Test fun an_unknown_or_dhl_partner_is_no_handoff() {
+        assertNull(DhlEcsApiParser.parse(envelope("""{"status":"En Route","dspName":"Pigeon Post","deliveryConfirmationNumber":"9261234500000000000042","events":[]}"""))!!.handoff)
+        assertNull(DhlEcsApiParser.parse(envelope("""{"status":"En Route","dspName":"DHL eCommerce","deliveryConfirmationNumber":"9261234500000000000042","events":[]}"""))!!.handoff)
+        assertNull(DhlEcsApiParser.parse(envelope("""{"status":"En Route","events":[]}"""))!!.handoff)
     }
 }

@@ -33,6 +33,8 @@ data class Parcel(
      */
     val delayNote: String? = null,
     val latestLocation: String? = null,
+    /** The carrier this parcel was handed to, once its own carrier has named one. */
+    val handoff: Handoff? = null,
     val isArchived: Boolean = false,
     val createdAt: Instant,
     val lastRefreshedAt: Instant? = null,

@@ -12,13 +12,15 @@ fun Parcel.toEntity(archivedAt: Long? = null) = ParcelEntity(
     etaDate = etaDate?.toString(),
     etaWindowStart = etaWindowStart?.toString(), etaWindowEnd = etaWindowEnd?.toString(),
     delayNote = delayNote,
-    latestLocation = latestLocation, isArchived = isArchived, archivedAt = archivedAt,
+    latestLocation = latestLocation,
+    handoffCarrierCode = handoff?.carrier?.code, handoffTrackingNumber = handoff?.trackingNumber,
+    isArchived = isArchived, archivedAt = archivedAt,
     createdAt = createdAt.toEpochMilliseconds(), lastRefreshedAt = lastRefreshedAt?.toEpochMilliseconds(),
 )
 
 fun TrackingEvent.toEntity(parcelId: String) = TrackingEventEntity(
     parcelId = parcelId, timestamp = timestamp.toEpochMilliseconds(),
-    description = description, location = location, status = status?.name,
+    description = description, location = location, status = status?.name, carrierCode = carrierCode,
 )
 
 fun ParcelWithEvents.toDomain(): Parcel = Parcel(
@@ -37,10 +39,14 @@ fun ParcelWithEvents.toDomain(): Parcel = Parcel(
             timestamp = Instant.fromEpochMilliseconds(it.timestamp),
             description = it.description, location = it.location,
             status = it.status?.let { s -> runCatching { TrackingStatus.valueOf(s) }.getOrNull() },
+            carrierCode = it.carrierCode,
         )
     },
     delayNote = parcel.delayNote,
-    latestLocation = parcel.latestLocation, isArchived = parcel.isArchived,
+    latestLocation = parcel.latestLocation,
+    handoff = parcel.handoffCarrierCode?.let(WellKnownCarriers::byCode)
+        ?.let { c -> parcel.handoffTrackingNumber?.let { Handoff(c, it) } },
+    isArchived = parcel.isArchived,
     createdAt = Instant.fromEpochMilliseconds(parcel.createdAt),
     lastRefreshedAt = parcel.lastRefreshedAt?.let(Instant::fromEpochMilliseconds),
 )

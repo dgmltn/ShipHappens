@@ -24,12 +24,20 @@ class SourceRegistry(
 
     /** Pure resolution against caller-supplied configs, so UI can evaluate it reactively. */
     fun sourceFor(parcel: Parcel, configs: Map<String, SourceConfig>): TrackingSource? {
-        // Only resolve among sources that actually implement live tracking — stub carrier
-        // sources (implemented = false) must not intercept parcels.
-        val enabled = sources.filter { configs[it.descriptor.id]?.enabled == true && it.descriptor.implemented }
+        val enabled = liveSources(configs)
         parcel.sourceId?.let { pinned -> enabled.firstOrNull { it.descriptor.id == pinned }?.let { return it } }
         return enabled.firstOrNull { it.detectCarrier(parcel.trackingNumber) != null }
     }
+
+    /** The enabled source that claims a bare number, such as one a carrier handed a parcel to. */
+    suspend fun sourceForNumber(trackingNumber: String): TrackingSource? =
+        liveSources(settingsRepository.settings.first().sourceConfigs)
+            .firstOrNull { it.detectCarrier(trackingNumber) != null }
+
+    // Only sources that actually implement live tracking — stub carrier sources
+    // (implemented = false) must not intercept parcels.
+    private fun liveSources(configs: Map<String, SourceConfig>): List<TrackingSource> =
+        sources.filter { configs[it.descriptor.id]?.enabled == true && it.descriptor.implemented }
 
     suspend fun detectCarrier(trackingNumber: String): Carrier? =
         WellKnownCarriers.detect(trackingNumber)

@@ -70,4 +70,25 @@ class SourceRegistryTest {
         assertEquals(dhl, reg.detectCarrier("XX99887766554433"))
         scope.cancel()
     }
+
+    @Test fun sourceForNumber_picks_the_enabled_source_that_claims_it() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val s = settings(scope)
+        val amzl = FakeSource("amzl", detects = WellKnownCarriers.AMAZON_LOGISTICS)
+        val ups = FakeSource("ups", detects = null)
+        s.setSourceConfig("amzl", SourceConfig(enabled = true))
+        s.setSourceConfig("ups", SourceConfig(enabled = true))
+        assertEquals("amzl", SourceRegistry(listOf(ups, amzl), s).sourceForNumber("TBA335777783614")!!.descriptor.id)
+        scope.cancel()
+    }
+
+    @Test fun sourceForNumber_ignores_disabled_and_stub_sources() = runTest {
+        val scope = CoroutineScope(coroutineContext + SupervisorJob())
+        val s = settings(scope)
+        val disabled = FakeSource("off", detects = WellKnownCarriers.AMAZON_LOGISTICS)
+        val stub = FakeSource("stub", detects = WellKnownCarriers.AMAZON_LOGISTICS, implemented = false)
+        s.setSourceConfig("stub", SourceConfig(enabled = true))
+        assertNull(SourceRegistry(listOf(disabled, stub), s).sourceForNumber("TBA335777783614"))
+        scope.cancel()
+    }
 }

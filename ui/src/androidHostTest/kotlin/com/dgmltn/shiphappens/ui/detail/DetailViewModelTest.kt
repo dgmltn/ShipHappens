@@ -325,4 +325,47 @@ class DetailViewModelTest {
         assertEquals("Route: A → B → … → F → G, 7 stops", routeDescription(listOf("A", "B", "C", "D", "E", "F", "G")))
         assertEquals("Route: A, 1 stop", routeDescription(listOf("A")))
     }
+
+    @Test fun scans_sit_under_their_step_oldest_first_with_verb_city_and_day() {
+        val tz = TimeZone.UTC
+        val rows = scanRows(listOf(
+            TrackingEvent(Instant.parse("2026-10-22T10:00:00Z"), "Shipped", null, TrackingStatus.SHIPPED),
+            TrackingEvent(Instant.parse("2026-10-22T18:00:00Z"), "Arrived at USPS Regional Facility", "San Francisco, CA", TrackingStatus.IN_TRANSIT),
+            TrackingEvent(Instant.parse("2026-10-23T02:00:00Z"), "Departed USPS Regional Facility", "San Francisco, CA", TrackingStatus.IN_TRANSIT),
+            TrackingEvent(Instant.parse("2026-10-23T09:00:00Z"), "Arrived at USPS Regional Facility", "San Diego, CA", TrackingStatus.IN_TRANSIT),
+        ), handoff = null, tz = tz)
+        assertEquals(listOf("Shipped · Thu, Oct 22"), rows[1].map { it.text })
+        assertEquals(listOf("Arrived San Francisco, CA · Thu, Oct 22", "Departed San Francisco, CA · Fri, Oct 23", "Arrived San Diego, CA · Fri, Oct 23"), rows[2].map { it.text })
+        assertTrue(rows[0].isEmpty() && rows[3].isEmpty() && rows[4].isEmpty())
+        assertTrue(rows.flatten().all { it.carrier == null })
+    }
+
+    @Test fun an_unclassified_scan_follows_the_last_classified_one() {
+        val rows = scanRows(listOf(
+            TrackingEvent(Instant.parse("2026-10-22T10:00:00Z"), "Mystery scan", "Reno, NV", null),
+            TrackingEvent(Instant.parse("2026-10-22T12:00:00Z"), "In transit", "Reno, NV", TrackingStatus.IN_TRANSIT),
+            TrackingEvent(Instant.parse("2026-10-22T13:00:00Z"), "Weather delay", "Reno, NV", null),
+        ), handoff = null, tz = TimeZone.UTC)
+        assertEquals(listOf("Mystery scan, Reno, NV · Thu, Oct 22"), rows[0].map { it.text })
+        assertEquals(listOf("In transit, Reno, NV · Thu, Oct 22", "Weather delay, Reno, NV · Thu, Oct 22"), rows[2].map { it.text })
+    }
+
+    @Test fun secondary_scans_carry_a_carrier_tag_only_when_the_parcel_has_a_handoff() {
+        val ev = TrackingEvent(Instant.parse("2026-10-23T10:00:00Z"), "Out for delivery", "Vista, US", TrackingStatus.OUT_FOR_DELIVERY, carrierCode = "amzl")
+        val h = Handoff(WellKnownCarriers.AMAZON_LOGISTICS, "TBA1")
+        assertEquals("Amazon Logistics", scanRows(listOf(ev), h, TimeZone.UTC)[3].single().carrier)
+        assertNull(scanRows(listOf(ev), null, TimeZone.UTC)[3].single().carrier)
+    }
+
+    @Test fun a_handed_off_parcel_shows_the_label_and_the_second_number() = runTest {
+        val p = base(TrackingStatus.IN_TRANSIT, LocalDate(2026, 7, 14)).copy(
+            carrier = WellKnownCarriers.AMAZON, trackingNumber = "112-0087174-7649828",
+            handoff = Handoff(WellKnownCarriers.AMAZON_LOGISTICS, "TBA335777783614"))
+        vm(p)
+        db.parcelDao().upsertParcel(p.toEntity())
+        val s = awaitState { it.loaded && it.secondary != null }
+        assertEquals("Amazon via Amazon Logistics", s.carrierLabel)
+        assertEquals("Amazon", s.carrierName)
+        assertEquals(SecondaryNumberUi("Amazon Logistics", "TBA335777783614"), s.secondary)
+    }
 }

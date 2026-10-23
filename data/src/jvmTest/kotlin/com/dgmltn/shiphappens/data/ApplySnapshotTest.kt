@@ -4,6 +4,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room3.Room
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import com.dgmltn.shiphappens.data.db.ShipHappensDb
+import com.dgmltn.shiphappens.data.db.toDomain
 import com.dgmltn.shiphappens.data.db.toEntity
 import com.dgmltn.shiphappens.data.settings.SettingsRepository
 import com.dgmltn.shiphappens.data.source.SourceRegistry
@@ -157,5 +158,46 @@ class ApplySnapshotTest {
         assertEquals(TrackingStatus.DELIVERED.name, row.parcel.status)
         assertEquals(1, row.events.size)
         assertEquals("Picked up", row.events[0].description)
+    }
+
+    @Test fun a_primary_only_snapshot_keeps_the_secondarys_rows() = runTest {
+        val r = repo(backgroundScope)
+        db.parcelDao().upsertParcel(parcel.copy(handoff = Handoff(WellKnownCarriers.AMAZON_LOGISTICS, "TBA335777783614")).toEntity())
+        db.parcelDao().replaceEvents("p1", listOf(
+            TrackingEvent(Instant.parse("2026-07-10T08:00:00Z"), "Shipped", null, TrackingStatus.SHIPPED).toEntity("p1"),
+            TrackingEvent(Instant.parse("2026-07-11T08:00:00Z"), "Out for delivery", "Vista, US", TrackingStatus.OUT_FOR_DELIVERY, carrierCode = "amzl").toEntity("p1"),
+        ))
+        r.applySnapshot("p1", TrackingSnapshot(TrackingStatus.IN_TRANSIT,
+            events = listOf(TrackingEvent(Instant.parse("2026-07-10T20:00:00Z"), "In transit", null, TrackingStatus.IN_TRANSIT))), sourceId = "amazon")
+        val rows = db.parcelDao().getById("p1")!!.events.sortedBy { it.timestamp }
+        assertEquals(listOf("In transit" to null, "Out for delivery" to "amzl"), rows.map { it.description to it.carrierCode })
+    }
+
+    @Test fun a_snapshot_that_reports_a_handoff_persists_it() = runTest {
+        val r = repo(backgroundScope)
+        db.parcelDao().upsertParcel(parcel.toEntity())
+        val h = Handoff(WellKnownCarriers.AMAZON_LOGISTICS, "TBA335777783614")
+        r.applySnapshot("p1", TrackingSnapshot(TrackingStatus.IN_TRANSIT, handoff = h), sourceId = "amazon")
+        assertEquals(h, db.parcelDao().getById("p1")!!.toDomain().handoff)
+    }
+
+    @Test fun a_primary_only_snapshot_on_a_handed_off_parcel_folds_in_the_stored_secondary_rows() = runTest {
+        val r = repo(backgroundScope)
+        val h = Handoff(WellKnownCarriers.AMAZON_LOGISTICS, "TBA335777783614")
+        db.parcelDao().upsertParcel(parcel.copy(status = TrackingStatus.OUT_FOR_DELIVERY, etaDate = LocalDate(2026, 7, 12), handoff = h).toEntity())
+        db.parcelDao().replaceEvents("p1", listOf(
+            TrackingEvent(Instant.parse("2026-07-10T08:00:00Z"), "Shipped", null, TrackingStatus.SHIPPED).toEntity("p1"),
+            TrackingEvent(Instant.parse("2026-07-12T08:00:00Z"), "Out for delivery", "Vista, US", TrackingStatus.OUT_FOR_DELIVERY, carrierCode = "amzl").toEntity("p1"),
+        ))
+        // The order page lags the delivering carrier: an older stage, a later promise, and a twin of the secondary's row.
+        r.applySnapshot("p1", TrackingSnapshot(TrackingStatus.SHIPPED, etaDate = LocalDate(2026, 7, 13), handoff = h,
+            events = listOf(
+                TrackingEvent(Instant.parse("2026-07-10T08:00:00Z"), "Shipped", null, TrackingStatus.SHIPPED),
+                TrackingEvent(Instant.parse("2026-07-12T08:00:00Z"), "Package is out for delivery.", null, TrackingStatus.OUT_FOR_DELIVERY),
+            )), sourceId = "amazon")
+        val row = db.parcelDao().getById("p1")!!
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY.name, row.parcel.status)
+        assertEquals("2026-07-12", row.parcel.etaDate)
+        assertEquals(listOf("Shipped" to null, "Out for delivery" to "amzl"), row.events.sortedBy { it.timestamp }.map { it.description to it.carrierCode })
     }
 }

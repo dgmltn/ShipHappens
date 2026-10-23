@@ -57,14 +57,24 @@ function(page) {
   }
 
   // The OUI order page preloads each card's "See all tracking updates" bottom sheet, hidden,
-  // with the full event trail: a year-less date header row, then rows of time + description +
-  // italic location (device capture 2026-10-23). The card's a-sheet declaration names the
-  // sheet's DOM id; the id's index suffix is the fallback.
+  // with the full event trail: a "Tracking ID: …" row naming the delivering carrier's number,
+  // then a year-less date header row, then rows of time + description + italic location
+  // (device capture 2026-10-23). The card's a-sheet declaration names the sheet's DOM id; the
+  // id's index suffix is the fallback.
   function trackingSheet(card, k) {
     var decl = card.querySelector('[data-a-sheet]');
     var id = null;
     if (decl) { try { id = JSON.parse(decl.getAttribute('data-a-sheet')).preloadDomId; } catch (e) {} }
     return (id && document.getElementById(id)) || document.getElementById('od-tracking-sheet-content-' + k);
+  }
+  function sheetTrackingId(sheet) {
+    if (!sheet) return null;
+    var rows = sheet.querySelectorAll('.a-row');
+    for (var i = 0; i < rows.length; i++) {
+      var t = page.clean(rows[i]);
+      if (t && t.indexOf('Tracking ID') >= 0) return t;
+    }
+    return null;
   }
   function sheetEvents(sheet) {
     var events = [];
@@ -95,8 +105,9 @@ function(page) {
     // the current milestone with an `active` class; its label is the shipment's stage, which
     // the headline no longer states (device capture 2026-09-12).
     var stage = page.clean(cards[k].querySelector('.od-milestone-label.active'));
+    var sheet = trackingSheet(cards[k], k);
     out.push({head: head, href: (link && link.href) ? link.href : null, stage: stage,
-              events: sheetEvents(trackingSheet(cards[k], k))});
+              events: sheetEvents(sheet), handoffText: sheetTrackingId(sheet)});
   }
   var borrowedLink = false;
   if (out.length === 1 && !out[0].stage) {
