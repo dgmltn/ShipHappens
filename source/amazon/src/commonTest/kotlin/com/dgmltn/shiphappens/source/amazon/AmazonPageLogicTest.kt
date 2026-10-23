@@ -529,4 +529,28 @@ class AmazonPageLogicTest {
         val s = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(card), todayIso = "2026-10-23"), pacific).snapshotOrNull()!!
         assertEquals(Handoff(WellKnownCarriers.AMAZON_LOGISTICS, "TBA335777783614"), s.handoff)
     }
+
+    // The order summary prints "Order placed October 21, 2026" (device dump 2026-10-23); it is
+    // the only dated "label created" moment an Amazon order ever shows.
+    @Test fun the_order_placed_line_becomes_a_label_created_scan() {
+        val e = amazonOrderPlaced("Order placed October 21, 2026", pacific)!!
+        assertEquals(LocalDateTime(2026, 10, 21, 0, 0).toInstant(pacific), e.timestamp)
+        assertEquals("Order placed", e.description)
+        assertNull(e.location)
+        assertEquals(TrackingStatus.LABEL_CREATED, e.status)
+        assertNull(amazonOrderPlaced("Order placed", pacific))
+        assertNull(amazonOrderPlaced(null, pacific))
+    }
+
+    @Test fun the_order_placed_scan_leads_the_timeline_without_setting_the_status() {
+        val card = DomCard(head = "Arriving today", stage = "Out for delivery", events = sheetEvents)
+        val raw = DomRaw(kind = "cards", cards = listOf(card), todayIso = "2026-10-23", createdText = "Order placed October 21, 2026")
+        val s = resolveAmazonCards(raw, pacific).snapshotOrNull()!!
+        assertEquals("Order placed", s.events.first().description)
+        assertEquals(sheetEvents.size + 1, s.events.size)
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, s.status)
+        val bare = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(DomCard(head = "Arriving today")), todayIso = "2026-10-23", createdText = "Order placed October 21, 2026"), pacific).snapshotOrNull()!!
+        assertEquals(TrackingStatus.UNKNOWN, bare.status)
+        assertEquals(listOf("Order placed"), bare.events.map { it.description })
+    }
 }

@@ -78,6 +78,11 @@ class AmazonWebSpecTest {
         assertTrue(AmazonWebSpec.extractionJs.contains("Tracking ID"))
     }
 
+    @Test fun extraction_js_reads_the_order_placed_line() {
+        assertTrue(AmazonWebSpec.extractionJs.contains("createdText:"))
+        assertTrue(AmazonWebSpec.extractionJs.contains("Order placed"))
+    }
+
     @Test fun extraction_js_reports_why_it_gave_up() {
         // page:'empty' alone can't be debugged off-device — each bail-out names its branch.
         assertTrue(AmazonWebSpec.extractionJs.contains("noShipmentCards"))

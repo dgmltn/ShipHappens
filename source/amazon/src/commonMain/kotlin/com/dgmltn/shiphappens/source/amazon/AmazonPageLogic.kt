@@ -1,6 +1,7 @@
 package com.dgmltn.shiphappens.source.amazon
 
 import com.dgmltn.shiphappens.domain.Handoff
+import com.dgmltn.shiphappens.domain.TrackingEvent
 import com.dgmltn.shiphappens.domain.TrackingStatus
 import com.dgmltn.shiphappens.domain.WellKnownCarriers
 import com.dgmltn.shiphappens.source.webview.BaseKeywords
@@ -12,7 +13,9 @@ import com.dgmltn.shiphappens.source.webview.StatusVocabulary
 import com.dgmltn.shiphappens.source.webview.TrackerPageRules
 import com.dgmltn.shiphappens.source.webview.assembleSnapshot
 import com.dgmltn.shiphappens.source.webview.headlineThenNewestEvent
+import com.dgmltn.shiphappens.source.webview.eventAt
 import com.dgmltn.shiphappens.source.webview.parseDayWithoutYear
+import com.dgmltn.shiphappens.source.webview.parseMonthNameDate
 import com.dgmltn.shiphappens.source.webview.parseRelativeDay
 import com.dgmltn.shiphappens.source.webview.resolveTrackerPage
 import com.dgmltn.shiphappens.source.webview.toTrackingEvent
@@ -127,6 +130,18 @@ internal fun pickShipmentCard(cards: List<DomCard>): DomCard? {
 private val TRACKING_ID = Regex("""Tracking ID:?\s*([A-Za-z0-9]+)""", RegexOption.IGNORE_CASE)
 
 /**
+ * The order summary's "Order placed October 21, 2026" as the order's first scan: the only
+ * dated label-created moment an Amazon order ever shows. Pinned to midnight in [zone], since
+ * the page prints no time.
+ */
+internal fun amazonOrderPlaced(text: String?, zone: TimeZone): TrackingEvent? {
+    val t = text ?: return null
+    if (!t.contains("order placed", ignoreCase = true)) return null
+    val date = parseMonthNameDate(t) ?: return null
+    return TrackingEvent(eventAt(date, null, zone), "Order placed", null, TrackingStatus.LABEL_CREATED)
+}
+
+/**
  * The carrier the tracking sheet's "Tracking ID" row hands the parcel to. Only a number a
  * well-known carrier other than Amazon claims counts (an AMZL `TBA…` today); anything else is
  * no handoff rather than a guess.
@@ -161,7 +176,10 @@ internal fun resolveAmazonCards(raw: DomRaw, zone: TimeZone = TimeZone.currentSy
     // signal (the rail's active step, the newest event row, or delivered/shipped/exception
     // phrasing) supplies one.
     val status = pick.stageStatus()
-    val coarse = if (status != null || eta != null || events.isNotEmpty()) {
+    // The order-placed scan rides along as history only: an order's existence says nothing
+    // about whether it has shipped, so it never supplies the stage.
+    val placed = amazonOrderPlaced(raw.createdText, zone)
+    val coarse = if (status != null || eta != null || events.isNotEmpty() || placed != null) {
         assembleSnapshot(
             vocabulary = AMAZON_VOCABULARY,
             headline = null,
@@ -170,6 +188,7 @@ internal fun resolveAmazonCards(raw: DomRaw, zone: TimeZone = TimeZone.currentSy
             delayNote = headlineThenNewestEvent(AMAZON_VOCABULARY, pick.head, events),
             statusFallback = status,
         ).let { if (status != null) it.copy(status = status) else it }
+            .let { s -> s.copy(events = (listOfNotNull(placed) + s.events).sortedBy { it.timestamp }) }
             .copy(handoff = amazonHandoff(pick.handoffText))
     } else null
     val href = pick.href

@@ -118,7 +118,13 @@ function(page) {
     var links = document.querySelectorAll('a[href*="progress-tracker"], a[href*="ship-track"]');
     if (links.length === 1 && links[0].href) { out[0].href = links[0].href; borrowedLink = true; }
   }
-  var c = page.raw('cards', {cards: out});
+  // The order summary's "Order placed <month day, year>" line is the order's only dated start.
+  var createdText = null;
+  var leaves = document.querySelectorAll('span, div');
+  for (var p = 0; p < leaves.length; p++) {
+    if (!leaves[p].children.length && /order placed/i.test(leaves[p].textContent || '')) { createdText = page.clean(leaves[p]); break; }
+  }
+  var c = page.raw('cards', {cards: out, createdText: createdText});
   if (borrowedLink) c.why = 'pageLevelLinkFallback';
   c.links = page.probe('a[href*="progress-tracker"]', 'a[href*="ship-track"]');
   c.sheets = page.probe('[id^="od-tracking-sheet-content-"]', '.od-tracking-event-description-column');

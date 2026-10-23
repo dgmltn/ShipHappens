@@ -50,6 +50,9 @@ data class DomRaw(
      *  against it, and resolving in Kotlin keeps that arithmetic under test. */
     val todayIso: String? = null,
     val events: List<DomRawEvent> = emptyList(),
+    /** Verbatim text naming when the shipment came into being ("Order placed October 21, 2026"),
+     *  for pages that print it outside the event list; the provider turns it into a scan. */
+    val createdText: String? = null,
 )
 
 /** One shipment card from a list page: its status headline and detail-page link, unclassified.
