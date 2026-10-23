@@ -116,8 +116,8 @@ class PayloadRouter(private val spec: WebProviderSpec) {
         val payload = runCatching { json.decodeFromString<BridgePayload>(payloadJson) }.getOrNull()
             ?: return RouteResult.Unparsed
         return when (payload.kind) {
-            "api" -> spec.parseApi(payload.url, payload.body)
-                ?.let { RouteResult.Tracking(it) } ?: RouteResult.Unparsed
+            "api" -> spec.parseApi(payload.url, payload.body)?.let { RouteResult.Tracking(it) }
+                ?: if (spec.apiNotFound(payload.body)) RouteResult.NotFound else RouteResult.Unparsed
             "dom" -> {
                 val dom = runCatching { json.decodeFromString<DomExtraction>(payload.body) }.getOrNull()
                     ?: return RouteResult.Unparsed

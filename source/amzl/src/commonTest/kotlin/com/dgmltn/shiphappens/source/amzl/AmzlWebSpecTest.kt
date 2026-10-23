@@ -9,6 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class AmzlWebSpecTest {
 
@@ -17,6 +18,10 @@ class AmzlWebSpecTest {
             "https://track.amazon.com/tracking/TBA333593378975?trackingId=TBA333593378975",
             AmzlWebSpec.trackingUrl("tba 3335-9337 8975"),
         )
+    }
+
+    @Test fun the_spec_ends_a_scrape_on_the_apis_not_found_error() {
+        assertTrue(AmzlWebSpec.apiNotFound("""{"progressTracker":"{\"errors\":[{\"errorCode\":\"TRACKING_ID_NOT_FOUND\"}]}"}"""))
     }
 
     @Test fun origin_rules_are_confined_to_the_tracking_subdomain() {

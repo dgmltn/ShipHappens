@@ -48,6 +48,12 @@ class WebProviderSpec(
     val extraChallengeMarkers: List<String> = emptyList(),
     val parseApi: (url: String?, body: String) -> TrackingSnapshot? = { _, _ -> null },
     /**
+     * Whether an API body [parseApi] could not read is the carrier saying it doesn't know the
+     * number (an in-band error on HTTP 200). True ends the scrape as NotFound at once instead
+     * of waiting for a DOM fallback that may never say so.
+     */
+    val apiNotFound: (body: String) -> Boolean = { false },
+    /**
      * Quiescence delay between onPageFinished and the extraction run. The default suits pages
      * that render server-side or hydrate quickly; a heavy SPA that client-routes after load
      * (fedex.com takes ~10s to land on its tracking view) needs more, or the extractor reads an

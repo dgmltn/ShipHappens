@@ -15,6 +15,7 @@ import kotlin.test.assertTrue
 internal fun testSpec(
     parseApi: (String?, String) -> TrackingSnapshot? = { _, _ -> null },
     parseRaw: (DomRaw) -> PageOutcome? = { null },
+    apiNotFound: (String) -> Boolean = { false },
 ) = WebProviderSpec(
     carrier = Carrier("test", "Test", numberPattern = Regex("^T\\d{6}$")),
     cookieDomain = "example.com",
@@ -23,6 +24,7 @@ internal fun testSpec(
     apiUrlPatterns = listOf(".*example\\.com/api/track.*"),
     parseApi = parseApi,
     parseRaw = parseRaw,
+    apiNotFound = apiNotFound,
     sourceId = "test",
 )
 
@@ -38,6 +40,13 @@ class PayloadRouterTest {
         }))
         val result = router.route("""{"kind":"api","url":"https://www.example.com/api/track?x=1","body":"{...}"}""")
         assertEquals(TrackingStatus.IN_TRANSIT, assertIs<RouteResult.Tracking>(result).snapshot.status)
+    }
+
+    @Test fun an_api_body_the_provider_recognizes_as_not_found_routes_not_found() {
+        // An in-band "unknown number" on HTTP 200 must end the scrape, not wait out the timeout.
+        val router = PayloadRouter(testSpec(apiNotFound = { body -> "NOT_FOUND" in body }))
+        assertIs<RouteResult.NotFound>(router.route("""{"kind":"api","url":"u","body":"{\"errorCode\":\"NOT_FOUND\"}"}"""))
+        assertIs<RouteResult.Unparsed>(router.route("""{"kind":"api","url":"u","body":"{\"errorCode\":\"OTHER\"}"}"""))
     }
 
     @Test fun api_payload_parse_failure_is_unparsed() {

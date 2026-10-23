@@ -9,6 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 // Live capture 2026-08-11, TBA333593378975 (pre-first-scan package: label created, ETA Aug 13).
@@ -49,6 +50,12 @@ class AmzlApiParserTest {
 
     @Test fun not_found_error_body_returns_null() {
         assertNull(AmzlApiParser.parse(NOT_FOUND_FIXTURE))
+    }
+
+    @Test fun not_found_error_body_is_recognized_as_not_found() {
+        assertTrue(AmzlApiParser.isNotFound(NOT_FOUND_FIXTURE))
+        assertFalse(AmzlApiParser.isNotFound(FIXTURE))
+        assertFalse(AmzlApiParser.isNotFound("junk"))
     }
 
     @Test fun summary_status_vocabulary_maps_to_canonical() {

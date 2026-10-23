@@ -72,12 +72,17 @@ import kotlinx.serialization.json.Json
 object AmzlApiParser {
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** True when the tracker API says it doesn't know the number. */
+    fun isNotFound(body: String): Boolean =
+        runCatching { json.decodeFromString<AmzlEnvelope>(body) }.getOrNull()?.progressTracker
+            ?.let { runCatching { json.decodeFromString<AmzlProgressTracker>(it) }.getOrNull() }
+            ?.errors?.any { it.errorCode == "TRACKING_ID_NOT_FOUND" } == true
+
     fun parse(body: String): TrackingSnapshot? {
         val envelope = runCatching { json.decodeFromString<AmzlEnvelope>(body) }.getOrNull() ?: return null
         val tracker = envelope.progressTracker
             ?.let { runCatching { json.decodeFromString<AmzlProgressTracker>(it) }.getOrNull() }
-        // TRACKING_ID_NOT_FOUND arrives as an in-band error on HTTP 200; parseApi can only say
-        // snapshot-or-null, so null it is — the DOM fallback owns the NotFound outcome.
+        // Errors (TRACKING_ID_NOT_FOUND) arrive in-band on HTTP 200; [isNotFound] names them.
         if (tracker == null || tracker.errors.isNotEmpty()) return null
         val history = envelope.eventHistory
             ?.let { runCatching { json.decodeFromString<AmzlEventHistoryDoc>(it) }.getOrNull() }

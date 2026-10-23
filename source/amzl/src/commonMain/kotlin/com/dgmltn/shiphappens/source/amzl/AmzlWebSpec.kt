@@ -71,6 +71,7 @@ val AmzlWebSpec = WebProviderSpec(
     ),
     extractionJs = AMZL_EXTRACTION_JS,
     parseApi = { _, body -> AmzlApiParser.parse(body) },
+    apiNotFound = AmzlApiParser::isNotFound,
     parseRaw = { resolveTrackerPage(it, AMZL_PAGE) },
 )
 
