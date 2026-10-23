@@ -102,6 +102,14 @@ class AmazonPageLogicTest {
             resolveTrackerPage(DomRaw(kind = "tracker", statusText = "Not yet shipped"), AMAZON_PAGE, TimeZone.UTC).snapshotOrNull()?.status)
     }
 
+    @Test fun the_order_pages_movement_scans_are_in_transit() {
+        // Device capture 2026-10-23: the sheet's first two rows named no stage and fell under
+        // "Label created" on the detail rail.
+        assertEquals(TrackingStatus.IN_TRANSIT, AMAZON_VOCABULARY.classify("Package left the shipper facility"))
+        assertEquals(TrackingStatus.IN_TRANSIT, AMAZON_VOCABULARY.classify("Package arrived at a carrier facility."))
+        assertEquals(TrackingStatus.DELIVERED, AMAZON_VOCABULARY.classify("Package delivered near the front door or porch."))
+    }
+
     @Test fun genuine_transit_phrasing_still_classifies_in_transit() {
         assertEquals(TrackingStatus.IN_TRANSIT, AMAZON_VOCABULARY.classify("Package is on the way"))
         assertEquals(TrackingStatus.IN_TRANSIT, AMAZON_VOCABULARY.classify("In transit to next facility"))

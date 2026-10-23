@@ -53,7 +53,7 @@ internal val AMAZON_VOCABULARY = StatusVocabulary(
         ),
         labelCreated = listOf("ordered", "order placed", "preparing for shipment"),
         shipped = listOf("shipped", "dispatched", "picked up"),
-        inTransit = listOf("in transit", "on the way", "on its way", "at carrier"),
+        inTransit = listOf("in transit", "on the way", "on its way", "at carrier", "at a carrier", "left the shipper"),
         delayed = listOf("delayed", "running late", "now expected"),
     ),
     base = BaseKeywords.None,
