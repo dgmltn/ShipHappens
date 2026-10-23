@@ -19,7 +19,9 @@ import org.koin.core.module.Module
 // page.todayIso — see AmazonPageLogic.kt and TrackerPageResolver.kt. Live QA (2026-09-10) found
 // the order-details cards renamed to an "OUI"-suffixed component ('shipmentCardOUI'); the class
 // selectors stay as fallbacks for older/A-B layouts. Same live QA found the OUI card carries no
-// tracker anchor of its own; the single page-level link is used when it's unambiguous.
+// tracker anchor of its own; the single page-level link is used when it's unambiguous. The
+// tracker hop redirects straight back here, so the card's event rows come from the order page's
+// own preloaded tracking sheet (2026-10-23) and the tracker branch below only serves older layouts.
 private val AMAZON_EXTRACTION_JS = """
 function(page) {
   var href = location.href;
@@ -54,6 +56,34 @@ function(page) {
     return r;
   }
 
+  // The OUI order page preloads each card's "See all tracking updates" bottom sheet, hidden,
+  // with the full event trail: a year-less date header row, then rows of time + description +
+  // italic location (device capture 2026-10-23). The card's a-sheet declaration names the
+  // sheet's DOM id; the id's index suffix is the fallback.
+  function trackingSheet(card, k) {
+    var decl = card.querySelector('[data-a-sheet]');
+    var id = null;
+    if (decl) { try { id = JSON.parse(decl.getAttribute('data-a-sheet')).preloadDomId; } catch (e) {} }
+    return (id && document.getElementById(id)) || document.getElementById('od-tracking-sheet-content-' + k);
+  }
+  function sheetEvents(sheet) {
+    var events = [];
+    if (!sheet) return events;
+    var rows = sheet.querySelectorAll('.a-row.a-spacing-medium');
+    var day = null;
+    for (var i = 0; i < rows.length; i++) {
+      var desc = rows[i].querySelector('.od-tracking-event-description-column');
+      if (!desc) { day = page.clean(rows[i]); continue; }
+      var msg = page.clean(desc.querySelector('span'));
+      if (!msg) continue;
+      var timeText = page.clean(rows[i].querySelector('.od-vertical-line-wrapper span:not(.od-vertical-line)'));
+      events.push({whenText: (day || '') + ' ' + (timeText || ''),
+                   description: msg,
+                   location: page.clean(desc.querySelector('.a-text-italic')) || null});
+    }
+    return events;
+  }
+
   var cards = document.querySelectorAll('[data-component="shipmentCard"], [data-component="shipmentCardOUI"]');
   if (!cards.length) cards = document.querySelectorAll('.shipment, [class*="shipment-info-container"], [data-component="shipments"] .a-box');
   var out = [];
@@ -65,7 +95,8 @@ function(page) {
     // the current milestone with an `active` class; its label is the shipment's stage, which
     // the headline no longer states (device capture 2026-09-12).
     var stage = page.clean(cards[k].querySelector('.od-milestone-label.active'));
-    out.push({head: head, href: (link && link.href) ? link.href : null, stage: stage});
+    out.push({head: head, href: (link && link.href) ? link.href : null, stage: stage,
+              events: sheetEvents(trackingSheet(cards[k], k))});
   }
   var borrowedLink = false;
   if (out.length === 1 && !out[0].stage) {
@@ -79,6 +110,7 @@ function(page) {
   var c = page.raw('cards', {cards: out});
   if (borrowedLink) c.why = 'pageLevelLinkFallback';
   c.links = page.probe('a[href*="progress-tracker"]', 'a[href*="ship-track"]');
+  c.sheets = page.probe('[id^="od-tracking-sheet-content-"]', '.od-tracking-event-description-column');
   if (!out.length) {
     c.why = 'noShipmentCards';
     c.url = href;

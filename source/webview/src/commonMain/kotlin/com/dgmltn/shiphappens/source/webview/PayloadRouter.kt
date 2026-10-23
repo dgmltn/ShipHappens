@@ -61,6 +61,9 @@ data class DomCard(
     /** The active step's label when the card shows a progress rail ("Out for delivery"); the
      *  rail's other labels are always in the DOM too, so only the marked one is sent. */
     val stage: String? = null,
+    /** Event rows a list page shows for this card (Amazon's preloaded "tracking updates" sheet),
+     *  for pages whose detail link never yields a tracker page of its own. */
+    val events: List<DomRawEvent> = emptyList(),
 )
 
 /** One event row. [timestamp] is ISO-8601 when the page's own date context lets the JS normalize

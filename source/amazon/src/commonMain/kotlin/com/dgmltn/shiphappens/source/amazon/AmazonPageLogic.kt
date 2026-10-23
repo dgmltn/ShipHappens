@@ -1,6 +1,5 @@
 package com.dgmltn.shiphappens.source.amazon
 
-import com.dgmltn.shiphappens.domain.TrackingSnapshot
 import com.dgmltn.shiphappens.domain.TrackingStatus
 import com.dgmltn.shiphappens.source.webview.BaseKeywords
 import com.dgmltn.shiphappens.source.webview.DomCard
@@ -9,11 +8,15 @@ import com.dgmltn.shiphappens.source.webview.PageOutcome
 import com.dgmltn.shiphappens.source.webview.StatusKeywords
 import com.dgmltn.shiphappens.source.webview.StatusVocabulary
 import com.dgmltn.shiphappens.source.webview.TrackerPageRules
+import com.dgmltn.shiphappens.source.webview.assembleSnapshot
+import com.dgmltn.shiphappens.source.webview.headlineThenNewestEvent
 import com.dgmltn.shiphappens.source.webview.parseDayWithoutYear
 import com.dgmltn.shiphappens.source.webview.parseRelativeDay
 import com.dgmltn.shiphappens.source.webview.resolveTrackerPage
+import com.dgmltn.shiphappens.source.webview.toTrackingEvent
 import com.dgmltn.shiphappens.source.webview.today
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
 
 /**
  * Everything the Amazon scrape *decides*, kept out of AMAZON_EXTRACTION_JS so it can be tested
@@ -126,23 +129,32 @@ private val AMAZON_NOT_FOUND = Regex(
     RegexOption.IGNORE_CASE,
 )
 
-/** Order-details page: choose a shipment and either hop to its tracker or report its coarse state. */
-internal fun resolveAmazonCards(raw: DomRaw): PageOutcome {
+/**
+ * Order-details page: choose a shipment and either hop to its tracker or report its state. The
+ * card's event rows (the page's preloaded tracking sheet) ride along either way, since the hop
+ * redirects back to this page and never reaches a tracker of its own.
+ */
+internal fun resolveAmazonCards(raw: DomRaw, zone: TimeZone = TimeZone.currentSystemDefault()): PageOutcome {
     if (raw.pageText?.let { AMAZON_NOT_FOUND.containsMatchIn(it) } == true) return PageOutcome.NotFound
     val pick = pickShipmentCard(raw.cards) ?: return PageOutcome.Empty
-    val eta = amazonEtaFromStatus(pick.head, raw.today())
+    val today = raw.today()
+    val eta = amazonEtaFromStatus(pick.head, today)
+    val events = pick.events.mapNotNull { it.toTrackingEvent(AMAZON_VOCABULARY, zone, today) }
     // The headline's "Arriving <day>" carries the ETA but not a transit state, so a card can
     // have a delivery date with no classifiable status. Keep the ETA regardless — a shipment
     // with no tracker link still yields a countdown — and leave status UNKNOWN until a real
-    // signal (the rail's active step, the tracker hop, or delivered/shipped/exception
+    // signal (the rail's active step, the newest event row, or delivered/shipped/exception
     // phrasing) supplies one.
     val status = pick.stageStatus()
-    val coarse = if (status != null || eta != null) {
-        TrackingSnapshot(
-            status = status ?: TrackingStatus.UNKNOWN,
+    val coarse = if (status != null || eta != null || events.isNotEmpty()) {
+        assembleSnapshot(
+            vocabulary = AMAZON_VOCABULARY,
+            headline = null,
+            events = events,
             etaDate = eta,
-            delayNote = pick.head.takeIf { AMAZON_VOCABULARY.isDelayed(it) },
-        )
+            delayNote = headlineThenNewestEvent(AMAZON_VOCABULARY, pick.head, events),
+            statusFallback = status,
+        ).let { if (status != null) it.copy(status = status) else it }
     } else null
     val href = pick.href
     return when {

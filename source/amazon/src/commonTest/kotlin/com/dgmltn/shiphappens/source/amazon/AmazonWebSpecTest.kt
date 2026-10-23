@@ -66,6 +66,13 @@ class AmazonWebSpecTest {
         assertTrue(AmazonWebSpec.extractionJs.contains("""[data-component="shipmentCardOUI"]"""))
     }
 
+    @Test fun extraction_js_reads_the_order_pages_preloaded_tracking_sheet() {
+        // The only place the OUI order page names a city (device capture 2026-10-23).
+        assertTrue(AmazonWebSpec.extractionJs.contains("od-tracking-sheet-content-"))
+        assertTrue(AmazonWebSpec.extractionJs.contains(".od-tracking-event-description-column"))
+        assertTrue(AmazonWebSpec.extractionJs.contains("events: sheetEvents("))
+    }
+
     @Test fun extraction_js_reports_why_it_gave_up() {
         // page:'empty' alone can't be debugged off-device — each bail-out names its branch.
         assertTrue(AmazonWebSpec.extractionJs.contains("noShipmentCards"))

@@ -8,8 +8,10 @@ import com.dgmltn.shiphappens.source.webview.PageOutcome
 import com.dgmltn.shiphappens.source.webview.resolveTrackerPage
 import com.dgmltn.shiphappens.source.webview.snapshotOrNull
 import kotlinx.datetime.LocalDate
+import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -437,5 +439,67 @@ class AmazonPageLogicTest {
         val deliveredByRail = DomCard(head = "Arriving today", stage = "Delivered")
         val inFlight = DomCard(head = "Arriving tomorrow", stage = "Shipped")
         assertEquals(inFlight, pickShipmentCard(listOf(deliveredByRail, inFlight)))
+    }
+
+    // Order 112-0087174-7649828 (2026-10-23): the order page preloads a hidden "See all tracking
+    // updates" sheet whose rows are the only place the page names a city. Rows are newest-first,
+    // under a year-less date header; the oldest row has no time.
+    private val pacific = TimeZone.of("America/Los_Angeles")
+    private val sheetEvents = listOf(
+        DomRawEvent(description = "Package is out for delivery.", location = "Vista, US", whenText = "Friday, October 23 10:57 AM"),
+        DomRawEvent(description = "Package being processed at carrier facility.", location = "Vista, US", whenText = "Friday, October 23 3:58 AM"),
+        DomRawEvent(description = "Package arrived at a carrier facility.", location = "Vista, US", whenText = "Friday, October 23 3:03 AM"),
+        DomRawEvent(description = "Package left the shipper facility", location = null, whenText = "Friday, October 23 "),
+    )
+
+    @Test fun order_page_event_rows_supply_the_latest_location() {
+        val card = DomCard(head = "Arriving today", href = "https://www.amazon.com/progress-tracker/package?x", stage = "Out for delivery", events = sheetEvents)
+        val goto = assertIs<PageOutcome.Goto>(resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(card), todayIso = "2026-10-23"), pacific))
+        val s = goto.coarse!!
+        assertEquals("Vista, US", s.latestLocation)
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, s.status)
+        assertEquals(LocalDate(2026, 10, 23), s.etaDate)
+    }
+
+    @Test fun order_page_event_rows_become_an_ascending_timeline_in_the_device_zone() {
+        val card = DomCard(head = "Arriving today", stage = "Out for delivery", events = sheetEvents)
+        val s = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(card), todayIso = "2026-10-23"), pacific).snapshotOrNull()!!
+        assertEquals(
+            listOf("Package left the shipper facility", "Package arrived at a carrier facility.", "Package being processed at carrier facility.", "Package is out for delivery."),
+            s.events.map { it.description },
+        )
+        assertEquals(LocalDateTime(2026, 10, 23, 10, 57).toInstant(pacific), s.events.last().timestamp)
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, s.events.last().status)
+    }
+
+    @Test fun a_sheet_row_with_no_readable_date_is_dropped() {
+        val card = DomCard(
+            head = "Arriving today",
+            events = listOf(
+                DomRawEvent(description = "Package left the shipper facility", whenText = "Tracking ID: TBA335777783614 "),
+                DomRawEvent(description = "Package arrived at a carrier facility.", location = "Vista, US", whenText = "Friday, October 23 3:03 AM"),
+            ),
+        )
+        val s = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(card), todayIso = "2026-10-23"), pacific).snapshotOrNull()!!
+        assertEquals(listOf("Package arrived at a carrier facility."), s.events.map { it.description })
+    }
+
+    @Test fun event_rows_alone_still_report_tracking_with_the_newest_events_stage() {
+        val card = DomCard(head = "", href = null, stage = null, events = sheetEvents)
+        val s = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(card), todayIso = "2026-10-23"), pacific).snapshotOrNull()!!
+        assertEquals(TrackingStatus.OUT_FOR_DELIVERY, s.status)
+        assertEquals("Vista, US", s.latestLocation)
+    }
+
+    @Test fun a_delay_reported_only_by_the_newest_event_row_becomes_the_note() {
+        val card = DomCard(
+            head = "Arriving today",
+            events = listOf(
+                DomRawEvent(description = "Package delayed in transit", location = "Vista, US", whenText = "Friday, October 23 3:58 AM"),
+                DomRawEvent(description = "Package arrived at a carrier facility.", location = "Vista, US", whenText = "Friday, October 23 3:03 AM"),
+            ),
+        )
+        val s = resolveAmazonCards(DomRaw(kind = "cards", cards = listOf(card), todayIso = "2026-10-23"), pacific).snapshotOrNull()!!
+        assertEquals("Package delayed in transit", s.delayNote)
     }
 }
