@@ -421,13 +421,13 @@ class ListViewModelTest {
         assertEquals("FedEx", fedex.manualAdd.effectiveCarrierName)
     }
 
-    @Test fun a_handed_off_parcel_names_both_carriers_on_its_card() = runTest {
+    @Test fun a_handed_off_parcel_keeps_its_own_carriers_name_on_the_list() = runTest {
         vm()
         val p = Parcel(id = "h1", name = "Light bulbs", trackingNumber = "112-0087174-7649828", carrier = WellKnownCarriers.AMAZON,
             status = TrackingStatus.IN_TRANSIT, handoff = Handoff(WellKnownCarriers.AMAZON_LOGISTICS, "TBA335777783614"),
             createdAt = Instant.fromEpochMilliseconds(0))
         db.parcelDao().upsertParcel(p.toEntity())
         val s = awaitState { it.cards.size == 1 }
-        assertEquals("Amazon via Amazon Logistics", s.cards.single().carrierName)
+        assertEquals("Amazon", s.cards.single().carrierName)
     }
 }

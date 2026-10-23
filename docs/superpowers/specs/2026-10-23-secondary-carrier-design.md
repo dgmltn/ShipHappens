@@ -24,7 +24,7 @@ byproduct, not the point.
 | Timeline | One merged timeline; the rail stays, with each step's scans listed beneath it (Doug) |
 | Conflicts | The carrier with the newest scan wins status, location, delay wording (my call, Doug deferred) |
 | ETA | The delivering (secondary) carrier's date wins when it has one; else the primary's (my call) |
-| Label | "Amazon via Amazon Logistics" / "DHL eCommerce via USPS" on the list card and detail header |
+| Label | "Amazon via Amazon Logistics" / "DHL eCommerce via USPS" on the detail header; the list card keeps the parcel's own carrier (Doug, 2026-10-23) |
 | Second number | Shown on the detail screen under its own carrier's name |
 | Settings | The secondary source must be enabled in Settings, same rule as any source |
 | Platforms | All in the shared layer; nothing platform-specific |
@@ -157,10 +157,9 @@ Everything above is unit-tested with Amazon + AMZL and DHL + USPS fixtures.
 
 ### UI
 
-- **List card:** carrier line reads "Amazon via Amazon Logistics" (`carrierName` already
-  flows through `ListUiState`; the view model formats the label). Accent color stays the
-  primary's.
-- **Detail header:** same label.
+- **List card:** unchanged, the parcel's own carrier name and accent (Doug: the "via" wording
+  is detail-screen information).
+- **Detail header:** "Amazon via Amazon Logistics".
 - **Detail body:** a second tracking-number card, "Amazon Logistics tracking number",
   under the existing one.
 - **Timeline (Doug):** the five-step rail stays. Under each step, the scans that classify
